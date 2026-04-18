@@ -1,0 +1,36 @@
+---
+name: main
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - '**'
+jobs:
+  run-tests:
+    name: Run tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+        python-version:
+          - '3.14'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pylcm (unreleased feature branch required)
+        run: >-
+          pip install "pylcm @
+          git+https://github.com/OpenSourceEconomics/pylcm.git@feature/h-consumes-dag-outputs"
+      - name: Install aca-model with test deps
+        run: pip install -e . pytest pdbp
+      - name: Run pytest
+        run: pytest tests
