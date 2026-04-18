@@ -5,11 +5,10 @@ Exports a compact, fully self-contained setup that exercises the full
 continuous state). Use for ASV benchmarks and fast end-to-end
 integration tests without requiring the aca-data pipeline.
 
-Parameters (`fixed_params` + `params`) are a frozen snapshot of one
-production run, shipped as a pickle in
-`aca-model/tests/data/benchmark_params.pkl`. Regenerate via
-`scripts/generate_benchmark_params.py` after changes to parameter
-assembly.
+Parameters (`fixed_params` + `params`) are a committed stub fixture at
+`aca-model/tests/data/benchmark_params.pkl` — aggregate-level values
+(policy schedules, transition probabilities, fitted coefficients) with
+no runtime dependency on aca-data or any data-prep package.
 
 Initial conditions are drawn randomly per call — assets/aime/wage_res
 from their grid ranges, discrete states from their categories, regimes
