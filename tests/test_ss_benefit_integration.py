@@ -5,11 +5,11 @@ full retirement age, and unreduced after.
 """
 
 import jax.numpy as jnp
-from aca_data.social_security import compute_pia_table
 
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.environment import social_security
 from aca_model.environment.social_security import ClaimedSS
+from tests.helpers.social_security import compute_pia_table
 
 ATOL = 0.01
 
