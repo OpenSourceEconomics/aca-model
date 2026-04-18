@@ -1,0 +1,129 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatchling" ]
+
+[project]
+name = "aca-model"
+version = "0.0.0"
+description = "Core lifecycle model for the ACA structural retirement project."
+readme = { file = "README.md", content-type = "text/markdown" }
+keywords = [
+  "ACA",
+  "Economics",
+  "Health Insurance",
+  "Life-Cycle",
+  "Retirement",
+]
+license = "Apache-2.0"
+license-files = [ "LICENSE" ]
+requires-python = ">=3.14"
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+  "attrs",
+  "cloudpickle",
+  "dags",
+  "estimagic",
+  "jax>=0.9",
+  "jaxtyping",
+  "numpy>=2.2",
+  "optimagic>=0.5.3",
+  "pandas>=3",
+  "plotly>=6",
+  "pylcm",
+  "pytask>=0.5.8",
+]
+[[project.authors]]
+name = "Hans-Martin von Gaudecker"
+email = "hmgaudecker@uni-bonn.de"
+[[project.maintainers]]
+name = "Hans-Martin von Gaudecker"
+email = "hmgaudecker@uni-bonn.de"
+
+[tool.hatch]
+build.targets.sdist.exclude = [ "tests" ]
+build.targets.sdist.only-packages = true
+build.targets.wheel.only-include = [ "src" ]
+build.targets.wheel.sources = [ "src" ]
+metadata.allow-direct-references = true
+
+[tool.ruff]
+fix = true
+unsafe-fixes = false
+[tool.ruff.lint]
+select = [ "ALL" ]
+extend-ignore = [
+  "ANN",     # Type annotations (use ty instead)
+  "COM812",  # Conflicts with ruff-format
+  "D10",     # Missing docstrings
+  "EM101",   # Exception must not use a string literal
+  "EM102",   # Exception must not use an f-string literal
+  "FBT001",  # Boolean-typed positional argument
+  "FBT002",  # Boolean default positional argument
+  "FBT003",  # Boolean positional value in function call
+  "FIX002",  # Line contains TODO
+  "ISC001",  # Conflicts with ruff-format
+  "N806",    # Allow uppercase variable names
+  "PLC2401", # Allow non-ASCII function names
+  "PLC2403", # Allow non-ASCII character in module name
+  "PLR0913", # Too many arguments
+  "PLR2004", # Magic value used in comparison
+  "RET504",  # Don't force to calculate upon return
+  "S101",    # Use of assert
+  "S301",    # pickle module is unsafe
+  "TC001",   # Move application import into a type-checking block
+  "TC002",   # Move third-party import into a type-checking block
+  "TC003",   # Move standard library import into a type-checking block
+  "TD003",   # Allow lazy todos
+  "TRY003",  # Long messages outside exception class
+  "F722",    # https://docs.kidger.site/jaxtyping/faq/#flake8-or-ruff-are-throwing-an-error
+  "RUF002",  # Ambiguous Unicode in docstrings (Greek letters in math)
+  "RUF003",  # Ambiguous Unicode in comments (Greek letters in math)
+]
+per-file-ignores."src/aca_model/models/*" = [ "E501" ]
+per-file-ignores."task_*.py" = [ "ANN", "ARG001" ]
+per-file-ignores."tests/*" = [ "D", "E501", "INP001", "PD011", "PLR2004", "S101" ]
+pydocstyle.convention = "google"
+
+[tool.pyproject-fmt]
+column_width = 88
+max_supported_python = "3.14"
+table_format = "long"
+collapse_tables = [ "tool.hatch", "tool.pytest", "tool.pytask", "tool.ty" ]
+
+[tool.ty]
+rules.ambiguous-protocol-member = "error"
+rules.deprecated = "error"
+rules.division-by-zero = "error"
+rules.ignore-comment-unknown-rule = "error"
+rules.ineffective-final = "error"
+rules.invalid-enum-member-annotation = "error"
+rules.invalid-ignore-comment = "error"
+rules.invalid-legacy-positional-parameter = "error"
+rules.possibly-missing-submodule = "error"
+rules.redundant-cast = "error"
+rules.unused-awaitable = "error"
+rules.unused-ignore-comment = "error"
+
+[tool.pytest]
+ini_options.addopts = '--pdbcls=pdbp:Pdb --ignore-glob=*skip_* -m "not long_running"'
+ini_options.filterwarnings = []
+ini_options.markers = [
+  """\
+  long_running: Tests that take a lot of time to run (run them via pytest -m \
+  long_running).\
+  """,
+]
+
+[tool.yamlfix]
+line_length = 88
+none_representation = "null"
+sequence_style = "block_style"
+
+[tool.pytask]
+ini_options.paths = [ "src/aca_model" ]
+ini_options.pdbcls = "pdbp:Pdb"
