@@ -39,9 +39,9 @@ MODEL_CONFIG = ModelConfig()
 GRID_CONFIG = GridConfig()
 
 BENCHMARK_GRID_CONFIG = GridConfig(
-    n_assets_gridpoints=5,
+    n_assets_gridpoints=3,
     n_aime_gridpoints=3,
-    n_consumption_gridpoints=10,
+    n_consumption_gridpoints=5,
     n_wage_res_gridpoints=3,
     n_hcc_persistent_gridpoints=3,
     n_hcc_transitory_gridpoints=3,
