@@ -33,6 +33,10 @@ class GridConfig:
     n_wage_res_gridpoints: int = 5
     n_hcc_persistent_gridpoints: int = 3
     n_hcc_transitory_gridpoints: int = 5
+    # `batch_size` on the assets grid: chunked vmap stride for the
+    # outer state loop. Useful at prod sizes for memory reasons; set
+    # to 0 in BENCHMARK_GRID_CONFIG to skip the Python-loop overhead.
+    n_assets_batch_size: int = 2
 
 
 MODEL_CONFIG = ModelConfig()
@@ -45,4 +49,5 @@ BENCHMARK_GRID_CONFIG = GridConfig(
     n_wage_res_gridpoints=3,
     n_hcc_persistent_gridpoints=3,
     n_hcc_transitory_gridpoints=3,
+    n_assets_batch_size=0,
 )
