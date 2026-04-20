@@ -192,7 +192,7 @@ def build_grids(grid_config: GridConfig = GRID_CONFIG) -> Grids:
             start=0.0,
             stop=500_000.0,
             n_points=grid_config.n_assets_gridpoints,
-            batch_size=2,
+            batch_size=grid_config.n_assets_batch_size,
         ),
         aime=LinSpacedGrid(
             start=0.0,
@@ -269,7 +269,7 @@ def build_states(spec: dict[str, str], grids: Grids) -> dict:
     states["hcc_persistent"] = grids.hcc_persistent
     states["hcc_transitory"] = grids.hcc_transitory
     states["spousal_income"] = DiscreteGrid(SpousalIncome)
-    states["pref_type"] = DiscreteGrid(PrefType, batch_size=1)
+    states["pref_type"] = DiscreteGrid(PrefType)
     if can_work:
         states["log_ft_wage_res"] = grids.wage_res
     if can_work and spec["his"] != "tied":
@@ -314,7 +314,7 @@ def build_dead_regime(grids: Grids) -> Regime:
         },
         states={
             "assets": grids.assets,
-            "pref_type": DiscreteGrid(PrefType, batch_size=1),
+            "pref_type": DiscreteGrid(PrefType),
         },
         active=lambda _age: True,
     )
