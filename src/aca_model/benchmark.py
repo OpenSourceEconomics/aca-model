@@ -6,12 +6,13 @@ continuous state). Use for ASV benchmarks and fast end-to-end
 integration tests without requiring the aca-data pipeline.
 
 The benchmark substitutes a 2-type `BenchmarkPrefType` for the
-production 3-type `PrefType` and lifts it to the top of the compiled
-kernel via `DispatchStrategy.PARTITION_SCAN`. Both choices matter for
-benchmark wall-clock: dropping one pref type saves ~33% of the
-compile + execution volume over all 18 regimes; partition-lifting
-bounds GPU memory and keeps the axis JAX-visible for a future
-`shard_map` swap.
+production 3-type `PrefType`, which saves ~33% of the compile +
+execution volume over all 18 regimes. By default the pref_type axis
+is handled via pylcm's fused-vmap dispatch (no `DispatchStrategy`
+imported — this module stays compatible with pylcm versions that
+pre-date the enum). Callers that want partition-lifted dispatch
+(`PARTITION_SCAN` / `PARTITION_VMAP`) construct the grid themselves
+and pass it via `pref_type_grid`.
 
 Parameters (`fixed_params` + `params`) are a committed stub fixture
 packaged alongside the module at
@@ -35,7 +36,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import Array
-from lcm import DiscreteGrid, DispatchStrategy, Model
+from lcm import DiscreteGrid, Model
 
 from aca_model.agent.health import GoodHealth
 from aca_model.agent.labor_market import IsMarried
@@ -48,13 +49,6 @@ _PARAMS_FILE = (
     Path(__file__).resolve().parent / "_benchmark_data" / "benchmark_params.pkl"
 )
 
-# Partition-lifted so the benchmark kernel runs with JAX-visible sweep
-# over pref_type (one Bellman compile per partition point). Matches the
-# recommended production setting for aca-model at scale.
-_BENCHMARK_PREF_TYPE_GRID = DiscreteGrid(
-    BenchmarkPrefType,
-    dispatch=DispatchStrategy.PARTITION_SCAN,
-)
 _N_BENCHMARK_PREF_TYPES = len(fields(BenchmarkPrefType))
 
 _DERIVED_CATEGORICALS = {
@@ -76,19 +70,29 @@ _INITIAL_REGIMES = (
 )
 
 
-def create_benchmark_model() -> Model:
+def create_benchmark_model(*, pref_type_grid: DiscreteGrid | None = None) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 
-    The benchmark uses a 2-type `BenchmarkPrefType` lifted via
-    `DispatchStrategy.PARTITION_SCAN`. No `batch_size != 0` on any grid
-    (continuous grids inherit `BENCHMARK_GRID_CONFIG.n_assets_batch_size = 0`).
+    The benchmark uses a 2-type `BenchmarkPrefType`. No `batch_size != 0`
+    on any grid (continuous grids inherit
+    `BENCHMARK_GRID_CONFIG.n_assets_batch_size = 0`).
+
+    Args:
+        pref_type_grid: Override for the pref_type grid. Default is a plain
+            `DiscreteGrid(BenchmarkPrefType)` (fused vmap). Pass
+            `DiscreteGrid(BenchmarkPrefType, dispatch=DispatchStrategy.PARTITION_SCAN)`
+            (or `PARTITION_VMAP`) to get the partition-lifted kernel — the
+            recommended production setting for aca-model at scale, but only
+            supported on pylcm versions that expose `DispatchStrategy`.
     """
+    if pref_type_grid is None:
+        pref_type_grid = DiscreteGrid(BenchmarkPrefType)
     fixed_params, _ = get_benchmark_params()
     return create_model(
         grid_config=BENCHMARK_GRID_CONFIG,
         fixed_params=fixed_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
-        pref_type_grid=_BENCHMARK_PREF_TYPE_GRID,
+        pref_type_grid=pref_type_grid,
     )
 
 
