@@ -29,7 +29,7 @@ jobs:
       - name: Install pylcm (unreleased feature branch required)
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@feature/h-consumes-dag-outputs"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@feature/batched-partition-dispatch"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest
