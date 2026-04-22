@@ -5,30 +5,41 @@ Exports a compact, fully self-contained setup that exercises the full
 continuous state). Use for ASV benchmarks and fast end-to-end
 integration tests without requiring the aca-data pipeline.
 
+The benchmark substitutes a 2-type `BenchmarkPrefType` for the
+production 3-type `PrefType` and lifts it to the top of the compiled
+kernel via `DispatchStrategy.PARTITION_SCAN`. Both choices matter for
+benchmark wall-clock: dropping one pref type saves ~33% of the
+compile + execution volume over all 18 regimes; partition-lifting
+bounds GPU memory and keeps the axis JAX-visible for a future
+`shard_map` swap.
+
 Parameters (`fixed_params` + `params`) are a committed stub fixture
 packaged alongside the module at
 `src/aca_model/_benchmark_data/benchmark_params.pkl` — aggregate-level
 values (policy schedules, transition probabilities, fitted
 coefficients) with no runtime dependency on aca-data or any data-prep
-package.
+package. The pref-type-indexed entries in `params` are truncated to
+two rows on load to match `BenchmarkPrefType`.
 
 Initial conditions are drawn randomly per call — assets/aime/wage_res
 from their grid ranges, discrete states from their categories, regimes
 sampled from the five regimes active at `start_age=51`.
 """
 
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
 import cloudpickle
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 from jax import Array
-from lcm import DiscreteGrid, Model
+from lcm import DiscreteGrid, DispatchStrategy, Model
 
 from aca_model.agent.health import GoodHealth
 from aca_model.agent.labor_market import IsMarried
-from aca_model.agent.preferences import PrefType
+from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model
 from aca_model.config import BENCHMARK_GRID_CONFIG
@@ -37,11 +48,20 @@ _PARAMS_FILE = (
     Path(__file__).resolve().parent / "_benchmark_data" / "benchmark_params.pkl"
 )
 
+# Partition-lifted so the benchmark kernel runs with JAX-visible sweep
+# over pref_type (one Bellman compile per partition point). Matches the
+# recommended production setting for aca-model at scale.
+_BENCHMARK_PREF_TYPE_GRID = DiscreteGrid(
+    BenchmarkPrefType,
+    dispatch=DispatchStrategy.PARTITION_SCAN,
+)
+_N_BENCHMARK_PREF_TYPES = len(fields(BenchmarkPrefType))
+
 _DERIVED_CATEGORICALS = {
     "good_health": DiscreteGrid(GoodHealth),
     "is_married": DiscreteGrid(IsMarried),
     "his": DiscreteGrid(HealthInsuranceState),
-    "pref_type": DiscreteGrid(PrefType),
+    "pref_type": DiscreteGrid(BenchmarkPrefType),
 }
 
 # Five regimes active at start_age=51 (inelig + canwork). All have
@@ -57,20 +77,51 @@ _INITIAL_REGIMES = (
 
 
 def create_benchmark_model() -> Model:
-    """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params."""
+    """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
+
+    The benchmark uses a 2-type `BenchmarkPrefType` lifted via
+    `DispatchStrategy.PARTITION_SCAN`. No `batch_size != 0` on any grid
+    (continuous grids inherit `BENCHMARK_GRID_CONFIG.n_assets_batch_size = 0`).
+    """
     fixed_params, _ = get_benchmark_params()
     return create_model(
         grid_config=BENCHMARK_GRID_CONFIG,
         fixed_params=fixed_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
+        pref_type_grid=_BENCHMARK_PREF_TYPE_GRID,
     )
 
 
 def get_benchmark_params() -> tuple[dict[str, Any], dict[str, Any]]:
-    """Load the frozen `(fixed_params, params)` snapshot."""
+    """Load the frozen `(fixed_params, params)` snapshot.
+
+    Pref-type-indexed `pd.Series` in `params` are truncated to
+    `_N_BENCHMARK_PREF_TYPES` rows so they line up with
+    `BenchmarkPrefType`'s categories.
+    """
     with _PARAMS_FILE.open("rb") as fh:
         data = cloudpickle.load(fh)
-    return data["fixed_params"], data["params"]
+    fixed_params = data["fixed_params"]
+    params = _truncate_pref_type_indexed(data["params"])
+    return fixed_params, params
+
+
+def _truncate_pref_type_indexed(params: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of `params` with pref_type-indexed Series cut to 2 rows.
+
+    A Series is pref_type-indexed when its index labels start with
+    `"type_"`. The first `_N_BENCHMARK_PREF_TYPES` rows are kept so the
+    Series aligns with `BenchmarkPrefType.type_0`, `type_1`, ...
+    """
+    out: dict[str, Any] = {}
+    for key, value in params.items():
+        if isinstance(value, pd.Series) and all(
+            str(label).startswith("type_") for label in value.index
+        ):
+            out[key] = value.iloc[:_N_BENCHMARK_PREF_TYPES]
+        else:
+            out[key] = value
+    return out
 
 
 def get_benchmark_initial_conditions(
@@ -112,7 +163,9 @@ def get_benchmark_initial_conditions(
         "hcc_persistent": jnp.asarray(rng.choice(hcc_p_pts, n_subjects)),
         "hcc_transitory": jnp.asarray(rng.choice(hcc_t_pts, n_subjects)),
         "spousal_income": jnp.asarray(rng.integers(0, 3, n_subjects).astype(np.int32)),
-        "pref_type": jnp.asarray(rng.integers(0, 3, n_subjects).astype(np.int32)),
+        "pref_type": jnp.asarray(
+            rng.integers(0, _N_BENCHMARK_PREF_TYPES, n_subjects).astype(np.int32)
+        ),
         "log_ft_wage_res": jnp.asarray(rng.choice(wage_res_pts, n_subjects)),
         "lagged_labor_supply": jnp.asarray(lls),
         # claimed_ss is required by non-initial regimes (ss="choose");

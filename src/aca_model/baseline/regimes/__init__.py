@@ -10,7 +10,7 @@ Each HIS type (retiree, tied, nongroup) has its own transition logic in a
 dedicated submodule. Shared definitions and builders live in _common.
 """
 
-from lcm import Regime
+from lcm import DiscreteGrid, Regime
 
 from aca_model.baseline.regimes import _nongroup as nongroup
 from aca_model.baseline.regimes import _retiree as retiree
@@ -56,9 +56,17 @@ def build_regime(name: str, grids: Grids) -> Regime:
 
 def build_all_regimes(
     grid_config: GridConfig = GRID_CONFIG,
+    *,
+    pref_type_grid: DiscreteGrid | None = None,
 ) -> dict[str, Regime]:
-    """Build all 19 baseline regimes (18 non-terminal + dead)."""
-    grids = build_grids(grid_config)
+    """Build all 19 baseline regimes (18 non-terminal + dead).
+
+    `pref_type_grid` is forwarded to `build_grids` — callers can inject a
+    compact or partition-lifted `DiscreteGrid(...)` (e.g. the benchmark
+    uses a 2-type `BenchmarkPrefType` with
+    `DispatchStrategy.PARTITION_SCAN`).
+    """
+    grids = build_grids(grid_config, pref_type_grid=pref_type_grid)
     regimes = {}
     for name in REGIME_SPECS:
         regimes[name] = build_regime(name, grids)

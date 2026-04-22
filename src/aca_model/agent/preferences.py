@@ -26,6 +26,21 @@ class PrefType:
     type_2: int
 
 
+@categorical(ordered=False)
+class BenchmarkPrefType:
+    """Compact 2-type variant of `PrefType` used by the ASV benchmark.
+
+    The benchmark model exercises the full 18-regime DAG with compact
+    continuous grids; shrinking `pref_type` from 3 to 2 types cuts the
+    partition-axis cardinality too, so the benchmark finishes faster
+    without changing anything structural about the kernel being
+    measured.
+    """
+
+    type_0: int
+    type_1: int
+
+
 def positive_leisure(leisure: FloatND) -> BoolND:
     """Return True where leisure is strictly positive."""
     return leisure > 0

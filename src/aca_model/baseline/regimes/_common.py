@@ -183,10 +183,21 @@ class Grids:
     wage_res: Any
     hcc_persistent: Any
     hcc_transitory: Any
+    pref_type: DiscreteGrid
 
 
-def build_grids(grid_config: GridConfig = GRID_CONFIG) -> Grids:
-    """Build continuous-state/action grids from a GridConfig."""
+def build_grids(
+    grid_config: GridConfig = GRID_CONFIG,
+    *,
+    pref_type_grid: DiscreteGrid | None = None,
+) -> Grids:
+    """Build continuous-state/action grids from a `GridConfig`.
+
+    `pref_type_grid` lets callers (e.g. the benchmark) substitute a
+    compact or partition-lifted `DiscreteGrid(...)` for the production
+    `DiscreteGrid(PrefType)`. When `None`, defaults to the production
+    3-type grid with the default `DispatchStrategy.FUSED_VMAP`.
+    """
     return Grids(
         assets=LinSpacedGrid(
             start=0.0,
@@ -222,6 +233,7 @@ def build_grids(grid_config: GridConfig = GRID_CONFIG) -> Grids:
             mu=0.0,
             sigma=1.0,
         ),
+        pref_type=pref_type_grid or DiscreteGrid(PrefType),
     )
 
 
@@ -269,7 +281,7 @@ def build_states(spec: dict[str, str], grids: Grids) -> dict:
     states["hcc_persistent"] = grids.hcc_persistent
     states["hcc_transitory"] = grids.hcc_transitory
     states["spousal_income"] = DiscreteGrid(SpousalIncome)
-    states["pref_type"] = DiscreteGrid(PrefType)
+    states["pref_type"] = grids.pref_type
     if can_work:
         states["log_ft_wage_res"] = grids.wage_res
     if can_work and spec["his"] != "tied":
@@ -314,7 +326,7 @@ def build_dead_regime(grids: Grids) -> Regime:
         },
         states={
             "assets": grids.assets,
-            "pref_type": DiscreteGrid(PrefType),
+            "pref_type": grids.pref_type,
         },
         active=lambda _age: True,
     )
