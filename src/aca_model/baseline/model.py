@@ -25,6 +25,7 @@ def create_model(
     derived_categoricals: Mapping[str, DiscreteGrid | Mapping[str, DiscreteGrid]]
     | None = None,
     grid_config: GridConfig = GRID_CONFIG,
+    pref_type_grid: DiscreteGrid | None = None,
 ) -> Model:
     """Create the baseline structural retirement model.
 
@@ -39,6 +40,9 @@ def create_model(
         grid_config: Continuous-grid point counts. Defaults to production
             values; pass `BENCHMARK_GRID_CONFIG` for a fast-but-structurally-
             faithful benchmark.
+        pref_type_grid: Optional override for the `pref_type` `DiscreteGrid`.
+            Defaults to `DiscreteGrid(PrefType)`. Used by the benchmark to
+            substitute a 2-type variant with `DispatchStrategy.PARTITION_SCAN`.
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
@@ -50,7 +54,7 @@ def create_model(
         stop=MODEL_CONFIG.end_age - 1,
         step="Y",
     )
-    regimes = build_all_regimes(grid_config)
+    regimes = build_all_regimes(grid_config, pref_type_grid=pref_type_grid)
 
     return Model(
         regimes=regimes,
