@@ -54,7 +54,9 @@ def create_model(
         stop=MODEL_CONFIG.end_age - 1,
         step="Y",
     )
-    regimes = build_all_regimes(grid_config, pref_type_grid=pref_type_grid)
+    regimes = build_all_regimes(
+        grid_config, fixed_params=fixed_params, pref_type_grid=pref_type_grid
+    )
 
     return Model(
         regimes=regimes,
