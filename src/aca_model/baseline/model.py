@@ -22,6 +22,7 @@ from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
 def create_model(
     *,
     fixed_params: Mapping[str, Any] | None = None,
+    wage_params: Mapping[str, Any] | None = None,
     derived_categoricals: Mapping[str, DiscreteGrid | Mapping[str, DiscreteGrid]]
     | None = None,
     grid_config: GridConfig = GRID_CONFIG,
@@ -34,6 +35,10 @@ def create_model(
             partialled into compiled functions and removed from the params
             template. Pass data-derived constants here; only estimation
             parameters should go through `model.simulate(params=...)`.
+        wage_params: Data-derived wage profile dict (`log_ft_wage_mean`,
+            `log_ft_wage_std`, `adj_wage_hours_*`) used only at grid-build
+            time to size the assets-floor to `-max_annual_labor_income`.
+            Not routed to the pylcm Model.
         derived_categoricals: Extra categorical mappings for derived variables
             not in the model's state/action grids. Needed when `fixed_params`
             contains `pd.Series` indexed by DAG function outputs.
@@ -55,7 +60,10 @@ def create_model(
         step="Y",
     )
     regimes = build_all_regimes(
-        grid_config, fixed_params=fixed_params, pref_type_grid=pref_type_grid
+        grid_config,
+        fixed_params=fixed_params,
+        wage_params=wage_params,
+        pref_type_grid=pref_type_grid,
     )
 
     return Model(
