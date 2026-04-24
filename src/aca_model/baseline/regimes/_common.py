@@ -198,36 +198,43 @@ def build_grids(
     grid_config: GridConfig = GRID_CONFIG,
     *,
     fixed_params: Mapping[str, Any] | None = None,
+    wage_params: Mapping[str, Any] | None = None,
     pref_type_grid: DiscreteGrid | None = None,
 ) -> Grids:
     """Build continuous-state/action grids from a `GridConfig`.
 
-    When `fixed_params` carries `pia_aime_grid` and the hcc-moment
-    parameters, the AIME grid becomes a `PiecewiseLinSpacedGrid`
-    breakpointed at the PIA bends and the assets grid's lower bound is
-    set to minus the maximum total-health-cost realisation over the
-    discretised hcc shocks in the model's active age range. Without
-    `fixed_params` (bare model for tests / compile-only paths), both
+    When `fixed_params` carries `pia_aime_grid`, the AIME grid becomes
+    a `PiecewiseLinSpacedGrid` breakpointed at the PIA bends (total 32
+    points). When `wage_params` provides `log_ft_wage_mean` and friends
+    (as produced by `aca_data.task_wages`), the assets grid's lower
+    bound is set to `-max_annual_labor_income` so that the worst shock
+    lands on a gridpoint inside the support. Without `fixed_params` /
+    `wage_params` (bare model for tests / compile-only paths), both
     grids fall back to their historical static shapes.
+
+    `wage_params` is passed separately rather than via `fixed_params`
+    because `log_ft_wage_mean` is a per-iteration param at estimation
+    time (reconstructed from `wage_bias_coeffs_*`), not a fixed one;
+    the grid floor must still be known at build time.
 
     `pref_type_grid` lets callers (e.g. the benchmark) substitute a
     compact or partition-lifted `DiscreteGrid(...)` for the production
     `DiscreteGrid(PrefType)`. When `None`, defaults to the production
     3-type grid with the default `DispatchStrategy.FUSED_VMAP`.
     """
+    # Unit-variance standardised shocks: the total_costs / wage
+    # formulas rescale these by fixed_params-level std parameters
+    # (std_xsect_persistent for hcc, log_ft_wage_std for wage). For the
+    # grid to have unconditional variance 1, the Rouwenhorst innovation
+    # std must be √(1 − ρ²). Passing the σ_y itself (≈0.577 for hcc,
+    # 0.5627 for wage) would mis-scale the grid.
+    _WAGE_RHO = 0.977
     wage_res = lcm.shocks.ar1.Rouwenhorst(
         n_points=grid_config.n_wage_res_gridpoints,
-        rho=0.977,
-        sigma=0.5627,
+        rho=_WAGE_RHO,
+        sigma=(1.0 - _WAGE_RHO**2) ** 0.5,
         mu=0.0,
     )
-    # Unit-variance standardised persistent shock: `total_costs`
-    # reconstructs the actual log-cost persistent component by
-    # multiplying `hcc_persistent` by `std_xsect_persistent` (σ_ζ from
-    # F&J 2011, in `fixed_params`). For the standardised grid to have
-    # unconditional variance 1, the Rouwenhorst innovation std must be
-    # √(1 − ρ²). Passing σ_ζ itself (≈ 0.577) here would mis-scale the
-    # grid by a factor of 1 / √(1 − ρ²) ≈ 2.63.
     _HCC_RHO = 0.925
     hcc_persistent = lcm.shocks.ar1.Rouwenhorst(
         n_points=grid_config.n_hcc_persistent_gridpoints,
@@ -243,11 +250,9 @@ def build_grids(
     )
 
     assets_start = 0.0
-    if fixed_params is not None and _has_hcc_moments(fixed_params=fixed_params):
-        assets_start = -_compute_max_total_cost(
-            fixed_params=fixed_params,
-            hcc_persistent_grid=hcc_persistent,
-            hcc_transitory_grid=hcc_transitory,
+    if wage_params is not None and _has_required_wage_keys(wage_params=wage_params):
+        assets_start = -_compute_max_annual_labor_income(
+            wage_params=wage_params, wage_res_grid=wage_res
         )
 
     return Grids(
@@ -294,40 +299,51 @@ def _build_aime_grid(
     return PiecewiseLinSpacedGrid(pieces=pieces)
 
 
-def _has_hcc_moments(*, fixed_params: Mapping[str, Any]) -> bool:
+def _has_required_wage_keys(*, wage_params: Mapping[str, Any]) -> bool:
     return all(
-        key in fixed_params for key in ("log_mean", "log_std", "std_xsect_persistent")
+        key in wage_params
+        for key in (
+            "log_ft_wage_mean",
+            "log_ft_wage_std",
+            "adj_wage_hours_exp",
+            "adj_wage_hours_int",
+        )
     )
 
 
-def _compute_max_total_cost(
+def _compute_max_annual_labor_income(
     *,
-    fixed_params: Mapping[str, Any],
-    hcc_persistent_grid: lcm.shocks.ar1.Rouwenhorst,
-    hcc_transitory_grid: lcm.shocks.iid.Normal,
+    wage_params: Mapping[str, Any],
+    wage_res_grid: lcm.shocks.ar1.Rouwenhorst,
 ) -> float:
-    """Max `exp(log_mean + log_std * max_shock)` over active-age moments.
+    """Return the annual labor income at the top of the wage grid.
 
-    `max_shock` is the combined linear combination used in
-    `total_costs` evaluated at the outer endpoints of the hcc shock
-    grids — the upper bound of the realised log-shock on the
-    discretisation. Active-age = `[MODEL_CONFIG.start_age,
-    MODEL_CONFIG.end_age)` (the model's solve range); filtering
-    restricts the worst case to ages the agent actually visits.
+    Used to set the assets-floor so that someone at the floor cannot
+    close the gap in a single year even working full-time at the
+    wage-grid upper bound — the "tough case" the model should be able
+    to represent without extrapolating outside the asset grid.
+
+    Formula matches `labor_market.labor_income` at the max-wage,
+    max-hours corner:
+        max_wage = exp(max(log_ft_wage_mean) + log_ft_wage_std * max(wage_res))
+        income   = max_wage * max_hours**(1 + exp) * int**(-exp)
     """
-    log_mean = fixed_params["log_mean"]
-    log_std = fixed_params["log_std"]
-    std_xsect_persistent = float(fixed_params["std_xsect_persistent"])
-    std_trans = float(np.sqrt(1.0 - std_xsect_persistent**2))
+    log_ft_wage_mean = wage_params["log_ft_wage_mean"]
+    log_ft_wage_std = float(wage_params["log_ft_wage_std"])
+    adj_wage_hours_exp = float(wage_params["adj_wage_hours_exp"])
+    adj_wage_hours_int = float(wage_params["adj_wage_hours_int"])
 
-    max_persistent = float(hcc_persistent_grid.get_gridpoints().max())
-    max_transitory = float(hcc_transitory_grid.get_gridpoints().max())
-    max_shock = max_persistent * std_xsect_persistent + max_transitory * std_trans
+    max_wage_res = float(wage_res_grid.get_gridpoints().max())
+    max_wage = float(
+        np.exp(float(log_ft_wage_mean.max()) + log_ft_wage_std * max_wage_res)
+    )
+    max_hours = float(labor_market.HOURS_VALUES.max())
 
-    ages = log_mean.index.get_level_values("age")
-    mask = (ages >= MODEL_CONFIG.start_age) & (ages < MODEL_CONFIG.end_age)
-    upper_log = log_mean[mask] + log_std[mask] * max_shock
-    return float(np.exp(float(upper_log.max())))
+    return (
+        max_wage
+        * max_hours ** (1.0 + adj_wage_hours_exp)
+        * adj_wage_hours_int ** (-adj_wage_hours_exp)
+    )
 
 
 _ACTIVE_PREDICATES: dict[tuple[str, str, str], Callable[..., Any]] = {

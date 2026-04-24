@@ -18,9 +18,12 @@ def build_all_regimes(
     grid_config: GridConfig = GRID_CONFIG,
     *,
     fixed_params: Mapping[str, Any] | None = None,
+    wage_params: Mapping[str, Any] | None = None,
 ) -> dict[str, Regime]:
     """Build all 19 regimes with ACA policy overrides."""
-    regimes = baseline_build_all_regimes(grid_config, fixed_params=fixed_params)
+    regimes = baseline_build_all_regimes(
+        grid_config, fixed_params=fixed_params, wage_params=wage_params
+    )
     result = {}
     for name, regime in regimes.items():
         if name == "dead":
