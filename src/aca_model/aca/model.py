@@ -46,7 +46,9 @@ def create_model(
         stop=MODEL_CONFIG.end_age - 1,
         step="Y",
     )
-    regimes = build_all_regimes(policy=policy, grid_config=grid_config)
+    regimes = build_all_regimes(
+        policy=policy, grid_config=grid_config, fixed_params=fixed_params
+    )
 
     return Model(
         regimes=regimes,

@@ -10,6 +10,9 @@ Each HIS type (retiree, tied, nongroup) has its own transition logic in a
 dedicated submodule. Shared definitions and builders live in _common.
 """
 
+from collections.abc import Mapping
+from typing import Any
+
 from lcm import DiscreteGrid, Regime
 
 from aca_model.baseline.regimes import _nongroup as nongroup
@@ -57,16 +60,20 @@ def build_regime(name: str, grids: Grids) -> Regime:
 def build_all_regimes(
     grid_config: GridConfig = GRID_CONFIG,
     *,
+    fixed_params: Mapping[str, Any] | None = None,
     pref_type_grid: DiscreteGrid | None = None,
 ) -> dict[str, Regime]:
     """Build all 19 baseline regimes (18 non-terminal + dead).
 
-    `pref_type_grid` is forwarded to `build_grids` — callers can inject a
-    compact or partition-lifted `DiscreteGrid(...)` (e.g. the benchmark
-    uses a 2-type `BenchmarkPrefType` with
-    `DispatchStrategy.PARTITION_SCAN`).
+    `fixed_params` is forwarded to `build_grids` for data-driven
+    AIME breakpoints and asset floor; `None` keeps the static fallbacks.
+    `pref_type_grid` similarly lets callers inject a compact or
+    partition-lifted `DiscreteGrid(...)` (e.g. the benchmark uses a
+    2-type `BenchmarkPrefType` with `DispatchStrategy.PARTITION_SCAN`).
     """
-    grids = build_grids(grid_config, pref_type_grid=pref_type_grid)
+    grids = build_grids(
+        grid_config, fixed_params=fixed_params, pref_type_grid=pref_type_grid
+    )
     regimes = {}
     for name in REGIME_SPECS:
         regimes[name] = build_regime(name, grids)

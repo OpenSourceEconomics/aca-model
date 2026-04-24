@@ -4,13 +4,14 @@ Contains RegimeId, REGIME_SPECS, grid constants, state/action builders, and
 build_common_functions. No policy logic, no HIS-specific conditionals.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 import jax.numpy as jnp
 import lcm.shocks.ar1
 import lcm.shocks.iid
+import numpy as np
 from lcm import (
     DiscreteGrid,
     LinSpacedGrid,
@@ -18,6 +19,8 @@ from lcm import (
     Regime,
     categorical,
 )
+from lcm.grids.continuous import ContinuousGrid
+from lcm.grids.piecewise import Piece, PiecewiseLinSpacedGrid
 from lcm.typing import BoolND, FloatND
 
 from aca_model.agent import (
@@ -178,7 +181,7 @@ config = MODEL_CONFIG
 @dataclass(frozen=True)
 class Grids:
     assets: LinSpacedGrid
-    aime: LinSpacedGrid
+    aime: ContinuousGrid
     consumption: LinSpacedGrid
     wage_res: Any
     hcc_persistent: Any
@@ -186,55 +189,137 @@ class Grids:
     pref_type: DiscreteGrid
 
 
+# AIME piecewise grid: number of points per segment between the PIA
+# bend points (0 → kink_0 → kink_1 → kink_2). Total = 32.
+_AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
+
+
 def build_grids(
     grid_config: GridConfig = GRID_CONFIG,
     *,
+    fixed_params: Mapping[str, Any] | None = None,
     pref_type_grid: DiscreteGrid | None = None,
 ) -> Grids:
     """Build continuous-state/action grids from a `GridConfig`.
+
+    When `fixed_params` carries `pia_aime_grid` and the hcc-moment
+    parameters, the AIME grid becomes a `PiecewiseLinSpacedGrid`
+    breakpointed at the PIA bends and the assets grid's lower bound is
+    set to minus the maximum total-health-cost realisation over the
+    discretised hcc shocks in the model's active age range. Without
+    `fixed_params` (bare model for tests / compile-only paths), both
+    grids fall back to their historical static shapes.
 
     `pref_type_grid` lets callers (e.g. the benchmark) substitute a
     compact or partition-lifted `DiscreteGrid(...)` for the production
     `DiscreteGrid(PrefType)`. When `None`, defaults to the production
     3-type grid with the default `DispatchStrategy.FUSED_VMAP`.
     """
+    wage_res = lcm.shocks.ar1.Rouwenhorst(
+        n_points=grid_config.n_wage_res_gridpoints,
+        rho=0.977,
+        sigma=0.5627,
+        mu=0.0,
+    )
+    hcc_persistent = lcm.shocks.ar1.Rouwenhorst(
+        n_points=grid_config.n_hcc_persistent_gridpoints,
+        rho=0.925,
+        sigma=0.5772347875864725,
+        mu=0.0,
+    )
+    hcc_transitory = lcm.shocks.iid.Normal(
+        n_points=grid_config.n_hcc_transitory_gridpoints,
+        gauss_hermite=True,
+        mu=0.0,
+        sigma=1.0,
+    )
+
+    assets_start = 0.0
+    if fixed_params is not None and _has_hcc_moments(fixed_params=fixed_params):
+        assets_start = -_compute_max_total_cost(
+            fixed_params=fixed_params,
+            hcc_persistent_grid=hcc_persistent,
+            hcc_transitory_grid=hcc_transitory,
+        )
+
     return Grids(
         assets=LinSpacedGrid(
-            start=0.0,
+            start=assets_start,
             stop=500_000.0,
             n_points=grid_config.n_assets_gridpoints,
             batch_size=grid_config.n_assets_batch_size,
         ),
-        aime=LinSpacedGrid(
-            start=0.0,
-            stop=8_000.0,
-            n_points=grid_config.n_aime_gridpoints,
-        ),
+        aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         consumption=LinSpacedGrid(
             start=100.0,
             stop=100_000.0,
             n_points=grid_config.n_consumption_gridpoints,
         ),
-        wage_res=lcm.shocks.ar1.Rouwenhorst(
-            n_points=grid_config.n_wage_res_gridpoints,
-            rho=0.977,
-            sigma=0.5627,
-            mu=0.0,
-        ),
-        hcc_persistent=lcm.shocks.ar1.Rouwenhorst(
-            n_points=grid_config.n_hcc_persistent_gridpoints,
-            rho=0.925,
-            sigma=0.5772347875864725,
-            mu=0.0,
-        ),
-        hcc_transitory=lcm.shocks.iid.Normal(
-            n_points=grid_config.n_hcc_transitory_gridpoints,
-            gauss_hermite=True,
-            mu=0.0,
-            sigma=1.0,
-        ),
+        wage_res=wage_res,
+        hcc_persistent=hcc_persistent,
+        hcc_transitory=hcc_transitory,
         pref_type=pref_type_grid or DiscreteGrid(PrefType),
     )
+
+
+def _build_aime_grid(
+    *, grid_config: GridConfig, fixed_params: Mapping[str, Any] | None
+) -> ContinuousGrid:
+    """Return the AIME grid.
+
+    With `pia_aime_grid` available, the grid is piecewise-linspaced with
+    breakpoints at the PIA bends and `_AIME_PIECE_N_POINTS` in each
+    segment. `n_aime_gridpoints` from `grid_config` is ignored on this
+    path; the total is fixed by the PIA structure (32 points). Without
+    the fixed params, falls back to the historical `LinSpacedGrid`.
+    """
+    if fixed_params is None or "pia_aime_grid" not in fixed_params:
+        return LinSpacedGrid(
+            start=0.0, stop=8_000.0, n_points=grid_config.n_aime_gridpoints
+        )
+    kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
+    pieces = (
+        Piece(interval=f"[{kinks[0]}, {kinks[1]})", n_points=_AIME_PIECE_N_POINTS[0]),
+        Piece(interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]),
+        Piece(interval=f"[{kinks[2]}, {kinks[3]}]", n_points=_AIME_PIECE_N_POINTS[2]),
+    )
+    return PiecewiseLinSpacedGrid(pieces=pieces)
+
+
+def _has_hcc_moments(*, fixed_params: Mapping[str, Any]) -> bool:
+    return all(
+        key in fixed_params for key in ("log_mean", "log_std", "std_xsect_persistent")
+    )
+
+
+def _compute_max_total_cost(
+    *,
+    fixed_params: Mapping[str, Any],
+    hcc_persistent_grid: lcm.shocks.ar1.Rouwenhorst,
+    hcc_transitory_grid: lcm.shocks.iid.Normal,
+) -> float:
+    """Max `exp(log_mean + log_std * max_shock)` over active-age moments.
+
+    `max_shock` is the combined linear combination used in
+    `total_costs` evaluated at the outer endpoints of the hcc shock
+    grids — the upper bound of the realised log-shock on the
+    discretisation. Active-age = `[MODEL_CONFIG.start_age,
+    MODEL_CONFIG.end_age)` (the model's solve range); filtering
+    restricts the worst case to ages the agent actually visits.
+    """
+    log_mean = fixed_params["log_mean"]
+    log_std = fixed_params["log_std"]
+    std_xsect_persistent = float(fixed_params["std_xsect_persistent"])
+    std_trans = float(np.sqrt(1.0 - std_xsect_persistent**2))
+
+    max_persistent = float(hcc_persistent_grid.get_gridpoints().max())
+    max_transitory = float(hcc_transitory_grid.get_gridpoints().max())
+    max_shock = max_persistent * std_xsect_persistent + max_transitory * std_trans
+
+    ages = log_mean.index.get_level_values("age")
+    mask = (ages >= MODEL_CONFIG.start_age) & (ages < MODEL_CONFIG.end_age)
+    upper_log = log_mean[mask] + log_std[mask] * max_shock
+    return float(np.exp(float(upper_log.max())))
 
 
 _ACTIVE_PREDICATES: dict[tuple[str, str, str], Callable[..., Any]] = {

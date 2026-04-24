@@ -1,6 +1,8 @@
 """ACA regime construction: applies ACA overrides to baseline regimes."""
 
 import dataclasses
+from collections.abc import Mapping
+from typing import Any
 
 from lcm import Regime
 
@@ -12,10 +14,13 @@ from aca_model.config import GRID_CONFIG, GridConfig
 
 
 def build_all_regimes(
-    policy: PolicyVariant, grid_config: GridConfig = GRID_CONFIG
+    policy: PolicyVariant,
+    grid_config: GridConfig = GRID_CONFIG,
+    *,
+    fixed_params: Mapping[str, Any] | None = None,
 ) -> dict[str, Regime]:
     """Build all 19 regimes with ACA policy overrides."""
-    regimes = baseline_build_all_regimes(grid_config)
+    regimes = baseline_build_all_regimes(grid_config, fixed_params=fixed_params)
     result = {}
     for name, regime in regimes.items():
         if name == "dead":
