@@ -221,10 +221,18 @@ def build_grids(
         sigma=0.5627,
         mu=0.0,
     )
+    # Unit-variance standardised persistent shock: `total_costs`
+    # reconstructs the actual log-cost persistent component by
+    # multiplying `hcc_persistent` by `std_xsect_persistent` (σ_ζ from
+    # F&J 2011, in `fixed_params`). For the standardised grid to have
+    # unconditional variance 1, the Rouwenhorst innovation std must be
+    # √(1 − ρ²). Passing σ_ζ itself (≈ 0.577) here would mis-scale the
+    # grid by a factor of 1 / √(1 − ρ²) ≈ 2.63.
+    _HCC_RHO = 0.925
     hcc_persistent = lcm.shocks.ar1.Rouwenhorst(
         n_points=grid_config.n_hcc_persistent_gridpoints,
-        rho=0.925,
-        sigma=0.5772347875864725,
+        rho=_HCC_RHO,
+        sigma=(1.0 - _HCC_RHO**2) ** 0.5,
         mu=0.0,
     )
     hcc_transitory = lcm.shocks.iid.Normal(
