@@ -19,9 +19,7 @@ MAX_CONSUMPTION: float = 300_000.0
 CRRA optimum for the highest-asset, highest-income agents in the state space."""
 
 
-def compute_consumption_points(
-    *, consumption_floor: float, n_points: int
-) -> Array:
+def compute_consumption_points(*, consumption_floor: float, n_points: int) -> Array:
     """Return log-spaced consumption gridpoints from the floor to `MAX_CONSUMPTION`.
 
     Args:
@@ -63,9 +61,7 @@ def inject_consumption_points(
     out: dict[str, Any] = dict(params)
     for regime_name, regime in model.regimes.items():
         grid = regime.actions.get("consumption")
-        if not (
-            isinstance(grid, IrregSpacedGrid) and grid.pass_points_at_runtime
-        ):
+        if not (isinstance(grid, IrregSpacedGrid) and grid.pass_points_at_runtime):
             continue
         points = compute_consumption_points(
             consumption_floor=consumption_floor, n_points=grid.n_points
