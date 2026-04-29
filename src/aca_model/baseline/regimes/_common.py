@@ -194,14 +194,6 @@ class Grids:
 # bend points (0 → kink_0 → kink_1 → kink_2). Total = 32.
 _AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
 
-# Consumption grid: log-spaced from the lower bound of the
-# `consumption_floor` parameter (BOUNDS in task_estimate_parameters)
-# up to a high value that brackets the unconstrained optimum for the
-# richest agents in the state space. Mirrors the struct-ret design
-# (concentrate gridpoints where CRRA curvature is highest).
-_CONSUMPTION_GRID_START: float = 100.0
-_CONSUMPTION_GRID_STOP: float = 300_000.0
-
 
 def build_grids(
     grid_config: GridConfig = GRID_CONFIG,
@@ -273,14 +265,7 @@ def build_grids(
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         consumption=IrregSpacedGrid(
-            points=tuple(
-                float(c)
-                for c in np.geomspace(
-                    _CONSUMPTION_GRID_START,
-                    _CONSUMPTION_GRID_STOP,
-                    num=grid_config.n_consumption_gridpoints,
-                )
-            ),
+            n_points=grid_config.n_consumption_gridpoints,
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,

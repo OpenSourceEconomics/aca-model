@@ -44,6 +44,7 @@ from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model
 from aca_model.config import BENCHMARK_GRID_CONFIG
+from aca_model.consumption_grid import inject_consumption_points
 
 _PARAMS_FILE = (
     Path(__file__).resolve().parent / "_benchmark_data" / "benchmark_params.pkl"
@@ -96,17 +97,26 @@ def create_benchmark_model(*, pref_type_grid: DiscreteGrid | None = None) -> Mod
     )
 
 
-def get_benchmark_params() -> tuple[dict[str, Any], dict[str, Any]]:
+def get_benchmark_params(
+    *, model: Model | None = None
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Load the frozen `(fixed_params, params)` snapshot.
 
     Pref-type-indexed `pd.Series` in `params` are truncated to
     `_N_BENCHMARK_PREF_TYPES` rows so they line up with
     `BenchmarkPrefType`'s categories.
+
+    When `model` is provided, consumption gridpoints are injected into
+    `params` for each regime that declares `consumption` as an
+    `IrregSpacedGrid` with runtime-supplied points. The lower bound is
+    read from `params["consumption_floor"]`.
     """
     with _PARAMS_FILE.open("rb") as fh:
         data = cloudpickle.load(fh)
     fixed_params = data["fixed_params"]
     params = _truncate_pref_type_indexed(data["params"])
+    if model is not None:
+        params = inject_consumption_points(params=params, model=model)
     return fixed_params, params
 
 
@@ -143,10 +153,14 @@ def get_benchmark_initial_conditions(
     regime = rng.choice(regime_ids, size=n_subjects).astype(np.int32)
 
     # Grid ranges come from any of the five regimes (shared structure).
+    # Use to_jax() so the helper handles both LinSpacedGrid and
+    # PiecewiseLinSpacedGrid (the latter has no `.start` / `.stop`).
     ref_regime = model.regimes[_INITIAL_REGIMES[0]]
     grids = ref_regime.states
-    assets_lo, assets_hi = grids["assets"].start, grids["assets"].stop
-    aime_lo, aime_hi = grids["aime"].start, grids["aime"].stop
+    assets_pts = np.asarray(grids["assets"].to_jax())
+    aime_pts = np.asarray(grids["aime"].to_jax())
+    assets_lo, assets_hi = float(assets_pts.min()), float(assets_pts.max())
+    aime_lo, aime_hi = float(aime_pts.min()), float(aime_pts.max())
     hcc_p_pts = np.asarray(grids["hcc_persistent"].to_jax())
     hcc_t_pts = np.asarray(grids["hcc_transitory"].to_jax())
     wage_res_pts = np.asarray(grids["log_ft_wage_res"].to_jax())
