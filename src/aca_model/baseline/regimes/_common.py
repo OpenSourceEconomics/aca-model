@@ -287,7 +287,10 @@ def _build_aime_grid(
     """
     if fixed_params is None or "pia_aime_grid" not in fixed_params:
         return LinSpacedGrid(
-            start=0.0, stop=8_000.0, n_points=grid_config.n_aime_gridpoints
+            start=0.0,
+            stop=8_000.0,
+            n_points=grid_config.n_aime_gridpoints,
+            batch_size=grid_config.n_aime_batch_size,
         )
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
     pieces = (
@@ -295,7 +298,9 @@ def _build_aime_grid(
         Piece(interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]),
         Piece(interval=f"[{kinks[2]}, {kinks[3]}]", n_points=_AIME_PIECE_N_POINTS[2]),
     )
-    return PiecewiseLinSpacedGrid(pieces=pieces)
+    return PiecewiseLinSpacedGrid(
+        pieces=pieces, batch_size=grid_config.n_aime_batch_size
+    )
 
 
 def _has_required_wage_keys(*, wage_params: Mapping[str, Any]) -> bool:

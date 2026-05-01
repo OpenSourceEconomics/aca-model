@@ -76,7 +76,8 @@ def create_benchmark_model(*, pref_type_grid: DiscreteGrid | None = None) -> Mod
 
     The benchmark uses a 2-type `BenchmarkPrefType`. No `batch_size != 0`
     on any grid (continuous grids inherit
-    `BENCHMARK_GRID_CONFIG.n_assets_batch_size = 0`).
+    `BENCHMARK_GRID_CONFIG.n_assets_batch_size = 0` and
+    `n_aime_batch_size = 0`).
 
     Args:
         pref_type_grid: Override for the pref_type grid. Default is a plain
