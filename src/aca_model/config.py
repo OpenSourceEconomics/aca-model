@@ -36,7 +36,7 @@ class GridConfig:
     # `batch_size` on the assets grid: chunked vmap stride for the
     # outer state loop. Useful at prod sizes for memory reasons; set
     # to 0 in BENCHMARK_GRID_CONFIG to skip the Python-loop overhead.
-    n_assets_batch_size: int = 2
+    n_assets_batch_size: int = 1
 
 
 MODEL_CONFIG = ModelConfig()
