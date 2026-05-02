@@ -23,6 +23,7 @@ def create_model(
     derived_categoricals: Mapping[str, DiscreteGrid | Mapping[str, DiscreteGrid]]
     | None = None,
     grid_config: GridConfig = GRID_CONFIG,
+    n_subjects: int | None = None,
 ) -> Model:
     """Create an ACA policy variant model.
 
@@ -65,4 +66,5 @@ def create_model(
         description=f"Structural retirement model ({policy.name})",
         fixed_params=fixed_params or {},
         derived_categoricals=derived_categoricals,
+        n_subjects=n_subjects,
     )

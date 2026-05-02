@@ -71,7 +71,11 @@ _INITIAL_REGIMES = (
 )
 
 
-def create_benchmark_model(*, pref_type_grid: DiscreteGrid | None = None) -> Model:
+def create_benchmark_model(
+    *,
+    pref_type_grid: DiscreteGrid | None = None,
+    n_subjects: int | None = None,
+) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 
     The benchmark uses a 2-type `BenchmarkPrefType`. No `batch_size != 0`
@@ -85,6 +89,9 @@ def create_benchmark_model(*, pref_type_grid: DiscreteGrid | None = None) -> Mod
             (or `PARTITION_VMAP`) to get the partition-lifted kernel — the
             recommended production setting for aca-model at scale, but only
             supported on pylcm versions that expose `DispatchStrategy`.
+        n_subjects: Forwarded to `lcm.Model(n_subjects=...)`. When set, the
+            first matching `simulate(...)` call AOT-compiles all simulate
+            functions for that batch shape.
     """
     if pref_type_grid is None:
         pref_type_grid = DiscreteGrid(BenchmarkPrefType)
@@ -94,6 +101,7 @@ def create_benchmark_model(*, pref_type_grid: DiscreteGrid | None = None) -> Mod
         fixed_params=fixed_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
         pref_type_grid=pref_type_grid,
+        n_subjects=n_subjects,
     )
 
 
