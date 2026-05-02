@@ -29,7 +29,7 @@ jobs:
       - name: Install pylcm (unreleased feature branch required)
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@feature/runtime-action-grids"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@feat/simulate-aot-n-subjects"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest
