@@ -32,6 +32,7 @@ def create_model(
     | None = None,
     grid_config: GridConfig = GRID_CONFIG,
     pref_type_grid: DiscreteGrid | None = None,
+    n_subjects: int | None = None,
 ) -> Model:
     """Create the baseline structural retirement model.
 
@@ -79,6 +80,7 @@ def create_model(
         description="Baseline structural retirement model (pre-ACA)",
         fixed_params=fixed_params,
         derived_categoricals=derived_categoricals,
+        n_subjects=n_subjects,
     )
 
 
