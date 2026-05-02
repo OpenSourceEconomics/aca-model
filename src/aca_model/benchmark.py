@@ -73,8 +73,8 @@ _INITIAL_REGIMES = (
 
 def create_benchmark_model(
     *,
+    n_subjects: int,
     pref_type_grid: DiscreteGrid | None = None,
-    n_subjects: int | None = None,
 ) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 

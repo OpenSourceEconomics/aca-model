@@ -26,13 +26,13 @@ Callers can override by passing `max_consumption` in `fixed_params`."""
 
 def create_model(
     *,
+    n_subjects: int,
     fixed_params: Mapping[str, Any] | None = None,
     wage_params: Mapping[str, Any] | None = None,
     derived_categoricals: Mapping[str, DiscreteGrid | Mapping[str, DiscreteGrid]]
     | None = None,
     grid_config: GridConfig = GRID_CONFIG,
     pref_type_grid: DiscreteGrid | None = None,
-    n_subjects: int | None = None,
 ) -> Model:
     """Create the baseline structural retirement model.
 

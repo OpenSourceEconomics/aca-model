@@ -18,13 +18,13 @@ from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
 
 def create_model(
     *,
+    n_subjects: int,
     policy: PolicyVariant = PolicyVariant.ACA,
     fixed_params: Mapping[str, Any] | None = None,
     wage_params: Mapping[str, Any] | None = None,
     derived_categoricals: Mapping[str, DiscreteGrid | Mapping[str, DiscreteGrid]]
     | None = None,
     grid_config: GridConfig = GRID_CONFIG,
-    n_subjects: int | None = None,
 ) -> Model:
     """Create an ACA policy variant model.
 
