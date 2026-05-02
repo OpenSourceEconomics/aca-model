@@ -12,7 +12,7 @@ from aca_model.benchmark import (
 @pytest.mark.long_running
 def test_benchmark_model_simulates_end_to_end() -> None:
     n_subjects = 20
-    model = create_benchmark_model(n_subjects=n_subjects)
+    model = create_benchmark_model(n_subjects=n_subjects, max_consumption=300_000.0)
     _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
         model=model, n_subjects=n_subjects, seed=0

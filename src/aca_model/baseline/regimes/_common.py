@@ -37,7 +37,6 @@ from aca_model.agent.preferences import PrefType
 from aca_model.baseline import health_insurance
 from aca_model.baseline.health_insurance import BuyPrivate
 from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
-from aca_model.consumption_grid import consumption_grid_upper_bound
 from aca_model.environment import social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
@@ -537,12 +536,6 @@ def build_common_functions(spec: dict[str, str]) -> dict:
     # Cash on hand and transfers
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
     functions["transfers"] = assets_and_income.transfers
-
-    # Marker: surfaces `max_consumption` in the params template so it
-    # can be supplied via fixed_params and read back at inject time
-    # by `inject_consumption_points`. Output unused; pruned at
-    # solve / simulate.
-    functions["consumption_grid_upper_bound"] = consumption_grid_upper_bound
 
     return functions
 

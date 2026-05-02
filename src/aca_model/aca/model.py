@@ -11,7 +11,6 @@ from lcm import AgeGrid, DiscreteGrid, Model
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
-from aca_model.baseline.model import _with_max_consumption_default
 from aca_model.baseline.regimes import RegimeId
 from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
 
@@ -19,6 +18,7 @@ from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
 def create_model(
     *,
     n_subjects: int,
+    max_consumption: float,
     policy: PolicyVariant = PolicyVariant.ACA,
     fixed_params: Mapping[str, Any] | None = None,
     wage_params: Mapping[str, Any] | None = None,
@@ -29,6 +29,7 @@ def create_model(
     """Create an ACA policy variant model.
 
     Args:
+        n_subjects: Forwarded to `lcm.Model(n_subjects=...)`.
         policy: Which ACA policy combination to apply.
         fixed_params: Parameters to fix at model creation time. These are
             partialled into compiled functions and removed from the params
@@ -43,6 +44,9 @@ def create_model(
             contains `pd.Series` indexed by DAG function outputs.
         grid_config: Continuous-grid point counts. Defaults to production
             values.
+        max_consumption: Upper bound of the runtime consumption grid in
+            $/year. Attached to the returned Model and read back at inject
+            time by `inject_consumption_points`.
 
     Returns:
         pylcm Model with ACA-specific function overrides.
@@ -53,7 +57,6 @@ def create_model(
         stop=MODEL_CONFIG.end_age - 1,
         step="Y",
     )
-    fixed_params = _with_max_consumption_default(fixed_params)
     regimes = build_all_regimes(
         policy=policy,
         grid_config=grid_config,
@@ -61,12 +64,14 @@ def create_model(
         wage_params=wage_params,
     )
 
-    return Model(
+    model = Model(
         regimes=regimes,
         ages=ages,
         regime_id_class=RegimeId,
         description=f"Structural retirement model ({policy.name})",
-        fixed_params=fixed_params,
+        fixed_params=fixed_params or {},
         derived_categoricals=derived_categoricals,
         n_subjects=n_subjects,
     )
+    model.max_consumption = max_consumption
+    return model

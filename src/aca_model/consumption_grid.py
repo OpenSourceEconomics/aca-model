@@ -3,10 +3,11 @@
 Consumption is declared as `IrregSpacedGrid(n_points=N)` in
 `baseline.regimes._common.build_grids` so the bounds can track
 runtime parameters: the lower bound from the per-iteration
-`consumption_floor` parameter, the upper bound from the per-creation-time
-`max_consumption` fixed param. Callers must inject the actual
-gridpoints into `params` via `inject_consumption_points` before
-calling `model.solve()` / `model.simulate()`.
+`consumption_floor` parameter, the upper bound from a per-model
+`max_consumption` knob attached to the `Model` instance by the
+`create_model` factories. Callers must inject the actual gridpoints
+into `params` via `inject_consumption_points` before calling
+`model.solve()` / `model.simulate()`.
 """
 
 from collections.abc import Mapping
@@ -24,13 +25,13 @@ def inject_consumption_points(
 ) -> dict[str, Any]:
     """Inject consumption gridpoints into per-regime params.
 
-    Walks `model.regimes`, finds those with `consumption` declared as
+    Walks every regime, finds the action whose grid is an
     `IrregSpacedGrid` with runtime-supplied points, and writes
     `params[regime_name]["consumption"] = {"points": <pts>}`.
 
     Lower bound: `params["consumption_floor"]` (varies per iteration).
-    Upper bound: `max_consumption` from the regime's resolved
-    fixed-params (set once at model creation).
+    Upper bound: `model.max_consumption` (required attribute; set by
+    the `create_model` factory).
 
     Args:
         params: Existing params mapping. Returned as a new dict; the input is
@@ -41,6 +42,7 @@ def inject_consumption_points(
         New params dict with consumption points injected.
     """
     consumption_floor = float(params["consumption_floor"])
+    max_consumption = float(model.max_consumption)
     out: dict[str, Any] = dict(params)
     for regime_name, regime in model.regimes.items():
         grid = regime.actions.get("consumption")
@@ -49,9 +51,6 @@ def inject_consumption_points(
         # Runtime-points grids always have `n_points` set (the constructor
         # rejects the (points=None, n_points=None) combo); narrow for ty.
         assert grid.n_points is not None
-        max_consumption = float(
-            model.internal_regimes[regime_name].resolved_fixed_params["max_consumption"]
-        )
         points = _compute_consumption_points(
             consumption_floor=consumption_floor,
             max_consumption=max_consumption,
@@ -61,20 +60,6 @@ def inject_consumption_points(
         regime_entry["consumption"] = {"points": points}
         out[regime_name] = regime_entry
     return out
-
-
-def consumption_grid_upper_bound(max_consumption: float) -> float:
-    """Surface `max_consumption` in the regime params template.
-
-    pylcm builds the params template from each regime function's
-    signature. `max_consumption` is read at runtime by
-    `inject_consumption_points` from `resolved_fixed_params`; for
-    that to work via pylcm's fixed-params machinery, the key must
-    appear in some function's signature. This marker function is
-    the entry point — its output is intentionally unused, and
-    dags.tree pruning drops the call at solve / simulate time.
-    """
-    return max_consumption
 
 
 def _compute_consumption_points(
