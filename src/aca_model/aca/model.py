@@ -11,6 +11,7 @@ from lcm import AgeGrid, DiscreteGrid, Model
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
+from aca_model.baseline.model import _with_max_consumption_default
 from aca_model.baseline.regimes import RegimeId
 from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
 
@@ -51,6 +52,7 @@ def create_model(
         stop=MODEL_CONFIG.end_age - 1,
         step="Y",
     )
+    fixed_params = _with_max_consumption_default(fixed_params)
     regimes = build_all_regimes(
         policy=policy,
         grid_config=grid_config,
@@ -63,6 +65,6 @@ def create_model(
         ages=ages,
         regime_id_class=RegimeId,
         description=f"Structural retirement model ({policy.name})",
-        fixed_params=fixed_params or {},
+        fixed_params=fixed_params,
         derived_categoricals=derived_categoricals,
     )
