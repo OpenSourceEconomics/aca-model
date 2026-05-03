@@ -16,13 +16,13 @@ from typing import Any
 from lcm import AgeGrid, DiscreteGrid, Model
 
 from aca_model.baseline.regimes import RegimeId, build_all_regimes
+from aca_model.baseline.regimes._common import MAX_CONSUMPTION
 from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
 
 
 def create_model(
     *,
     n_subjects: int,
-    max_consumption: float,
     fixed_params: Mapping[str, Any] | None = None,
     wage_params: Mapping[str, Any] | None = None,
     derived_categoricals: Mapping[str, DiscreteGrid | Mapping[str, DiscreteGrid]]
@@ -51,9 +51,6 @@ def create_model(
         pref_type_grid: Optional override for the `pref_type` `DiscreteGrid`.
             Defaults to `DiscreteGrid(PrefType)`. Used by the benchmark to
             substitute a 2-type variant with `DispatchStrategy.PARTITION_SCAN`.
-        max_consumption: Upper bound of the runtime consumption grid in
-            $/year. Attached to the returned Model and read back at inject
-            time by `inject_consumption_points`.
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
@@ -81,12 +78,7 @@ def create_model(
         derived_categoricals=derived_categoricals,
         n_subjects=n_subjects,
     )
-    # Attach the consumption-grid upper bound directly to the Model
-    # instance. Tried surfacing it via a marker function in the regime
-    # DAG first — pylcm's pruning drops unused-output functions before
-    # their parameters reach the params template, so the value never
-    # made it into `resolved_fixed_params`. Direct attachment sidesteps
-    # the templating machinery entirely; `inject_consumption_points`
-    # reads `model.max_consumption`.
-    model.max_consumption = max_consumption
+    # See `MAX_CONSUMPTION` in `baseline.regimes._common` for why this
+    # rides on the Model instance instead of `fixed_params`.
+    model.max_consumption = MAX_CONSUMPTION
     return model

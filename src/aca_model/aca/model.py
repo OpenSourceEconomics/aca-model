@@ -12,13 +12,13 @@ from lcm import AgeGrid, DiscreteGrid, Model
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
 from aca_model.baseline.regimes import RegimeId
+from aca_model.baseline.regimes._common import MAX_CONSUMPTION
 from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
 
 
 def create_model(
     *,
     n_subjects: int,
-    max_consumption: float,
     policy: PolicyVariant = PolicyVariant.ACA,
     fixed_params: Mapping[str, Any] | None = None,
     wage_params: Mapping[str, Any] | None = None,
@@ -44,9 +44,6 @@ def create_model(
             contains `pd.Series` indexed by DAG function outputs.
         grid_config: Continuous-grid point counts. Defaults to production
             values.
-        max_consumption: Upper bound of the runtime consumption grid in
-            $/year. Attached to the returned Model and read back at inject
-            time by `inject_consumption_points`.
 
     Returns:
         pylcm Model with ACA-specific function overrides.
@@ -73,5 +70,5 @@ def create_model(
         derived_categoricals=derived_categoricals,
         n_subjects=n_subjects,
     )
-    model.max_consumption = max_consumption
+    model.max_consumption = MAX_CONSUMPTION
     return model

@@ -3,11 +3,12 @@
 Consumption is declared as `IrregSpacedGrid(n_points=N)` in
 `baseline.regimes._common.build_grids` so the bounds can track
 runtime parameters: the lower bound from the per-iteration
-`consumption_floor` parameter, the upper bound from a per-model
-`max_consumption` knob attached to the `Model` instance by the
-`create_model` factories. Callers must inject the actual gridpoints
-into `params` via `inject_consumption_points` before calling
-`model.solve()` / `model.simulate()`.
+`consumption_floor` parameter, the upper bound from
+`MAX_CONSUMPTION` in `baseline.regimes._common`, which the
+`create_model` factories attach to `model.max_consumption`.
+Callers must inject the actual gridpoints into `params` via
+`inject_consumption_points` before calling `model.solve()` /
+`model.simulate()`.
 """
 
 from collections.abc import Mapping
@@ -30,8 +31,8 @@ def inject_consumption_points(
     `params[regime_name]["consumption"] = {"points": <pts>}`.
 
     Lower bound: `params["consumption_floor"]` (varies per iteration).
-    Upper bound: `model.max_consumption` (required attribute; set by
-    the `create_model` factory).
+    Upper bound: `model.max_consumption` (set by the `create_model`
+    factory from `MAX_CONSUMPTION` in `baseline.regimes._common`).
 
     Args:
         params: Existing params mapping. Returned as a new dict; the input is

@@ -195,6 +195,18 @@ class Grids:
 _AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
 
 
+MAX_CONSUMPTION: float = 300_000.0
+"""Upper bound of the runtime consumption grid in $/year.
+
+Lives here next to the other grid bounds (assets `stop=500_000.0`,
+AIME `stop=8_000.0`). The `create_model` factories attach this onto
+`model.max_consumption` so `inject_consumption_points` can read it
+back at runtime. Routed via a Model attribute rather than
+`fixed_params` because pylcm validates `fixed_params` keys against
+the regime DAG and rejects entries no function consumes.
+"""
+
+
 def build_grids(
     grid_config: GridConfig = GRID_CONFIG,
     *,
