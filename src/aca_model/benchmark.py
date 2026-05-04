@@ -122,11 +122,21 @@ def get_benchmark_params(
     """
     with _PARAMS_FILE.open("rb") as fh:
         data = cloudpickle.load(fh)
-    fixed_params = data["fixed_params"]
+    fixed_params = {
+        k: v for k, v in data["fixed_params"].items() if k not in _STALE_FIXED_KEYS
+    }
     params = _truncate_pref_type_indexed(data["params"])
     if model is not None:
         params = inject_consumption_points(params=params, model=model)
     return fixed_params, params
+
+
+# Keys that the older aca-estimation `_assemble_params.py` wrote into
+# `fixed_params` but that the current regime now resolves as a DAG
+# function. Drop them on load so pylcm's `_resolve_fixed_params` does
+# not reject the snapshot. Regenerating `benchmark_params.pkl` would
+# also remove these — the filter is a no-op when the snapshot is fresh.
+_STALE_FIXED_KEYS: frozenset[str] = frozenset({"imputed_pension_wealth_next_period"})
 
 
 def _truncate_pref_type_indexed(params: dict[str, Any]) -> dict[str, Any]:
