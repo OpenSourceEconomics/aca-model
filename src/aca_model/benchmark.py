@@ -173,7 +173,12 @@ def _add_shifted_imputation_arrays(fixed_params: dict[str, Any]) -> dict[str, An
 
 
 def _shift_one_period_forward(sr: pd.Series) -> pd.Series:
-    """Shift age-axis values forward one position (last row held flat)."""
+    """Shift age-axis values forward one position (last row held flat).
+
+    For (age, his)-indexed inputs, also rename the `his` level to
+    `target_his` so the resulting Series matches the level naming the
+    consuming `imputed_pension_wealth_next_period` function expects.
+    """
     if isinstance(sr.index, pd.MultiIndex) and sr.index.names[0] == "age":
         n_periods = sr.index.levshape[0]
         n_other = int(
@@ -181,13 +186,21 @@ def _shift_one_period_forward(sr: pd.Series) -> pd.Series:
         )
         values = sr.to_numpy().reshape(n_periods, n_other)
         shifted = np.concatenate([values[1:], values[-1:]], axis=0)
-        return pd.Series(shifted.ravel(), index=sr.index)
+        new_index = sr.index.rename(
+            [_rename_his_level(name) for name in sr.index.names]
+        )
+        return pd.Series(shifted.ravel(), index=new_index)
     if sr.index.name == "age":
         values = sr.to_numpy()
         shifted = np.concatenate([values[1:], values[-1:]])
         return pd.Series(shifted, index=sr.index)
     msg = f"Unexpected index for _shift_one_period_forward: {sr.index!r}"
     raise ValueError(msg)
+
+
+def _rename_his_level(name: str) -> str:
+    """Rename `his` to `target_his`, leave others alone."""
+    return "target_his" if name == "his" else name
 
 
 def _truncate_pref_type_indexed(params: dict[str, Any]) -> dict[str, Any]:
