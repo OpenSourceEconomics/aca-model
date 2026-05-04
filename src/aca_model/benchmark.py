@@ -125,6 +125,7 @@ def get_benchmark_params(
     fixed_params = {
         k: v for k, v in data["fixed_params"].items() if k not in _STALE_FIXED_KEYS
     }
+    fixed_params = _add_shifted_imputation_arrays(fixed_params)
     params = _truncate_pref_type_indexed(data["params"])
     if model is not None:
         params = inject_consumption_points(params=params, model=model)
@@ -137,6 +138,55 @@ def get_benchmark_params(
 # not reject the snapshot. Regenerating `benchmark_params.pkl` would
 # also remove these — the filter is a no-op when the snapshot is fresh.
 _STALE_FIXED_KEYS: frozenset[str] = frozenset({"imputed_pension_wealth_next_period"})
+
+
+# Source → derived key mapping for the 1-period-shifted views of the
+# imputation arrays. The current pension correction (`imputed_pension_
+# wealth_next_period`) consumes these. The frozen `benchmark_params.pkl`
+# predates aca-data's `_shift_one_period_forward` change, so synthesise
+# the shifted views on load. The transformation is deterministic: row
+# `period` carries the original at row `period + 1`; the last row holds
+# flat. A regenerated snapshot can drop this synthesis (the filter is a
+# no-op when the keys already exist).
+_SHIFTED_IMPUTATION_KEYS: tuple[str, ...] = (
+    "imp_intercept",
+    "imp_pia_coeff",
+    "imp_pia_kink_0_coeff",
+    "imp_pia_kink_1_coeff",
+    "imp_kink_0",
+    "imp_kink_1",
+    "imp_fraction_receiving",
+    "epdv_constant_pension",
+)
+
+
+def _add_shifted_imputation_arrays(fixed_params: dict[str, Any]) -> dict[str, Any]:
+    """Synthesise `<key>_next_period` views from the source arrays."""
+    out = dict(fixed_params)
+    for key in _SHIFTED_IMPUTATION_KEYS:
+        next_period_key = f"{key}_next_period"
+        if next_period_key in out or key not in out:
+            continue
+        out[next_period_key] = _shift_one_period_forward(out[key])
+    return out
+
+
+def _shift_one_period_forward(sr: pd.Series) -> pd.Series:
+    """Shift age-axis values forward one position (last row held flat)."""
+    if isinstance(sr.index, pd.MultiIndex) and sr.index.names[0] == "age":
+        n_periods = sr.index.levshape[0]
+        n_other = int(
+            np.prod([sr.index.levshape[i] for i in range(1, sr.index.nlevels)])
+        )
+        values = sr.to_numpy().reshape(n_periods, n_other)
+        shifted = np.concatenate([values[1:], values[-1:]], axis=0)
+        return pd.Series(shifted.ravel(), index=sr.index)
+    if sr.index.name == "age":
+        values = sr.to_numpy()
+        shifted = np.concatenate([values[1:], values[-1:]])
+        return pd.Series(shifted, index=sr.index)
+    msg = f"Unexpected index for _shift_one_period_forward: {sr.index!r}"
+    raise ValueError(msg)
 
 
 def _truncate_pref_type_indexed(params: dict[str, Any]) -> dict[str, Any]:
