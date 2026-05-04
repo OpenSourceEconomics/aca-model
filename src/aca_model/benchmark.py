@@ -56,6 +56,7 @@ _DERIVED_CATEGORICALS = {
     "good_health": DiscreteGrid(GoodHealth),
     "is_married": DiscreteGrid(IsMarried),
     "his": DiscreteGrid(HealthInsuranceState),
+    "target_his": DiscreteGrid(HealthInsuranceState),
     "pref_type": DiscreteGrid(BenchmarkPrefType),
 }
 
