@@ -55,7 +55,7 @@ def next_assets(
     consumption: ContinuousAction,
     oop_costs: FloatND,
 ) -> ContinuousState:
-    """Compute beginning-of-next-period assets.
+    """Compute beginning-of-next-period assets for non-terminal targets.
 
     OOP health costs are deducted here (not from cash_on_hand) so that the
     consumption choice does not condition on the HCC shock realization.
@@ -63,6 +63,23 @@ def next_assets(
     return (
         cash_on_hand + transfers + pension_assets_adjustment - consumption - oop_costs
     )
+
+
+def next_assets_terminal(
+    cash_on_hand: FloatND,
+    transfers: FloatND,
+    consumption: ContinuousAction,
+    oop_costs: FloatND,
+) -> ContinuousState:
+    """Compute beginning-of-next-period assets for the dead/terminal target.
+
+    No `pension_assets_adjustment` term: with no future, there is no
+    next-period pension wealth to impute against. Avoiding the dependency
+    also keeps the `dead` per-target transition's DAG free of `next_aime`
+    (which would otherwise need to come from a transition `dead` does not
+    have, since `aime` is not a state in the terminal regime).
+    """
+    return cash_on_hand + transfers - consumption - oop_costs
 
 
 def borrowing_constraint(

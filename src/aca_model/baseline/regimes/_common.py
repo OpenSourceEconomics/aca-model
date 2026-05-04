@@ -644,7 +644,7 @@ def build_state_transitions(spec: dict[str, str]) -> dict:
     """Build the state transitions dict for a non-dead regime."""
     transitions: dict = {}
     transitions["health"] = _build_per_target_health(spec)
-    transitions["assets"] = assets_and_income.next_assets
+    transitions["assets"] = _build_per_target_next_assets(spec)
     transitions["pref_type"] = None
     transitions["aime"] = (
         social_security.next_aime
@@ -659,6 +659,34 @@ def build_state_transitions(spec: dict[str, str]) -> dict:
     if claimed_ss_transition:
         transitions["claimed_ss"] = claimed_ss_transition
     return transitions
+
+
+def _build_per_target_next_assets(spec: dict[str, str]) -> dict:
+    """Build per-target assets transitions.
+
+    The `dead` target uses `next_assets_terminal` (no
+    `pension_assets_adjustment`), so the dead per-target DAG does not
+    pull in the `next_aime`-dependent imputation chain — `dead` has no
+    `aime` state and pylcm cannot resolve `next_aime` there. Non-dead
+    targets use the full `next_assets` with the pension correction.
+    """
+    targets = precompute_targets(spec)
+    id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
+
+    result: dict = {}
+    seen_ids: set[int] = set()
+
+    for target_id in targets.values():
+        if target_id in seen_ids:
+            continue
+        seen_ids.add(target_id)
+        target_name = id_to_name.get(target_id)
+        if target_name is None:
+            continue
+        result[target_name] = assets_and_income.next_assets
+
+    result["dead"] = assets_and_income.next_assets_terminal
+    return result
 
 
 def _build_per_target_health(spec: dict[str, str]) -> dict:
