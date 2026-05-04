@@ -69,7 +69,14 @@ def borrowing_constraint(
     consumption: ContinuousAction,
     cash_on_hand: FloatND,
     transfers: FloatND,
-    pension_assets_adjustment: FloatND,
 ) -> BoolND:
-    """Consumption cannot exceed available resources (no borrowing)."""
-    return consumption <= cash_on_hand + transfers + pension_assets_adjustment
+    """Consumption cannot exceed available resources (no borrowing).
+
+    `pension_assets_adjustment` is excluded: it can be negative (e.g.,
+    when the imputation overstates next-period pension wealth at a
+    cross-HIS transition), and including it here can leave no feasible
+    action at low-asset / mid-AIME corners. The correction enters
+    `next_assets` instead — a post-decision shift that does not gate
+    the current consumption choice.
+    """
+    return consumption <= cash_on_hand + transfers

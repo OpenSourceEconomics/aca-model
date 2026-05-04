@@ -4,7 +4,7 @@ Ported from struct-ret/src/model/baseline/soc_sec_pensions_taxes.py.
 """
 
 import jax.numpy as jnp
-from lcm.typing import FloatND, IntND, Period
+from lcm.typing import ContinuousState, FloatND, IntND, Period
 
 
 def benefit(
@@ -164,3 +164,42 @@ def assets_adjustment(
         * unconditional_survival_prob[period]
         * (pension_wealth_next_before_adjustment - imputed_pension_wealth_next_period)
     )
+
+
+def imputed_pension_wealth_next_period(
+    next_aime: ContinuousState,
+    target_his: IntND,
+    period: Period,
+    pia_table: FloatND,
+    pia_aime_grid: FloatND,
+    imp_intercept_next_period: FloatND,
+    imp_pia_coeff_next_period: FloatND,
+    imp_pia_kink_0_coeff_next_period: FloatND,
+    imp_pia_kink_1_coeff_next_period: FloatND,
+    imp_kink_0_next_period: FloatND,
+    imp_kink_1_next_period: FloatND,
+    imp_fraction_receiving_next_period: FloatND,
+    epdv_constant_pension_next_period: FloatND,
+) -> FloatND:
+    """Imputed pension wealth at next period using the target regime's HIS.
+
+    Mirrors `benefit` and `wealth` but indexes into 1-period-shifted views
+    of the imputation arrays so all subscripts use bare-name parameters
+    (`period`, `target_his`). Inlining is required: pylcm's AST shape
+    inference inspects the registered function's body and does not trace
+    through nested calls into `benefit`.
+    """
+    next_pia = jnp.interp(next_aime, pia_aime_grid, pia_table)
+
+    intercept = imp_intercept_next_period[period, target_his]
+    pia_pred = imp_pia_coeff_next_period[period, target_his] * next_pia
+    kink_0_adj = imp_pia_kink_0_coeff_next_period[period, target_his] * jnp.maximum(
+        0.0, next_pia - imp_kink_0_next_period[period]
+    )
+    kink_1_adj = imp_pia_kink_1_coeff_next_period[period, target_his] * jnp.maximum(
+        0.0, next_pia - imp_kink_1_next_period[period]
+    )
+
+    full_benefit = jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
+    benefit_next = full_benefit * imp_fraction_receiving_next_period[period]
+    return benefit_next * epdv_constant_pension_next_period[period]

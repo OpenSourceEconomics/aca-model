@@ -246,6 +246,29 @@ def is_medicaid_eligible(is_ssi_eligible: BoolND) -> BoolND:
     return is_ssi_eligible
 
 
+def target_his(
+    his: IntND,
+    labor_supply: DiscreteAction,
+    is_medicaid_eligible: BoolND,
+) -> IntND:
+    """Return the HIS class of the surviving target regime.
+
+    Mirrors the cross-HIS branches inside `_make_transition_canwork` (retiree,
+    tied, nongroup): tied agents who stop working become nongroup, and
+    Medicaid-eligible agents are overridden to nongroup. Used by
+    `imputed_pension_wealth_next_period` to look up next-period imputation
+    coefficients at the target's HIS.
+    """
+    tied_to_ng = (his == HealthInsuranceState.tied) & (
+        labor_supply == LaborSupply.do_not_work
+    )
+    return jnp.where(
+        tied_to_ng | is_medicaid_eligible,
+        HealthInsuranceState.nongroup,
+        his,
+    ).astype(jnp.int32)
+
+
 def oop_with_medicaid(
     primary_oop: FloatND,
     is_medicaid_eligible: BoolND,
