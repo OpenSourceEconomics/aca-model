@@ -262,10 +262,25 @@ def build_grids(
         sigma=1.0,
     )
 
-    assets_start = 0.0
+    # Assets-grid lower bound includes a one-period margin below the
+    # binding borrowing limit so that `next_assets = cash_on_hand - OOP -
+    # consumption` stays inside the grid even at the worst-shock × low-
+    # consumption corner. With the runtime log-spaced consumption grid
+    # `geomspace(consumption_floor, max_consumption, n_points)`, choices
+    # cluster densely just above `consumption_floor`, and at the lowest-
+    # asset/highest-OOP-shock corner those choices push `next_assets`
+    # slightly off the grid bottom — out-of-bounds interpolation of
+    # next-period V then injects NaN that propagates through E[V].
+    # Subtracting `MAX_CONSUMPTION` gives a worst-case single-period
+    # drain margin; cheap at production grid sizes (24 linspace points
+    # over the wider range).
+    assets_start = -MAX_CONSUMPTION
     if wage_params is not None and _has_required_wage_keys(wage_params=wage_params):
-        assets_start = -_compute_max_annual_labor_income(
-            wage_params=wage_params, wage_res_grid=wage_res
+        assets_start = (
+            -_compute_max_annual_labor_income(
+                wage_params=wage_params, wage_res_grid=wage_res
+            )
+            - MAX_CONSUMPTION
         )
 
     return Grids(
