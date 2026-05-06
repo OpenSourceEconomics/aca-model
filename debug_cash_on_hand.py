@@ -17,17 +17,29 @@ import pandas as pd
 from dags import concatenate_functions
 from lcm.params.processing import broadcast_to_template
 
+from lcm import DiscreteGrid
+
 from aca_estimation._assemble_params import (
     _NON_MODEL_KEYS,
     assemble_fixed_params,
     assemble_params,
 )
-from aca_estimation.config import ACA_DATA_BLD
 from aca_estimation._type_prediction import triple_initdist_by_pref_type
+from aca_estimation.config import ACA_DATA_BLD, GRID_CONFIG_FOR_RUN
 from aca_model.aca import PolicyVariant
 from aca_model.aca.model import create_model as create_aca_model
-from aca_estimation.config import GRID_CONFIG_FOR_RUN
+from aca_model.agent.health import GoodHealth
+from aca_model.agent.labor_market import IsMarried
+from aca_model.agent.preferences import PrefType
+from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.consumption_grid import inject_consumption_points
+
+_DERIVED_CATEGORICALS = {
+    "good_health": DiscreteGrid(GoodHealth),
+    "is_married": DiscreteGrid(IsMarried),
+    "his": DiscreteGrid(HealthInsuranceState),
+    "pref_type": DiscreteGrid(PrefType),
+}
 
 # Subjects whose `borrowing_constraint=False` in the gpu-01 production
 # diagnostic. (subject_id, regime_name) tuples. Subject 1299 is included
@@ -87,6 +99,7 @@ def main() -> None:
         policy=PolicyVariant.ACA,
         fixed_params=fixed_params,
         wage_params=wage,
+        derived_categoricals=_DERIVED_CATEGORICALS,
         grid_config=GRID_CONFIG_FOR_RUN,
     )
     model_params = {k: v for k, v in params.items() if k not in _NON_MODEL_KEYS}
