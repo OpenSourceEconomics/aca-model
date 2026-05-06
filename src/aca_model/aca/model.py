@@ -11,6 +11,7 @@ from lcm import AgeGrid, DiscreteGrid, Model
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
+from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.regimes import RegimeId
 from aca_model.baseline.regimes._common import MAX_CONSUMPTION
 from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
@@ -22,8 +23,7 @@ def create_model(
     policy: PolicyVariant = PolicyVariant.ACA,
     fixed_params: Mapping[str, Any] | None = None,
     wage_params: Mapping[str, Any] | None = None,
-    derived_categoricals: Mapping[str, DiscreteGrid | Mapping[str, DiscreteGrid]]
-    | None = None,
+    derived_categoricals: Mapping[str, DiscreteGrid] | None = None,
     grid_config: GridConfig = GRID_CONFIG,
 ) -> Model:
     """Create an ACA policy variant model.
@@ -61,13 +61,21 @@ def create_model(
         wage_params=wage_params,
     )
 
+    # See `baseline.model.create_model` for why `target_his` is declared
+    # as a base-layer derived categorical.
+    base_derived: dict[str, DiscreteGrid] = {
+        "target_his": DiscreteGrid(HealthInsuranceState),
+    }
+    if derived_categoricals is not None:
+        base_derived.update(derived_categoricals)
+
     model = Model(
         regimes=regimes,
         ages=ages,
         regime_id_class=RegimeId,
         description=f"Structural retirement model ({policy.name})",
         fixed_params=fixed_params or {},
-        derived_categoricals=derived_categoricals,
+        derived_categoricals=base_derived,
         n_subjects=n_subjects,
     )
     model.max_consumption = MAX_CONSUMPTION
