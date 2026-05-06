@@ -89,6 +89,11 @@ def main() -> None:
         hcc_insurer_params=hcc_insurer,
         pref_params=pref,
     )
+    from aca_estimation.task_simulate_aca import _augment_fixed_params_for_aca
+
+    _augment_fixed_params_for_aca(
+        fixed_params=fixed_params, ssi_params=ssi, policy=PolicyVariant.ACA
+    )
     broadcast_to_template(params=fixed_params, template=template, required=False)
     params = assemble_params(
         pref_params=pref, base_wage_profile=wage["log_ft_wage_base"]
