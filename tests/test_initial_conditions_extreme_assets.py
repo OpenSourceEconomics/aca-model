@@ -39,6 +39,34 @@ def test_borrowing_constraint_admits_c_floor_at_million_dollar_negative_cash() -
     assert admitted
 
 
+def test_borrowing_constraint_admits_c_floor_with_python_float_floor() -> None:
+    """Python-fp64 `consumption_floor` against fp32 `consumption` must compare in fp32.
+
+    `consumption_floor` arrives at the constraint as a Python float (fp64), but
+    `consumption` comes from the model's fp32 grid (`jnp.geomspace(...)`),
+    quantized to a value that differs from the fp64 input by one fp32 ulp
+    (~2e-5 at $c_{floor} \\approx 1597$). Without an explicit dtype cast on the
+    floor, the comparison promotes to fp64 and the lowest grid point fails
+    the constraint. The fix forces the floor into `consumption.dtype` before
+    the `max` so both sides use the same precision.
+
+    Reproduces the production failure on gpu-01 where every subject in
+    `nongroup_nomc_inelig_canwork` (and similar regimes) hit
+    `borrowing_constraint=False` despite legitimate cash_on_hand values.
+    """
+    consumption_floor = 1597.0921419521899  # production value, fp64
+    consumption_fp32 = jnp.float32(consumption_floor)
+    admitted = bool(
+        borrowing_constraint(
+            consumption=consumption_fp32,
+            cash_on_hand=jnp.float32(-44_937.9),
+            consumption_floor=consumption_floor,  # raw Python float
+            equivalence_scale=jnp.float32(1.0),
+        )
+    )
+    assert admitted
+
+
 def test_extreme_negative_assets_subject_passes_validation() -> None:
     """A subject placed at `assets = -1_000_000` clears initial-conditions validation.
 
