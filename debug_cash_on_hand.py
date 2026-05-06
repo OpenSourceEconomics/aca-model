@@ -15,14 +15,14 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from dags import concatenate_functions
+from lcm.params.processing import broadcast_to_template
 
-from aca_data.config import data_catalog
 from aca_estimation._assemble_params import (
     _NON_MODEL_KEYS,
     assemble_fixed_params,
     assemble_params,
-    broadcast_to_template,
 )
+from aca_estimation.config import ACA_DATA_BLD
 from aca_estimation._type_prediction import triple_initdist_by_pref_type
 from aca_model.aca import PolicyVariant
 from aca_model.aca.model import create_model as create_aca_model
@@ -41,23 +41,23 @@ _TARGETS: tuple[tuple[int, str], ...] = (
 )
 
 
-def _load_pickle(name: str):
-    with open(data_catalog[name], "rb") as fh:
+def _load(name: str):
+    with open(ACA_DATA_BLD / f"{name}.pkl", "rb") as fh:
         return pickle.load(fh)
 
 
 def main() -> None:
-    ss = _load_pickle("social_security_params")
-    tax = _load_pickle("tax_params")
-    ssi = _load_pickle("ssi_medicaid_params")
-    hi = _load_pickle("health_insurance_params")
-    pension = _load_pickle("pension_params")
-    wage = _load_pickle("wage_offer")
-    transition = _load_pickle("transition_params")
-    env = _load_pickle("environment_constants")
-    hcc_insurer = _load_pickle("hcc_insurer_params")
-    pref = _load_pickle("preference_start_values")
-    initdist_df = pd.read_pickle(data_catalog["initial_conditions"])
+    ss = _load("social_security_params")
+    tax = _load("tax_params")
+    ssi = _load("ssi_medicaid_params")
+    hi = _load("health_insurance_params")
+    pension = _load("pension_params")
+    wage = _load("wage_params")
+    transition = _load("transition_probs")
+    env = _load("environment_constants")
+    hcc_insurer = _load("hcc_insurer_params")
+    pref = _load("preference_start_values")
+    initdist_df = pd.read_pickle(ACA_DATA_BLD / "initial_conditions.pkl")
 
     n_subjects = 3 * len(initdist_df)
     bare_model = create_aca_model(
