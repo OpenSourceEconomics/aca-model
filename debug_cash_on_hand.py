@@ -26,7 +26,7 @@ from aca_estimation.config import ACA_DATA_BLD
 from aca_estimation._type_prediction import triple_initdist_by_pref_type
 from aca_model.aca import PolicyVariant
 from aca_model.aca.model import create_model as create_aca_model
-from aca_model.config import GRID_CONFIG_FOR_RUN
+from aca_estimation.config import GRID_CONFIG_FOR_RUN
 from aca_model.consumption_grid import inject_consumption_points
 
 # Subjects whose `borrowing_constraint=False` in the gpu-01 production
