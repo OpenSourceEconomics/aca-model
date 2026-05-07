@@ -10,19 +10,22 @@ from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes._overrides import apply_aca_overrides
 from aca_model.baseline.regimes import build_all_regimes as baseline_build_all_regimes
 from aca_model.baseline.regimes._common import REGIME_SPECS
-from aca_model.config import GRID_CONFIG, GridConfig
+from aca_model.config import GridConfig
 
 
 def build_all_regimes(
-    policy: PolicyVariant,
-    grid_config: GridConfig = GRID_CONFIG,
     *,
-    fixed_params: Mapping[str, Any] | None = None,
-    wage_params: Mapping[str, Any] | None = None,
+    policy: PolicyVariant,
+    grid_config: GridConfig,
+    fixed_params: Mapping[str, Any] | None,
+    wage_params: Mapping[str, Any] | None,
 ) -> dict[str, Regime]:
     """Build all 19 regimes with ACA policy overrides."""
     regimes = baseline_build_all_regimes(
-        grid_config, fixed_params=fixed_params, wage_params=wage_params
+        grid_config=grid_config,
+        fixed_params=fixed_params,
+        wage_params=wage_params,
+        pref_type_grid=None,
     )
     result = {}
     for name, regime in regimes.items():

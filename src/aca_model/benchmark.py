@@ -75,7 +75,7 @@ _INITIAL_REGIMES = (
 def create_benchmark_model(
     *,
     n_subjects: int,
-    pref_type_grid: DiscreteGrid | None = None,
+    pref_type_grid: DiscreteGrid,
 ) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 
@@ -85,22 +85,21 @@ def create_benchmark_model(
     `n_aime_batch_size = 0`).
 
     Args:
-        pref_type_grid: Override for the pref_type grid. Default is a plain
-            `DiscreteGrid(BenchmarkPrefType)` (fused vmap). Pass
-            `DiscreteGrid(BenchmarkPrefType, dispatch=DispatchStrategy.PARTITION_SCAN)`
-            (or `PARTITION_VMAP`) to get the partition-lifted kernel — the
-            recommended production setting for aca-model at scale, but only
-            supported on pylcm versions that expose `DispatchStrategy`.
         n_subjects: Forwarded to `lcm.Model(n_subjects=...)`. When set, the
             first matching `simulate(...)` call AOT-compiles all simulate
             functions for that batch shape.
+        pref_type_grid: Pref-type grid. Pass `DiscreteGrid(BenchmarkPrefType)`
+            for plain fused-vmap, or
+            `DiscreteGrid(BenchmarkPrefType, dispatch=DispatchStrategy.PARTITION_SCAN)`
+            (or `PARTITION_VMAP`) for the partition-lifted kernel — the
+            recommended production setting for aca-model at scale, but only
+            supported on pylcm versions that expose `DispatchStrategy`.
     """
-    if pref_type_grid is None:
-        pref_type_grid = DiscreteGrid(BenchmarkPrefType)
-    fixed_params, _ = get_benchmark_params()
+    fixed_params, _ = get_benchmark_params(model=None)
     return create_model(
         grid_config=BENCHMARK_GRID_CONFIG,
         fixed_params=fixed_params,
+        wage_params=None,
         derived_categoricals=_DERIVED_CATEGORICALS,
         pref_type_grid=pref_type_grid,
         n_subjects=n_subjects,
@@ -108,7 +107,7 @@ def create_benchmark_model(
 
 
 def get_benchmark_params(
-    *, model: Model | None = None
+    *, model: Model | None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Load the frozen `(fixed_params, params)` snapshot.
 
@@ -119,7 +118,8 @@ def get_benchmark_params(
     When `model` is provided, consumption gridpoints are injected into
     `params` for each regime that declares `consumption` as an
     `IrregSpacedGrid` with runtime-supplied points. The lower bound is
-    read from `params["consumption_floor"]`.
+    read from `params["consumption_floor"]`. Pass `model=None` to skip
+    injection (e.g. when constructing the model with `fixed_params`).
     """
     with _PARAMS_FILE.open("rb") as fh:
         data = cloudpickle.load(fh)
@@ -222,7 +222,7 @@ def _truncate_pref_type_indexed(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_benchmark_initial_conditions(
-    *, model: Model, n_subjects: int = 100, seed: int = 42
+    *, model: Model, n_subjects: int, seed: int
 ) -> dict[str, Array]:
     """Draw random feasible initial conditions across five age-51 regimes.
 

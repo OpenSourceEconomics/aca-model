@@ -36,7 +36,7 @@ from aca_model.agent.labor_market import LaborSupply, LaggedLaborSupply, Spousal
 from aca_model.agent.preferences import PrefType
 from aca_model.baseline import health_insurance
 from aca_model.baseline.health_insurance import BuyPrivate
-from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
+from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment import social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
@@ -208,11 +208,11 @@ the regime DAG and rejects entries no function consumes.
 
 
 def build_grids(
-    grid_config: GridConfig = GRID_CONFIG,
     *,
-    fixed_params: Mapping[str, Any] | None = None,
-    wage_params: Mapping[str, Any] | None = None,
-    pref_type_grid: DiscreteGrid | None = None,
+    grid_config: GridConfig,
+    fixed_params: Mapping[str, Any] | None,
+    wage_params: Mapping[str, Any] | None,
+    pref_type_grid: DiscreteGrid | None,
 ) -> Grids:
     """Build continuous-state/action grids from a `GridConfig`.
 
