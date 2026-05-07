@@ -14,36 +14,40 @@ from aca_model.aca.regimes import build_all_regimes
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.regimes import RegimeId
 from aca_model.baseline.regimes._common import MAX_CONSUMPTION
-from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
+from aca_model.config import MODEL_CONFIG, GridConfig
 
 
 def create_model(
     *,
     n_subjects: int,
-    policy: PolicyVariant = PolicyVariant.ACA,
-    fixed_params: Mapping[str, Any] | None = None,
-    wage_params: Mapping[str, Any] | None = None,
-    derived_categoricals: Mapping[str, DiscreteGrid] | None = None,
-    grid_config: GridConfig = GRID_CONFIG,
+    policy: PolicyVariant,
+    fixed_params: Mapping[str, Any] | None,
+    wage_params: Mapping[str, Any] | None,
+    derived_categoricals: Mapping[str, DiscreteGrid] | None,
+    grid_config: GridConfig,
 ) -> Model:
     """Create an ACA policy variant model.
 
     Args:
         n_subjects: Forwarded to `lcm.Model(n_subjects=...)`.
-        policy: Which ACA policy combination to apply.
-        fixed_params: Parameters to fix at model creation time. These are
-            partialled into compiled functions and removed from the params
-            template. Pass data-derived constants here; only estimation
-            parameters should go through `model.simulate(params=...)`.
+        policy: Which ACA policy combination to apply (e.g.
+            `PolicyVariant.ACA`).
+        fixed_params: Parameters to fix at model creation time, or `None`
+            to skip. Fixed params are partialled into compiled functions
+            and removed from the params template. Pass data-derived
+            constants here; only estimation parameters should go through
+            `model.simulate(params=...)`.
         wage_params: Data-derived wage profile dict (`log_ft_wage_mean`,
             `log_ft_wage_std`, `adj_wage_hours_*`) used only at grid-build
             time to size the assets-floor to `-max_annual_labor_income`.
-            Not routed to the pylcm Model.
-        derived_categoricals: Extra categorical mappings for derived variables
-            not in the model's state/action grids. Needed when `fixed_params`
-            contains `pd.Series` indexed by DAG function outputs.
-        grid_config: Continuous-grid point counts. Defaults to production
-            values.
+            Not routed to the pylcm Model. `None` skips the floor sizing.
+        derived_categoricals: Extra categorical mappings for derived
+            variables not in the model's state/action grids, or `None`.
+            Needed when `fixed_params` contains `pd.Series` indexed by DAG
+            function outputs.
+        grid_config: Continuous-grid point counts. Pass `GRID_CONFIG` for
+            production values or `BENCHMARK_GRID_CONFIG` for the
+            fast-but-structurally-faithful benchmark.
 
     Returns:
         pylcm Model with ACA-specific function overrides.

@@ -8,9 +8,11 @@ how negative starting assets are. The model's constraints — and pylcm's
 """
 
 import jax.numpy as jnp
+from lcm import DiscreteGrid
 from lcm.simulation.initial_conditions import validate_initial_conditions
 
 from aca_model.agent.assets_and_income import borrowing_constraint
+from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.benchmark import (
     create_benchmark_model,
     get_benchmark_initial_conditions,
@@ -18,25 +20,38 @@ from aca_model.benchmark import (
 )
 
 
-def test_borrowing_constraint_admits_c_floor_at_million_dollar_negative_cash() -> None:
-    """At `cash_on_hand = -$1M` (fp32), `c = c_floor` remains a feasible choice.
+def test_borrowing_constraint_admits_consumption_at_post_transfer_resources() -> None:
+    """`consumption == cash_on_hand + transfers` is feasible by equality."""
+    cash_on_hand = jnp.asarray(-50_000.0)
+    transfers = jnp.asarray(55_000.0)
+    consumption = cash_on_hand + transfers
 
-    Computing `cash_on_hand + transfers` directly suffers float32 catastrophic
-    cancellation: `(-1e6) + (c_floor + 1e6)` loses ~0.1 of precision, enough
-    to wipe out the `c == c_floor` boundary. The constraint must use the
-    algebraically equivalent but numerically stable `max(cash_on_hand, floor)`
-    form.
-    """
-    consumption_floor = 5_000.0
     admitted = bool(
         borrowing_constraint(
-            consumption=jnp.float32(consumption_floor),
-            cash_on_hand=jnp.float32(-1_000_000.0),
-            consumption_floor=consumption_floor,
-            equivalence_scale=jnp.float32(1.0),
+            consumption=consumption,
+            cash_on_hand=cash_on_hand,
+            transfers=transfers,
         )
     )
     assert admitted
+
+
+def test_borrowing_constraint_rejects_consumption_above_post_transfer_resources() -> (
+    None
+):
+    """`consumption > cash_on_hand + transfers` is rejected."""
+    cash_on_hand = jnp.asarray(-50_000.0)
+    transfers = jnp.asarray(55_000.0)
+    consumption = cash_on_hand + transfers + 1.0
+
+    admitted = bool(
+        borrowing_constraint(
+            consumption=consumption,
+            cash_on_hand=cash_on_hand,
+            transfers=transfers,
+        )
+    )
+    assert not admitted
 
 
 def test_extreme_negative_assets_subject_passes_validation() -> None:
@@ -47,7 +62,10 @@ def test_extreme_negative_assets_subject_passes_validation() -> None:
     floor / transfer system absorbs them, with `c = c_floor` always feasible.
     """
     n_subjects = 1
-    model = create_benchmark_model(n_subjects=n_subjects)
+    model = create_benchmark_model(
+        n_subjects=n_subjects,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
     _, params = get_benchmark_params(model=model)
 
     initial_conditions = get_benchmark_initial_conditions(
