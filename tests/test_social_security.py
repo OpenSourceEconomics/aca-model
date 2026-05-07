@@ -9,7 +9,7 @@ import numpy as np
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.environment import social_security
 from aca_model.environment.social_security import ClaimedSS
-from tests.helpers.social_security import compute_di_dropout_scale, compute_pia_table
+from .helpers.social_security import compute_di_dropout_scale, compute_pia_table
 
 ATOL = 0.01
 
