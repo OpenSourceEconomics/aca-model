@@ -108,5 +108,5 @@ def borrowing_constraint(
     `next_assets` instead — a post-decision shift that does not gate
     the current consumption choice.
     """
-    floor = jnp.asarray(consumption_floor, dtype=consumption.dtype) * equivalence_scale
+    floor = consumption_floor * equivalence_scale
     return consumption <= jnp.maximum(cash_on_hand, floor)
