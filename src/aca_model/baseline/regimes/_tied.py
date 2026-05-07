@@ -83,6 +83,10 @@ def _build_functions(spec: dict[str, str]) -> dict:
         functions["pension_wealth_next_before_adjustment"] = (
             pensions.wealth_next_before_adjustment
         )
+        functions["target_his"] = health_insurance.target_his
+        functions["imputed_pension_wealth_next_period"] = (
+            pensions.imputed_pension_wealth_next_period
+        )
         functions["pension_assets_adjustment"] = pensions.assets_adjustment
         functions["total_to_pia"] = pensions.total_to_pia
 

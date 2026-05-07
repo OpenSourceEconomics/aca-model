@@ -84,7 +84,7 @@ def test_utility_positive_leisure() -> None:
         consumption_weight=jnp.array([0.4, 0.4, 0.4]),
         coefficient_rra=jnp.array([2.0, 2.0, 2.0]),
         equivalence_scale=jnp.array(1.0),
-        utility_scale_factor=jnp.array([1.0, 1.0, 1.0]),
+        utility_scale_factor=jnp.array(1.0),
     )
     assert jnp.isfinite(result)
 
@@ -97,7 +97,7 @@ def test_utility_log_case() -> None:
         consumption_weight=jnp.array([0.4, 0.4, 0.4]),
         coefficient_rra=jnp.array([1.0, 1.0, 1.0]),
         equivalence_scale=jnp.array(1.0),
-        utility_scale_factor=jnp.array([1.0, 1.0, 1.0]),
+        utility_scale_factor=jnp.array(1.0),
     )
     composite = 10000.0**0.4 * 3000.0**0.6
     expected = jnp.log(composite)
@@ -112,7 +112,7 @@ def test_bequest_positive_assets() -> None:
         scaled_bequest_weight=0.5,
         consumption_weight=jnp.array([0.4, 0.4, 0.4]),
         coefficient_rra=jnp.array([2.0, 2.0, 2.0]),
-        utility_scale_factor=jnp.array([1.0, 1.0, 1.0]),
+        utility_scale_factor=jnp.array(1.0),
     )
     assert jnp.isfinite(result)
 
@@ -125,7 +125,7 @@ def test_bequest_zero_assets() -> None:
         scaled_bequest_weight=0.5,
         consumption_weight=jnp.array([0.4, 0.4, 0.4]),
         coefficient_rra=jnp.array([2.0, 2.0, 2.0]),
-        utility_scale_factor=jnp.array([1.0, 1.0, 1.0]),
+        utility_scale_factor=jnp.array(1.0),
     )
     assert jnp.isfinite(result)
     assert result < 0  # CRRA with γ>1 gives negative values

@@ -33,6 +33,7 @@ RRA_1_BY_TYPE = jnp.array([1.0, 1.0, 1.0])
 
 def test_utility_scale_factor_crra() -> None:
     result = preferences.utility_scale_factor(
+        pref_type=jnp.array(0),
         average_consumption=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_5_BY_TYPE,
@@ -43,11 +44,12 @@ def test_utility_scale_factor_crra() -> None:
         reference_age=REFERENCE_AGE,
         scale_reference_age=SCALE_REFERENCE_AGE,
     )
-    assert jnp.isclose(result[0], 9_233_279_397_806_166.0, rtol=1e-6)
+    assert jnp.isclose(result, 9_233_279_397_806_166.0, rtol=1e-6)
 
 
 def test_utility_scale_factor_log() -> None:
     result = preferences.utility_scale_factor(
+        pref_type=jnp.array(0),
         average_consumption=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_1_BY_TYPE,
@@ -58,7 +60,7 @@ def test_utility_scale_factor_log() -> None:
         reference_age=REFERENCE_AGE,
         scale_reference_age=SCALE_REFERENCE_AGE,
     )
-    assert jnp.isclose(result[0], 0.113_073_257_794_546_72, rtol=1e-6)
+    assert jnp.isclose(result, 0.113_073_257_794_546_72, rtol=1e-6)
 
 
 # --- scaled_bequest_weight ---
@@ -105,6 +107,7 @@ def test_scaled_bequest_weight_zero() -> None:
 
 def test_utility_log_regression() -> None:
     scale = preferences.utility_scale_factor(
+        pref_type=jnp.array(0),
         average_consumption=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_1_BY_TYPE,
@@ -129,6 +132,7 @@ def test_utility_log_regression() -> None:
 
 def test_utility_crra_regression() -> None:
     scale = preferences.utility_scale_factor(
+        pref_type=jnp.array(0),
         average_consumption=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_5_BY_TYPE,
@@ -154,6 +158,7 @@ def test_utility_crra_regression() -> None:
 def test_utility_married_equivalence() -> None:
     """Married with equiv-scaled consumption should equal single utility."""
     scale = preferences.utility_scale_factor(
+        pref_type=jnp.array(0),
         average_consumption=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_5_BY_TYPE,
@@ -190,6 +195,7 @@ def test_utility_married_equivalence() -> None:
 
 def test_bequest_log_regression() -> None:
     scale = preferences.utility_scale_factor(
+        pref_type=jnp.array(0),
         average_consumption=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_1_BY_TYPE,
@@ -222,6 +228,7 @@ def test_bequest_log_regression() -> None:
 
 def test_bequest_crra_regression() -> None:
     scale = preferences.utility_scale_factor(
+        pref_type=jnp.array(0),
         average_consumption=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_5_BY_TYPE,

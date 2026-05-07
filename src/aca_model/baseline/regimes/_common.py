@@ -194,13 +194,17 @@ class Grids:
 # bend points (0 → kink_0 → kink_1 → kink_2). Total = 32.
 _AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
 
-# Consumption grid: log-spaced from the lower bound of the
-# `consumption_floor` parameter (BOUNDS in task_estimate_parameters)
-# up to a high value that brackets the unconstrained optimum for the
-# richest agents in the state space. Mirrors the struct-ret design
-# (concentrate gridpoints where CRRA curvature is highest).
-_CONSUMPTION_GRID_START: float = 100.0
-_CONSUMPTION_GRID_STOP: float = 300_000.0
+
+MAX_CONSUMPTION: float = 300_000.0
+"""Upper bound of the runtime consumption grid in $/year.
+
+Lives here next to the other grid bounds (assets `stop=500_000.0`,
+AIME `stop=8_000.0`). The `create_model` factories attach this onto
+`model.max_consumption` so `inject_consumption_points` can read it
+back at runtime. Routed via a Model attribute rather than
+`fixed_params` because pylcm validates `fixed_params` keys against
+the regime DAG and rejects entries no function consumes.
+"""
 
 
 def build_grids(
@@ -273,14 +277,7 @@ def build_grids(
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         consumption=IrregSpacedGrid(
-            points=tuple(
-                float(c)
-                for c in np.geomspace(
-                    _CONSUMPTION_GRID_START,
-                    _CONSUMPTION_GRID_STOP,
-                    num=grid_config.n_consumption_gridpoints,
-                )
-            ),
+            n_points=grid_config.n_consumption_gridpoints,
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
@@ -302,7 +299,10 @@ def _build_aime_grid(
     """
     if fixed_params is None or "pia_aime_grid" not in fixed_params:
         return LinSpacedGrid(
-            start=0.0, stop=8_000.0, n_points=grid_config.n_aime_gridpoints
+            start=0.0,
+            stop=8_000.0,
+            n_points=grid_config.n_aime_gridpoints,
+            batch_size=grid_config.n_aime_batch_size,
         )
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
     pieces = (
@@ -310,7 +310,9 @@ def _build_aime_grid(
         Piece(interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]),
         Piece(interval=f"[{kinks[2]}, {kinks[3]}]", n_points=_AIME_PIECE_N_POINTS[2]),
     )
-    return PiecewiseLinSpacedGrid(pieces=pieces)
+    return PiecewiseLinSpacedGrid(
+        pieces=pieces, batch_size=grid_config.n_aime_batch_size
+    )
 
 
 def _has_required_wage_keys(*, wage_params: Mapping[str, Any]) -> bool:
@@ -642,7 +644,7 @@ def build_state_transitions(spec: dict[str, str]) -> dict:
     """Build the state transitions dict for a non-dead regime."""
     transitions: dict = {}
     transitions["health"] = _build_per_target_health(spec)
-    transitions["assets"] = assets_and_income.next_assets
+    transitions["assets"] = _build_per_target_next_assets(spec)
     transitions["pref_type"] = None
     transitions["aime"] = (
         social_security.next_aime
@@ -657,6 +659,34 @@ def build_state_transitions(spec: dict[str, str]) -> dict:
     if claimed_ss_transition:
         transitions["claimed_ss"] = claimed_ss_transition
     return transitions
+
+
+def _build_per_target_next_assets(spec: dict[str, str]) -> dict:
+    """Build per-target assets transitions.
+
+    The `dead` target uses `next_assets_terminal` (no
+    `pension_assets_adjustment`), so the dead per-target DAG does not
+    pull in the `next_aime`-dependent imputation chain — `dead` has no
+    `aime` state and pylcm cannot resolve `next_aime` there. Non-dead
+    targets use the full `next_assets` with the pension correction.
+    """
+    targets = precompute_targets(spec)
+    id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
+
+    result: dict = {}
+    seen_ids: set[int] = set()
+
+    for target_id in targets.values():
+        if target_id in seen_ids:
+            continue
+        seen_ids.add(target_id)
+        target_name = id_to_name.get(target_id)
+        if target_name is None:
+            continue
+        result[target_name] = assets_and_income.next_assets
+
+    result["dead"] = assets_and_income.next_assets_terminal
+    return result
 
 
 def _build_per_target_health(spec: dict[str, str]) -> dict:

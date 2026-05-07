@@ -11,7 +11,7 @@ from aca_model.aca.regimes import build_all_regimes as build_aca_regimes
 from aca_model.baseline.model import create_model
 from aca_model.baseline.regimes import REGIME_SPECS, RegimeId
 from aca_model.baseline.regimes import build_regime as _build_regime
-from aca_model.baseline.regimes._common import build_grids
+from aca_model.baseline.regimes._common import MAX_CONSUMPTION, build_grids
 
 _GRIDS = build_grids()
 
@@ -21,24 +21,24 @@ def build_regime(name: str):
 
 
 def test_model_creates_successfully() -> None:
-    model = create_model()
+    model = create_model(n_subjects=1)
     assert len(model.regimes) == 19
     assert model.n_periods == 45
 
 
 def test_model_age_range() -> None:
-    model = create_model()
+    model = create_model(n_subjects=1)
     assert model.ages.values[0] == 51.0
     assert model.ages.values[-1] == 95.0
 
 
 def test_dead_regime_is_terminal() -> None:
-    model = create_model()
+    model = create_model(n_subjects=1)
     assert model.regimes["dead"].terminal
 
 
 def test_non_terminal_regimes_not_terminal() -> None:
-    model = create_model()
+    model = create_model(n_subjects=1)
     for name in REGIME_SPECS:
         assert not model.regimes[name].terminal
 
@@ -170,7 +170,7 @@ def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
 
 
 def test_aca_model_creates_successfully() -> None:
-    model = create_aca_model()
+    model = create_aca_model(n_subjects=1)
     assert len(model.regimes) == 19
     assert model.n_periods == 45
 
@@ -211,7 +211,7 @@ def test_aca_other_regimes_have_no_aca_policy_keys() -> None:
 @pytest.mark.parametrize("policy", list(PolicyVariant))
 def test_all_policy_variants_create(policy: PolicyVariant) -> None:
     """All policy variants create valid models."""
-    model = create_aca_model(policy=policy)
+    model = create_aca_model(n_subjects=1, policy=policy)
     assert len(model.regimes) == 19
 
 
@@ -251,5 +251,10 @@ def test_aca_only_medicaid_expansion() -> None:
 
 def test_baseline_model_creates() -> None:
     """Baseline model creates successfully without PolicyVariant."""
-    model = create_model()
+    model = create_model(n_subjects=1)
     assert len(model.regimes) == 19
+
+
+def test_max_consumption_attached_from_canonical_constant() -> None:
+    model = create_model(n_subjects=1)
+    assert model.max_consumption == MAX_CONSUMPTION

@@ -5,7 +5,7 @@ represents pre-ACA rules (no individual mandate, no ACA subsidies).
 
 Usage:
     from aca_model.baseline.model import create_model
-    model = create_model()
+    model = create_model(n_subjects=...)
     params = get_default_params()
     V = model.solve(params)
 """
@@ -15,22 +15,25 @@ from typing import Any
 
 from lcm import AgeGrid, DiscreteGrid, Model
 
+from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.regimes import RegimeId, build_all_regimes
+from aca_model.baseline.regimes._common import MAX_CONSUMPTION
 from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
 
 
 def create_model(
     *,
+    n_subjects: int,
     fixed_params: Mapping[str, Any] | None = None,
     wage_params: Mapping[str, Any] | None = None,
-    derived_categoricals: Mapping[str, DiscreteGrid | Mapping[str, DiscreteGrid]]
-    | None = None,
+    derived_categoricals: Mapping[str, DiscreteGrid] | None = None,
     grid_config: GridConfig = GRID_CONFIG,
     pref_type_grid: DiscreteGrid | None = None,
 ) -> Model:
     """Create the baseline structural retirement model.
 
     Args:
+        n_subjects: Forwarded to `lcm.Model(n_subjects=...)`.
         fixed_params: Parameters to fix at model creation time. These are
             partialled into compiled functions and removed from the params
             template. Pass data-derived constants here; only estimation
@@ -66,11 +69,27 @@ def create_model(
         pref_type_grid=pref_type_grid,
     )
 
-    return Model(
+    # `target_his` is a DAG output of `health_insurance.target_his` (set on
+    # nongroup/tied/retiree regimes). The pension imputation correction
+    # (`imputed_pension_wealth_next_period`) indexes shifted arrays by
+    # `arr[period, target_his]`; pylcm needs the categorical declared so
+    # `pd.Series` fixed_params with a `target_his` index level resolve.
+    base_derived: dict[str, DiscreteGrid] = {
+        "target_his": DiscreteGrid(HealthInsuranceState),
+    }
+    if derived_categoricals is not None:
+        base_derived.update(derived_categoricals)
+
+    model = Model(
         regimes=regimes,
         ages=ages,
         regime_id_class=RegimeId,
         description="Baseline structural retirement model (pre-ACA)",
         fixed_params=fixed_params or {},
-        derived_categoricals=derived_categoricals,
+        derived_categoricals=base_derived,
+        n_subjects=n_subjects,
     )
+    # See `MAX_CONSUMPTION` in `baseline.regimes._common` for why this
+    # rides on the Model instance instead of `fixed_params`.
+    model.max_consumption = MAX_CONSUMPTION
+    return model
