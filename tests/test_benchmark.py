@@ -40,14 +40,21 @@ def test_benchmark_model_simulates_end_to_end() -> None:
 
 @pytest.mark.long_running
 def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
-    """`consumption <= cash_on_hand + transfers` holds for every alive row.
+    """`consumption <= max(cash_on_hand, floor)` holds for every alive row.
 
     The simulator only ever picks feasible actions — the borrowing
     constraint must hold post-hoc on the simulated panel. A regression
-    that drops the constraint from a regime, replaces transfers with
+    that drops the constraint from a regime, replaces the floor with
     something looser, or lets an action grid skip the floor would
-    surface as a row with `consumption > cash_on_hand + transfers`.
+    surface as a row with `consumption > max(cash_on_hand, floor)`.
+
+    The constraint's RHS is `max(cash_on_hand, floor)` rather than
+    `cash_on_hand + transfers`: the additive form rounds short by
+    sub-ULP at extreme `|cash_on_hand|`, so the post-hoc check would
+    also flip on the same kink.
     """
+    import numpy as np
+
     n_subjects = 4
     model = create_benchmark_model(
         n_subjects=n_subjects,
@@ -66,13 +73,15 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
         check_initial_conditions=False,
     )
 
-    df = result.to_dataframe(additional_targets=["cash_on_hand", "transfers"])
+    df = result.to_dataframe(
+        additional_targets=["cash_on_hand", "equivalence_scale"]
+    )
     alive = df.loc[df["regime"] != "dead"].copy()
-    slack = (alive["cash_on_hand"] + alive["transfers"]) - alive["consumption"]
-    # Non-negative within fp64 tolerance; allow 1e-6 of the magnitude scale
-    # to absorb the float64 rounding budget.
-    assert (slack >= -1e-6).all(), (
-        f"borrowing_constraint violated on "
-        f"{int((slack < -1e-6).sum())} row(s); "
+    consumption_floor = float(params["consumption_floor"])
+    floor = consumption_floor * alive["equivalence_scale"].to_numpy()
+    rhs = np.maximum(alive["cash_on_hand"].to_numpy(), floor)
+    slack = rhs - alive["consumption"].to_numpy()
+    assert (slack >= 0).all(), (
+        f"borrowing_constraint violated on {int((slack < 0).sum())} row(s); "
         f"min slack = {slack.min():.6g}"
     )

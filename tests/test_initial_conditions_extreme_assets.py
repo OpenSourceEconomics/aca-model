@@ -20,17 +20,18 @@ from aca_model.benchmark import (
 )
 
 
-def test_borrowing_constraint_admits_consumption_at_post_transfer_resources() -> None:
-    """`consumption == cash_on_hand + transfers` is feasible by equality."""
-    cash_on_hand = jnp.asarray(-50_000.0)
-    transfers = jnp.asarray(55_000.0)
-    consumption = cash_on_hand + transfers
+def test_borrowing_constraint_admits_consumption_at_floor() -> None:
+    """`consumption == consumption_floor` at the kink is feasible by equality."""
+    consumption_floor = 5_000.0
+    equivalence_scale = jnp.asarray(1.0)
+    cash_on_hand = jnp.asarray(-50_000.0)  # below floor — RHS = floor
 
     admitted = bool(
         borrowing_constraint(
-            consumption=consumption,
+            consumption=jnp.asarray(consumption_floor),
             cash_on_hand=cash_on_hand,
-            transfers=transfers,
+            consumption_floor=consumption_floor,
+            equivalence_scale=equivalence_scale,
         )
     )
     assert admitted
@@ -39,19 +40,46 @@ def test_borrowing_constraint_admits_consumption_at_post_transfer_resources() ->
 def test_borrowing_constraint_rejects_consumption_above_post_transfer_resources() -> (
     None
 ):
-    """`consumption > cash_on_hand + transfers` is rejected."""
+    """`consumption > max(cash_on_hand, floor)` is rejected."""
+    consumption_floor = 5_000.0
+    equivalence_scale = jnp.asarray(1.0)
     cash_on_hand = jnp.asarray(-50_000.0)
-    transfers = jnp.asarray(55_000.0)
-    consumption = cash_on_hand + transfers + 1.0
+    consumption = jnp.asarray(consumption_floor + 1.0)
 
     admitted = bool(
         borrowing_constraint(
             consumption=consumption,
             cash_on_hand=cash_on_hand,
-            transfers=transfers,
+            consumption_floor=consumption_floor,
+            equivalence_scale=equivalence_scale,
         )
     )
     assert not admitted
+
+
+def test_borrowing_constraint_admits_floor_at_million_dollar_negative_cash() -> None:
+    """The kink-boundary check survives sub-ULP rounding at `|cash_on_hand| ~ 1e6`.
+
+    Reproduces the production failure mode at `assets=-$1{,}000{,}000$` (HRS
+    bottom-code): the algebraically equivalent `cash_on_hand + transfers`
+    form rounds to `floor - 5.7e-11` at fp64, flipping `consumption <= ...`
+    for the lowest consumption gridpoint. The `max(cash_on_hand, floor)`
+    form returns `floor` exactly.
+    """
+    consumption_floor = 1597.0921419521899  # production value
+    equivalence_scale = jnp.asarray(1.0)
+    cash_on_hand = jnp.asarray(-1_000_000.0)
+    consumption = jnp.asarray(consumption_floor)  # lowest grid point
+
+    admitted = bool(
+        borrowing_constraint(
+            consumption=consumption,
+            cash_on_hand=cash_on_hand,
+            consumption_floor=consumption_floor,
+            equivalence_scale=equivalence_scale,
+        )
+    )
+    assert admitted
 
 
 def test_extreme_negative_assets_subject_passes_validation() -> None:

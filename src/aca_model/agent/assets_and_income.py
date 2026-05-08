@@ -85,9 +85,19 @@ def next_assets_terminal(
 def borrowing_constraint(
     consumption: ContinuousAction,
     cash_on_hand: FloatND,
-    transfers: FloatND,
+    consumption_floor: float,
+    equivalence_scale: FloatND,
 ) -> BoolND:
     """Consumption cannot exceed post-transfer resources.
+
+    Post-transfer resources are `max(cash_on_hand, consumption_floor *
+    equivalence_scale)`: the transfer system tops `cash_on_hand` to the
+    floor when below, otherwise resources are unchanged. The algebraic
+    identity is `cash_on_hand + transfers == max(cash_on_hand, floor)`;
+    the `max` form is preferred because the additive form rounds to
+    `floor + ε` (with `|ε| ~ ULP(|cash_on_hand|)`) at extreme cash, which
+    flips the kink-boundary comparison for HRS-bottom-coded subjects at
+    `assets=-$1{,}000{,}000`. The `max` form returns `floor` exactly.
 
     `pension_assets_adjustment` is excluded from the constraint: it can
     be negative (e.g. when the imputation overstates next-period pension
@@ -96,4 +106,5 @@ def borrowing_constraint(
     enters `next_assets` instead — a post-decision shift that does not
     gate the current consumption choice.
     """
-    return consumption <= cash_on_hand + transfers
+    floor = consumption_floor * equivalence_scale
+    return consumption <= jnp.maximum(cash_on_hand, floor)
