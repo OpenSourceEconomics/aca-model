@@ -69,5 +69,17 @@ def _compute_consumption_points(
     max_consumption: float,
     n_points: int,
 ) -> Array:
-    """Return log-spaced consumption gridpoints from floor to max."""
-    return jnp.geomspace(consumption_floor, max_consumption, num=n_points)
+    """Return log-spaced consumption gridpoints from floor to max.
+
+    `jnp.geomspace` computes intermediate points as `start * r^i` with
+    `r = (stop/start)^(1/(n-1))`; the first point is `start * r^0`,
+    which is `start` mathematically but can be off by sub-ULP under
+    some XLA backends (CUDA + 70 points: `start + 2.27e-13`). The
+    borrowing constraint compares the first action against
+    `max(cash_on_hand, consumption_floor)`, and any positive drift
+    above `consumption_floor` flips the kink-boundary `<=` for
+    subjects with very negative cash. Pin the first element back to
+    `consumption_floor` exactly.
+    """
+    pts = jnp.geomspace(consumption_floor, max_consumption, num=n_points)
+    return pts.at[0].set(consumption_floor)
