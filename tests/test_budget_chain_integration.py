@@ -126,14 +126,12 @@ def test_transfers_kick_in_below_floor() -> None:
         ssi_benefit=jnp.array(0.0),
         hic_premium=jnp.array(0.0),
         oop_costs=jnp.array(0.0),
-        consumption_unequiv_floor=5000.0,
-        equivalence_scale=jnp.array(1.0),
+        consumption_unequiv_floor=jnp.array(5000.0),
         pension_assets_adjustment=jnp.array(0.0),
         consumption_unequiv=jnp.array(4000.0),
     )
 
     # cash_on_hand = 500 + 200 = 700
-    # floor = 5000 * 1.0 = 5000
     # transfers = max(0, 5000 - 700) = 4300
     assert jnp.isclose(result["transfers"], 4300.0, atol=ATOL)
     # next_assets = 700 + 4300 + 0 - 4000 = 1000

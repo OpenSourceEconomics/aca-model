@@ -121,34 +121,47 @@ def leisure_retired(
     return time_endowment - health_loss
 
 
-def utility(
+def consumption_equiv(
     consumption_unequiv: ContinuousAction,
+    equivalence_scale: FloatND,
+) -> FloatND:
+    """Per-equivalent consumption: total $ divided by household equivalence scale."""
+    return consumption_unequiv / equivalence_scale
+
+
+def utility(
+    consumption_equiv: FloatND,
     leisure: FloatND,
     pref_type: DiscreteState,
-    consumption_weight: FloatND,
-    coefficient_rra: FloatND,
-    equivalence_scale: FloatND,
+    consumption_weights: FloatND,
+    coefficients_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
-    """Within-period utility: CES aggregator over consumption_unequiv and leisure.
+    """Within-period utility: CES aggregator over consumption and leisure.
 
-    u = utility_scale_factor * ((c/eq_scale)^α * l^(1-α))^(1-γ) / (1-γ)
-    with log case for γ=1. `consumption_weight` and `coefficient_rra` are
-    pref-type-indexed Series sourced directly from params; `utility_scale_factor`
-    is a regime-function output (already a per-cell scalar — must NOT be
-    re-indexed by pref_type, see `aca_model.agent.preferences.utility_scale_factor`
-    for why).
+    u = utility_scale_factor *
+        (consumption_equiv^consumption_weight * leisure^(1 - consumption_weight))^(1 - coefficient_rra)
+        / (1 - coefficient_rra)
+    with log case for coefficient_rra=1. `consumption_weights` and
+    `coefficients_rra` are pref-type-indexed Series sourced directly
+    from params; `utility_scale_factor` is a regime-function output
+    (already a per-cell scalar — must NOT be re-indexed by pref_type,
+    see `aca_model.agent.preferences.utility_scale_factor` for why).
     """
-    alpha = consumption_weight[pref_type]
-    gamma = coefficient_rra[pref_type]
-    consumption_equiv = consumption_unequiv / equivalence_scale
-    composite = consumption_equiv**alpha * leisure ** (1.0 - alpha)
+    consumption_weight = consumption_weights[pref_type]
+    coefficient_rra = coefficients_rra[pref_type]
+    composite = (
+        consumption_equiv**consumption_weight
+        * leisure ** (1.0 - consumption_weight)
+    )
 
-    one_minus_gamma = jnp.where(jnp.isclose(gamma, 1.0), 1.0, 1.0 - gamma)
+    one_minus_rra = jnp.where(
+        jnp.isclose(coefficient_rra, 1.0), 1.0, 1.0 - coefficient_rra
+    )
     u = jnp.where(
-        jnp.isclose(gamma, 1.0),
+        jnp.isclose(coefficient_rra, 1.0),
         jnp.log(composite),
-        composite**one_minus_gamma / one_minus_gamma,
+        composite**one_minus_rra / one_minus_rra,
     )
     return u * utility_scale_factor
 
@@ -169,8 +182,8 @@ def discount_factor(
 def utility_scale_factor(
     pref_type: DiscreteState,
     average_consumption_unequiv: float,
-    consumption_weight: FloatND,
-    coefficient_rra: FloatND,
+    consumption_weights: FloatND,
+    coefficients_rra: FloatND,
     time_endowment: float,
     fixed_cost_of_work_intercept: float,
     fixed_cost_of_work_age_trend: float,
@@ -184,25 +197,27 @@ def utility_scale_factor(
     pattern: take the state as input, return a per-cell scalar. Registering this
     as a regime function and then doing `utility_scale_factor[pref_type]` in a
     downstream consumer is invalid — pylcm broadcasts function outputs to
-    per-cell scalars before consumption_unequiv, and the validator in
+    per-cell scalars before consumption, and the validator in
     `lcm.regime_building.validation` raises on that clash.
     """
-    alpha = consumption_weight[pref_type]
-    gamma = coefficient_rra[pref_type]
+    consumption_weight = consumption_weights[pref_type]
+    coefficient_rra = coefficients_rra[pref_type]
     age_offset = scale_reference_age - reference_age
     average_leisure = (
         time_endowment
         - scale_reference_hours
         - (fixed_cost_of_work_intercept + fixed_cost_of_work_age_trend * age_offset)
     )
-    u_cons = average_consumption_unequiv**alpha
-    u_leisure = average_leisure ** (1.0 - alpha)
+    u_cons = average_consumption_unequiv**consumption_weight
+    u_leisure = average_leisure ** (1.0 - consumption_weight)
 
-    one_minus_gamma = jnp.where(jnp.isclose(gamma, 1.0), 1.0, 1.0 - gamma)
+    one_minus_rra = jnp.where(
+        jnp.isclose(coefficient_rra, 1.0), 1.0, 1.0 - coefficient_rra
+    )
     raw = jnp.where(
-        jnp.isclose(gamma, 1.0),
+        jnp.isclose(coefficient_rra, 1.0),
         jnp.log(u_cons * u_leisure),
-        (u_cons * u_leisure) ** one_minus_gamma / one_minus_gamma,
+        (u_cons * u_leisure) ** one_minus_rra / one_minus_rra,
     )
     return jnp.abs(1.0 / raw)
 
@@ -237,25 +252,30 @@ def bequest(
     pref_type: DiscreteState,
     bequest_shifter: float,
     scaled_bequest_weight: float,
-    consumption_weight: FloatND,
-    coefficient_rra: FloatND,
+    consumption_weights: FloatND,
+    coefficients_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
     """Bequest function for terminal/dead states.
 
-    bequest = scale * bwt * (max(0,a) + shifter)^(α*(1-γ)) / (1-γ)
-    `consumption_weight` and `coefficient_rra` are pref-type-indexed Series
-    from params; `utility_scale_factor` is a regime-function output (already a
-    per-cell scalar — must NOT be re-indexed by pref_type).
+    bequest = scale * bwt *
+        (max(0,a) + shifter)^(consumption_weight*(1 - coefficient_rra))
+        / (1 - coefficient_rra)
+    `consumption_weights` and `coefficients_rra` are pref-type-indexed
+    Series from params; `utility_scale_factor` is a regime-function
+    output (already a per-cell scalar — must NOT be re-indexed by
+    pref_type).
     """
-    alpha = consumption_weight[pref_type]
-    gamma = coefficient_rra[pref_type]
+    consumption_weight = consumption_weights[pref_type]
+    coefficient_rra = coefficients_rra[pref_type]
     assets_shifted = jnp.maximum(0.0, assets) + bequest_shifter
 
-    one_minus_gamma = jnp.where(jnp.isclose(gamma, 1.0), 1.0, 1.0 - gamma)
+    one_minus_rra = jnp.where(
+        jnp.isclose(coefficient_rra, 1.0), 1.0, 1.0 - coefficient_rra
+    )
     val = jnp.where(
-        jnp.isclose(gamma, 1.0),
+        jnp.isclose(coefficient_rra, 1.0),
         jnp.log(assets_shifted),
-        assets_shifted ** (one_minus_gamma * alpha) / one_minus_gamma,
+        assets_shifted ** (one_minus_rra * consumption_weight) / one_minus_rra,
     )
     return val * scaled_bequest_weight * utility_scale_factor

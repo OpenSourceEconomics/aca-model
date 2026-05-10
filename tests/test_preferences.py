@@ -35,8 +35,8 @@ def test_utility_scale_factor_crra() -> None:
     result = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
         average_consumption_unequiv=AVERAGE_CONSUMPTION,
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_5_BY_TYPE,
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
@@ -51,8 +51,8 @@ def test_utility_scale_factor_log() -> None:
     result = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
         average_consumption_unequiv=AVERAGE_CONSUMPTION,
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_1_BY_TYPE,
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_1_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
@@ -109,8 +109,8 @@ def test_utility_log_regression() -> None:
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
         average_consumption_unequiv=AVERAGE_CONSUMPTION,
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_1_BY_TYPE,
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_1_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
@@ -119,12 +119,11 @@ def test_utility_log_regression() -> None:
         scale_reference_age=SCALE_REFERENCE_AGE,
     )
     result = preferences.utility(
-        consumption_unequiv=jnp.array(50000.0),
+        consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_1_BY_TYPE,
-        equivalence_scale=jnp.array(1.0),
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_1_BY_TYPE,
         utility_scale_factor=scale,
     )
     assert jnp.isclose(result, 1.005_046_313_660_588_5, rtol=1e-5)
@@ -134,8 +133,8 @@ def test_utility_crra_regression() -> None:
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
         average_consumption_unequiv=AVERAGE_CONSUMPTION,
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_5_BY_TYPE,
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
@@ -144,12 +143,11 @@ def test_utility_crra_regression() -> None:
         scale_reference_age=SCALE_REFERENCE_AGE,
     )
     result = preferences.utility(
-        consumption_unequiv=jnp.array(50000.0),
+        consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_5_BY_TYPE,
-        equivalence_scale=jnp.array(1.0),
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_5_BY_TYPE,
         utility_scale_factor=scale,
     )
     assert jnp.isclose(result, -0.836_511_642_073_019_1, rtol=1e-5)
@@ -160,8 +158,8 @@ def test_utility_married_equivalence() -> None:
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
         average_consumption_unequiv=AVERAGE_CONSUMPTION,
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_5_BY_TYPE,
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
@@ -170,21 +168,19 @@ def test_utility_married_equivalence() -> None:
         scale_reference_age=SCALE_REFERENCE_AGE,
     )
     single = preferences.utility(
-        consumption_unequiv=jnp.array(50000.0),
+        consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_5_BY_TYPE,
-        equivalence_scale=jnp.array(1.0),
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_5_BY_TYPE,
         utility_scale_factor=scale,
     )
     married = preferences.utility(
-        consumption_unequiv=jnp.array(50000.0 * 2**0.7),
+        consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_5_BY_TYPE,
-        equivalence_scale=jnp.array(2**0.7),
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_5_BY_TYPE,
         utility_scale_factor=scale,
     )
     assert jnp.isclose(single, married, rtol=1e-5)
@@ -197,8 +193,8 @@ def test_bequest_log_regression() -> None:
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
         average_consumption_unequiv=AVERAGE_CONSUMPTION,
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_1_BY_TYPE,
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_1_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
@@ -219,8 +215,8 @@ def test_bequest_log_regression() -> None:
         pref_type=jnp.array(0),
         bequest_shifter=BEQUEST_SHIFTER,
         scaled_bequest_weight=bwt.item(),
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_1_BY_TYPE,
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_1_BY_TYPE,
         utility_scale_factor=scale,
     )
     assert jnp.isclose(result, 86.539_249_963_643_88, rtol=1e-5)
@@ -230,8 +226,8 @@ def test_bequest_crra_regression() -> None:
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
         average_consumption_unequiv=AVERAGE_CONSUMPTION,
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_5_BY_TYPE,
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
@@ -252,8 +248,8 @@ def test_bequest_crra_regression() -> None:
         pref_type=jnp.array(0),
         bequest_shifter=BEQUEST_SHIFTER,
         scaled_bequest_weight=bwt.item(),
-        consumption_weight=WEIGHT_BY_TYPE,
-        coefficient_rra=RRA_5_BY_TYPE,
+        consumption_weights=WEIGHT_BY_TYPE,
+        coefficients_rra=RRA_5_BY_TYPE,
         utility_scale_factor=scale,
     )
     assert jnp.isclose(result, -37.932_748_117_035_63, rtol=1e-5)

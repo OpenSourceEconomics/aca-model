@@ -22,7 +22,7 @@ from lcm import (
 )
 from lcm.grids.continuous import ContinuousGrid
 from lcm.grids.piecewise import Piece, PiecewiseLinSpacedGrid
-from lcm.typing import BoolND, FloatND
+from lcm.typing import BoolND, FloatND, RegimeName
 
 from aca_model.agent import (
     assets_and_income,
@@ -199,11 +199,9 @@ MAX_CONSUMPTION_UNEQUIV: float = 300_000.0
 """Upper bound of the runtime consumption_unequiv grid in $/year.
 
 Lives here next to the other grid bounds (assets `stop=500_000.0`,
-AIME `stop=8_000.0`). The `create_model` factories attach this onto
-`model.max_consumption_unequiv` so `inject_consumption_unequiv_points` can read it
-back at runtime. Routed via a Model attribute rather than
-`fixed_params` because pylcm validates `fixed_params` keys against
-the regime DAG and rejects entries no function consumes.
+AIME `stop=8_000.0`). `inject_consumption_unequiv_points` imports it
+directly — pylcm rejects `fixed_params` entries no DAG function
+consumes, so this stays a module constant.
 """
 
 
@@ -547,12 +545,14 @@ def build_common_functions(spec: dict[str, str]) -> dict:
 
     # Cash on hand and transfers
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
+    functions["consumption_unequiv_floor"] = assets_and_income.consumption_unequiv_floor
     functions["transfers"] = assets_and_income.transfers
+    functions["consumption_equiv"] = preferences.consumption_equiv
 
     return functions
 
 
-def precompute_targets(spec: dict[str, str]) -> dict[str, int]:
+def precompute_targets(spec: Mapping[str, str]) -> dict[str, int]:
     """Pre-compute target regime IDs for each next-age bracket."""
 
     def _resolve(his_val: str, mc_val: str, ss_val: str, canwork_val: str) -> int:
@@ -661,7 +661,9 @@ def build_state_transitions(spec: dict[str, str]) -> dict:
     return transitions
 
 
-def _build_per_target_next_assets(spec: dict[str, str]) -> dict:
+def _build_per_target_next_assets(
+    spec: Mapping[str, str],
+) -> dict[RegimeName, Callable[..., FloatND]]:
     """Build per-target assets transitions.
 
     The `dead` target uses `next_assets_terminal` (no
@@ -673,7 +675,7 @@ def _build_per_target_next_assets(spec: dict[str, str]) -> dict:
     targets = precompute_targets(spec)
     id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
 
-    result: dict = {}
+    result: dict[RegimeName, Callable[..., FloatND]] = {}
     seen_ids: set[int] = set()
 
     for target_id in targets.values():
@@ -689,7 +691,9 @@ def _build_per_target_next_assets(spec: dict[str, str]) -> dict:
     return result
 
 
-def _build_per_target_health(spec: dict[str, str]) -> dict:
+def _build_per_target_health(
+    spec: Mapping[str, str],
+) -> dict[RegimeName, MarkovTransition]:
     """Build per-target health transitions.
 
     Pre-65 regimes use HealthWithDisability (3-state), post-65 use Health (2-state).
@@ -698,7 +702,7 @@ def _build_per_target_health(spec: dict[str, str]) -> dict:
     targets = precompute_targets(spec)
     id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
 
-    result: dict[str, MarkovTransition] = {}
+    result: dict[RegimeName, MarkovTransition] = {}
     seen_ids: set[int] = set()
 
     for target_id in targets.values():
@@ -719,7 +723,9 @@ def _build_per_target_health(spec: dict[str, str]) -> dict:
     return result
 
 
-def _build_per_target_claimed_ss(spec: dict[str, str]) -> dict:
+def _build_per_target_claimed_ss(
+    spec: Mapping[str, str],
+) -> dict[RegimeName, Callable[..., BoolND]]:
     """Build per-target claimed_ss transitions.
 
     - `choose` regimes (source has `claimed_ss`): absorbing transition.
@@ -732,7 +738,7 @@ def _build_per_target_claimed_ss(spec: dict[str, str]) -> dict:
     targets = precompute_targets(spec)
     id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
 
-    result: dict = {}
+    result: dict[RegimeName, Callable[..., BoolND]] = {}
     seen_ids: set[int] = set()
 
     for target_id in targets.values():
@@ -754,7 +760,9 @@ def _build_per_target_claimed_ss(spec: dict[str, str]) -> dict:
     return result
 
 
-def _build_per_target_lagged_labor_supply(spec: dict[str, str]) -> dict:
+def _build_per_target_lagged_labor_supply(
+    spec: Mapping[str, str],
+) -> dict[RegimeName, Callable[..., BoolND]]:
     """Build per-target lagged_labor_supply transitions.
 
     `lagged_labor_supply` exists in canwork non-tied regimes. Tied regimes
@@ -771,7 +779,7 @@ def _build_per_target_lagged_labor_supply(spec: dict[str, str]) -> dict:
     targets = precompute_targets(spec)
     id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
 
-    result: dict = {}
+    result: dict[RegimeName, Callable[..., BoolND]] = {}
     seen_ids: set[int] = set()
 
     for target_id in targets.values():

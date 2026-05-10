@@ -10,7 +10,7 @@ from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes as _build_aca_regimes
 from aca_model.baseline.regimes import REGIME_SPECS, RegimeId
 from aca_model.baseline.regimes import build_regime as _build_regime
-from aca_model.baseline.regimes._common import MAX_CONSUMPTION_UNEQUIV, build_grids
+from aca_model.baseline.regimes._common import build_grids
 from aca_model.config import GRID_CONFIG
 
 
@@ -143,7 +143,7 @@ def test_pre65_regimes_use_health_with_disability() -> None:
         if spec["mc"] in ("nomc", "dimc"):
             regime = build_regime(name)
             grid = regime.states["health"]
-            assert len(grid.categories) == 3, f"{name} should use HealthWithDisability"  # ty: ignore[unresolved-attribute]
+            assert len(grid.categories) == 3, f"{name} should use HealthWithDisability"
 
 
 def test_post65_regimes_use_health() -> None:
@@ -151,7 +151,7 @@ def test_post65_regimes_use_health() -> None:
         if spec["mc"] == "oamc":
             regime = build_regime(name)
             grid = regime.states["health"]
-            assert len(grid.categories) == 2, f"{name} should use Health"  # ty: ignore[unresolved-attribute]
+            assert len(grid.categories) == 2, f"{name} should use Health"
 
 
 def test_all_regimes_have_aime() -> None:
@@ -270,6 +270,3 @@ def test_baseline_model_creates() -> None:
     assert len(model.regimes) == 19
 
 
-def test_max_consumption_unequiv_attached_from_canonical_constant() -> None:
-    model = make_baseline_model(n_subjects=1)
-    assert model.max_consumption_unequiv == MAX_CONSUMPTION_UNEQUIV

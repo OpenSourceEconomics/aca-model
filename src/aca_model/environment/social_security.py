@@ -30,7 +30,7 @@ def next_claimed_ss(
 
 def enter_claimed_ss() -> DiscreteState:
     """Initial claimed_ss when entering the SS eligibility window."""
-    return ClaimedSS.no
+    return jnp.int32(ClaimedSS.no)
 
 
 # --- PIA lookup (DAG functions) ---

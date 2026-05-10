@@ -26,26 +26,40 @@ def cash_on_hand(
     ssi_benefit: FloatND,
     hic_premium: FloatND,
 ) -> FloatND:
-    """Compute cash on hand available for consumption_unequiv and saving.
+    """Compute cash on hand available for consumption and saving.
 
     OOP health costs are NOT deducted here — they are deducted from
     next-period assets instead, matching the timing where HCC shocks are
-    integrated over (agent does not condition consumption_unequiv on OOP).
+    integrated over (agent does not condition consumption on OOP).
     """
     return assets + after_tax_income + ssi_benefit - hic_premium
 
 
-def transfers(
-    cash_on_hand: FloatND,
-    consumption_unequiv_floor: float,
+def consumption_unequiv_floor(
+    consumption_equiv_floor: float,
     equivalence_scale: FloatND,
 ) -> FloatND:
-    """Government transfers to enforce consumption_unequiv floor.
+    """Per-household $-floor on consumption.
 
-    tr = max{0, C_min * equivalence_scale - cash_on_hand}
+    Lifts the per-equivalent floor parameter to the household-$ level
+    by scaling with `equivalence_scale`. Singles keep
+    `consumption_equiv_floor`, married households face
+    `consumption_equiv_floor * 2 ** exponent` — the same two values
+    that get pinned exactly on the runtime consumption_unequiv grid
+    (see `aca_model.consumption_unequiv_grid`).
     """
-    floor = consumption_unequiv_floor * equivalence_scale
-    return jnp.maximum(0.0, floor - cash_on_hand)
+    return consumption_equiv_floor * equivalence_scale
+
+
+def transfers(
+    cash_on_hand: FloatND,
+    consumption_unequiv_floor: FloatND,
+) -> FloatND:
+    """Government transfers to enforce the consumption floor.
+
+    tr = max{0, consumption_unequiv_floor - cash_on_hand}
+    """
+    return jnp.maximum(0.0, consumption_unequiv_floor - cash_on_hand)
 
 
 def next_assets(
@@ -58,7 +72,7 @@ def next_assets(
     """Compute beginning-of-next-period assets for non-terminal targets.
 
     OOP health costs are deducted here (not from cash_on_hand) so that the
-    consumption_unequiv choice does not condition on the HCC shock realization.
+    consumption choice does not condition on the HCC shock realization.
     """
     return (
         cash_on_hand + transfers + pension_assets_adjustment - consumption_unequiv - oop_costs
@@ -85,18 +99,17 @@ def next_assets_terminal(
 def borrowing_constraint(
     consumption_unequiv: ContinuousAction,
     cash_on_hand: FloatND,
-    consumption_unequiv_floor: float,
-    equivalence_scale: FloatND,
+    consumption_unequiv_floor: FloatND,
 ) -> BoolND:
     """Consumption cannot exceed post-transfer resources.
 
-    Post-transfer resources are `max(cash_on_hand, consumption_unequiv_floor *
-    equivalence_scale)`: the transfer system tops `cash_on_hand` to the
-    floor when below, otherwise resources are unchanged. The algebraic
-    identity is `cash_on_hand + transfers == max(cash_on_hand, floor)`;
-    the `max` form is preferred because the additive form rounds to
-    `floor + ε` (with `|ε| ~ ULP(|cash_on_hand|)`) at extreme cash, which
-    flips the kink-boundary comparison for HRS-bottom-coded subjects at
+    Post-transfer resources are `max(cash_on_hand, consumption_unequiv_floor)`:
+    the transfer system tops `cash_on_hand` to the floor when below,
+    otherwise resources are unchanged. The algebraic identity is
+    `cash_on_hand + transfers == max(cash_on_hand, floor)`; the `max`
+    form is preferred because the additive form rounds to `floor + ε`
+    (with `|ε| ~ ULP(|cash_on_hand|)`) at extreme cash, which flips
+    the kink-boundary comparison for HRS-bottom-coded subjects at
     `assets=-$1{,}000{,}000`. The `max` form returns `floor` exactly.
 
     `pension_assets_adjustment` is excluded from the constraint: it can
@@ -104,7 +117,6 @@ def borrowing_constraint(
     wealth at a cross-HIS transition), and including it here can leave
     no feasible action at low-asset / mid-AIME corners. The correction
     enters `next_assets` instead — a post-decision shift that does not
-    gate the current consumption_unequiv choice.
+    gate the current consumption choice.
     """
-    floor = consumption_unequiv_floor * equivalence_scale
-    return consumption_unequiv <= jnp.maximum(cash_on_hand, floor)
+    return consumption_unequiv <= jnp.maximum(cash_on_hand, consumption_unequiv_floor)

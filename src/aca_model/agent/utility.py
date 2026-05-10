@@ -8,7 +8,6 @@ as a separate DAG function (`preferences.leisure` / `preferences.leisure_tied`).
 """
 
 from lcm.typing import (
-    ContinuousAction,
     ContinuousState,
     DiscreteState,
     FloatND,
@@ -19,29 +18,27 @@ from aca_model.agent import preferences
 
 
 def retired(
-    consumption_unequiv: ContinuousAction,
+    consumption_equiv: FloatND,
     good_health: IntND,
-    equivalence_scale: FloatND,
     pref_type: DiscreteState,
-    consumption_weight: FloatND,
-    coefficient_rra: FloatND,
+    consumption_weights: FloatND,
+    coefficients_rra: FloatND,
     utility_scale_factor: FloatND,
     time_endowment: float,
     leisure_cost_of_bad_health: float,
 ) -> FloatND:
     """Utility for forcedout regimes (no work)."""
-    lei = preferences.leisure_retired(
+    leisure = preferences.leisure_retired(
         good_health=good_health,
         time_endowment=time_endowment,
         leisure_cost_of_bad_health=leisure_cost_of_bad_health,
     )
     return preferences.utility(
-        consumption_unequiv=consumption_unequiv,
-        leisure=lei,
+        consumption_equiv=consumption_equiv,
+        leisure=leisure,
         pref_type=pref_type,
-        consumption_weight=consumption_weight,
-        coefficient_rra=coefficient_rra,
-        equivalence_scale=equivalence_scale,
+        consumption_weights=consumption_weights,
+        coefficients_rra=coefficients_rra,
         utility_scale_factor=utility_scale_factor,
     )
 
@@ -51,8 +48,8 @@ def dead(
     pref_type: DiscreteState,
     bequest_shifter: float,
     scaled_bequest_weight: float,
-    consumption_weight: FloatND,
-    coefficient_rra: FloatND,
+    consumption_weights: FloatND,
+    coefficients_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
     """Terminal bequest utility for dead regime."""
@@ -61,7 +58,7 @@ def dead(
         pref_type=pref_type,
         bequest_shifter=bequest_shifter,
         scaled_bequest_weight=scaled_bequest_weight,
-        consumption_weight=consumption_weight,
-        coefficient_rra=coefficient_rra,
+        consumption_weights=consumption_weights,
+        coefficients_rra=coefficients_rra,
         utility_scale_factor=utility_scale_factor,
     )

@@ -120,7 +120,7 @@ def cash_on_hand(
 
     OOP health costs are NOT deducted here — they are deducted from
     next-period assets instead, matching the timing where HCC shocks are
-    integrated over (agent does not condition consumption_unequiv on OOP).
+    integrated over (agent does not condition consumption on OOP).
     """
     return (
         assets

@@ -17,7 +17,6 @@ from lcm import AgeGrid, DiscreteGrid, Model
 
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.regimes import RegimeId, build_all_regimes
-from aca_model.baseline.regimes._common import MAX_CONSUMPTION_UNEQUIV
 from aca_model.config import MODEL_CONFIG, GridConfig
 
 
@@ -82,7 +81,7 @@ def create_model(
     if derived_categoricals is not None:
         base_derived.update(derived_categoricals)
 
-    model = Model(
+    return Model(
         regimes=regimes,
         ages=ages,
         regime_id_class=RegimeId,
@@ -91,7 +90,3 @@ def create_model(
         derived_categoricals=base_derived,
         n_subjects=n_subjects,
     )
-    # See `MAX_CONSUMPTION_UNEQUIV` in `baseline.regimes._common` for why this
-    # rides on the Model instance instead of `fixed_params`.
-    model.max_consumption_unequiv = MAX_CONSUMPTION_UNEQUIV
-    return model

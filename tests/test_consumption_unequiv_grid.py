@@ -2,21 +2,29 @@
 
 The borrowing constraint in `agent.assets_and_income.borrowing_constraint`
 compares the lowest consumption_unequiv action against
-`max(cash_on_hand, consumption_unequiv_floor * equivalence_scale)`. For subjects
-with cash below the floor (HRS bottom-coded `assets=-$1{,}000{,}000$`,
-moderate-negative-asset retirees etc.) this RHS collapses to exactly
-`consumption_unequiv_floor` for singles. The constraint is feasible iff the
-lowest consumption_unequiv gridpoint is `<= consumption_unequiv_floor`.
+`max(cash_on_hand, consumption_unequiv_floor)`. For subjects with cash
+below the floor (HRS bottom-coded `assets=-$1{,}000{,}000$`,
+moderate-negative-asset retirees, etc.) this RHS collapses to exactly
+`consumption_unequiv_floor`. The constraint is feasible iff the
+relevant household-floor gridpoint is `<= consumption_unequiv_floor`.
+
+For singles (`equivalence_scale = 1`) that floor is
+`consumption_equiv_floor`; for married households
+(`equivalence_scale = 2 ** exponent`) it is
+`consumption_equiv_floor * 2 ** exponent`. Both must land **exactly**
+on the consumption_unequiv grid.
 
 `jnp.geomspace(start, stop, num=n)` returns `start * r^i` with
 `r = (stop/start)^(1/(n-1))`; mathematically `r^0 == 1` so the first
 point equals `start`, but XLA backends can drift by sub-ULP for some
 `(start, stop, n)` combinations (observed: CUDA, n=70, drift +2.27e-13).
-A positive drift above `consumption_unequiv_floor` flips the kink-boundary `<=`
-and rejects every action for those subjects.
+A positive drift above the floor flips the kink-boundary `<=` and
+rejects every action for the affected subjects.
 
-`_compute_consumption_unequiv_points` therefore pins the first point back to
-`consumption_unequiv_floor` after `geomspace`. Test that invariant directly.
+`_compute_consumption_unequiv_points` therefore prepends the singles'
+floor as `pts[0]`, runs `geomspace` from the married floor up to
+`MAX_CONSUMPTION_UNEQUIV` for the rest, and pins the geomspace start
+back to the married floor exactly. Test those invariants directly.
 """
 
 import jax.numpy as jnp
@@ -24,25 +32,56 @@ import pytest
 
 from aca_model.consumption_unequiv_grid import _compute_consumption_unequiv_points
 
+EXPONENT = 0.7  # production value (env_constants["exponent"])
+SINGLE_FLOOR = 1597.0921419521899  # production value
+MARRIED_SCALE = 2.0**EXPONENT
+
 
 @pytest.mark.parametrize("n_points", [5, 16, 64, 70, 100])
-def test_compute_consumption_unequiv_points_first_equals_floor_exactly(n_points: int) -> None:
-    """The first gridpoint equals `consumption_unequiv_floor` exactly under any `n_points`."""
-    consumption_unequiv_floor = 1597.0921419521899  # production value
+def test_compute_consumption_unequiv_points_first_equals_singles_floor(
+    n_points: int,
+) -> None:
+    """`pts[0]` equals the singles' floor exactly under any `n_points`."""
     pts = _compute_consumption_unequiv_points(
-        consumption_unequiv_floor=consumption_unequiv_floor,
-        max_consumption_unequiv=300_000.0,
+        consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
+        exponent=jnp.asarray(EXPONENT),
         n_points=n_points,
     )
-    assert float(pts[0]) == consumption_unequiv_floor
+    assert float(pts[0]) == SINGLE_FLOOR
+
+
+@pytest.mark.parametrize("n_points", [5, 16, 64, 70, 100])
+def test_compute_consumption_unequiv_points_second_equals_married_floor(
+    n_points: int,
+) -> None:
+    """`pts[1]` equals `consumption_equiv_floor * 2 ** exponent` exactly."""
+    pts = _compute_consumption_unequiv_points(
+        consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
+        exponent=jnp.asarray(EXPONENT),
+        n_points=n_points,
+    )
+    expected = float(jnp.asarray(SINGLE_FLOOR) * jnp.asarray(2.0) ** EXPONENT)
+    assert float(pts[1]) == expected
 
 
 def test_compute_consumption_unequiv_points_strictly_increasing() -> None:
     """Gridpoints are strictly increasing — no kink-pinning ties."""
     pts = _compute_consumption_unequiv_points(
-        consumption_unequiv_floor=1597.0921419521899,
-        max_consumption_unequiv=300_000.0,
+        consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
+        exponent=jnp.asarray(EXPONENT),
         n_points=70,
     )
     diffs = jnp.diff(pts)
     assert bool((diffs > 0).all())
+
+
+def test_compute_consumption_unequiv_points_last_equals_max() -> None:
+    """The final point is the configured upper bound."""
+    from aca_model.baseline.regimes._common import MAX_CONSUMPTION_UNEQUIV
+
+    pts = _compute_consumption_unequiv_points(
+        consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
+        exponent=jnp.asarray(EXPONENT),
+        n_points=70,
+    )
+    assert float(pts[-1]) == pytest.approx(MAX_CONSUMPTION_UNEQUIV)
