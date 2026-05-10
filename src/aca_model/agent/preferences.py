@@ -122,7 +122,7 @@ def leisure_retired(
 
 
 def utility(
-    consumption: ContinuousAction,
+    consumption_unequiv: ContinuousAction,
     leisure: FloatND,
     pref_type: DiscreteState,
     consumption_weight: FloatND,
@@ -130,7 +130,7 @@ def utility(
     equivalence_scale: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
-    """Within-period utility: CES aggregator over consumption and leisure.
+    """Within-period utility: CES aggregator over consumption_unequiv and leisure.
 
     u = utility_scale_factor * ((c/eq_scale)^α * l^(1-α))^(1-γ) / (1-γ)
     with log case for γ=1. `consumption_weight` and `coefficient_rra` are
@@ -141,8 +141,8 @@ def utility(
     """
     alpha = consumption_weight[pref_type]
     gamma = coefficient_rra[pref_type]
-    equiv_cons = consumption / equivalence_scale
-    composite = equiv_cons**alpha * leisure ** (1.0 - alpha)
+    consumption_equiv = consumption_unequiv / equivalence_scale
+    composite = consumption_equiv**alpha * leisure ** (1.0 - alpha)
 
     one_minus_gamma = jnp.where(jnp.isclose(gamma, 1.0), 1.0, 1.0 - gamma)
     u = jnp.where(
@@ -168,7 +168,7 @@ def discount_factor(
 
 def utility_scale_factor(
     pref_type: DiscreteState,
-    average_consumption: float,
+    average_consumption_unequiv: float,
     consumption_weight: FloatND,
     coefficient_rra: FloatND,
     time_endowment: float,
@@ -184,7 +184,7 @@ def utility_scale_factor(
     pattern: take the state as input, return a per-cell scalar. Registering this
     as a regime function and then doing `utility_scale_factor[pref_type]` in a
     downstream consumer is invalid — pylcm broadcasts function outputs to
-    per-cell scalars before consumption, and the validator in
+    per-cell scalars before consumption_unequiv, and the validator in
     `lcm.regime_building.validation` raises on that clash.
     """
     alpha = consumption_weight[pref_type]
@@ -195,7 +195,7 @@ def utility_scale_factor(
         - scale_reference_hours
         - (fixed_cost_of_work_intercept + fixed_cost_of_work_age_trend * age_offset)
     )
-    u_cons = average_consumption**alpha
+    u_cons = average_consumption_unequiv**alpha
     u_leisure = average_leisure ** (1.0 - alpha)
 
     one_minus_gamma = jnp.where(jnp.isclose(gamma, 1.0), 1.0, 1.0 - gamma)

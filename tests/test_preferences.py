@@ -34,7 +34,7 @@ RRA_1_BY_TYPE = jnp.array([1.0, 1.0, 1.0])
 def test_utility_scale_factor_crra() -> None:
     result = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
-        average_consumption=AVERAGE_CONSUMPTION,
+        average_consumption_unequiv=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
@@ -50,7 +50,7 @@ def test_utility_scale_factor_crra() -> None:
 def test_utility_scale_factor_log() -> None:
     result = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
-        average_consumption=AVERAGE_CONSUMPTION,
+        average_consumption_unequiv=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_1_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
@@ -108,7 +108,7 @@ def test_scaled_bequest_weight_zero() -> None:
 def test_utility_log_regression() -> None:
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
-        average_consumption=AVERAGE_CONSUMPTION,
+        average_consumption_unequiv=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_1_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
@@ -119,7 +119,7 @@ def test_utility_log_regression() -> None:
         scale_reference_age=SCALE_REFERENCE_AGE,
     )
     result = preferences.utility(
-        consumption=jnp.array(50000.0),
+        consumption_unequiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
         consumption_weight=WEIGHT_BY_TYPE,
@@ -133,7 +133,7 @@ def test_utility_log_regression() -> None:
 def test_utility_crra_regression() -> None:
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
-        average_consumption=AVERAGE_CONSUMPTION,
+        average_consumption_unequiv=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
@@ -144,7 +144,7 @@ def test_utility_crra_regression() -> None:
         scale_reference_age=SCALE_REFERENCE_AGE,
     )
     result = preferences.utility(
-        consumption=jnp.array(50000.0),
+        consumption_unequiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
         consumption_weight=WEIGHT_BY_TYPE,
@@ -156,10 +156,10 @@ def test_utility_crra_regression() -> None:
 
 
 def test_utility_married_equivalence() -> None:
-    """Married with equiv-scaled consumption should equal single utility."""
+    """Married with equiv-scaled consumption_unequiv should equal single utility."""
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
-        average_consumption=AVERAGE_CONSUMPTION,
+        average_consumption_unequiv=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
@@ -170,7 +170,7 @@ def test_utility_married_equivalence() -> None:
         scale_reference_age=SCALE_REFERENCE_AGE,
     )
     single = preferences.utility(
-        consumption=jnp.array(50000.0),
+        consumption_unequiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
         consumption_weight=WEIGHT_BY_TYPE,
@@ -179,7 +179,7 @@ def test_utility_married_equivalence() -> None:
         utility_scale_factor=scale,
     )
     married = preferences.utility(
-        consumption=jnp.array(50000.0 * 2**0.7),
+        consumption_unequiv=jnp.array(50000.0 * 2**0.7),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
         consumption_weight=WEIGHT_BY_TYPE,
@@ -196,7 +196,7 @@ def test_utility_married_equivalence() -> None:
 def test_bequest_log_regression() -> None:
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
-        average_consumption=AVERAGE_CONSUMPTION,
+        average_consumption_unequiv=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_1_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
@@ -229,7 +229,7 @@ def test_bequest_log_regression() -> None:
 def test_bequest_crra_regression() -> None:
     scale = preferences.utility_scale_factor(
         pref_type=jnp.array(0),
-        average_consumption=AVERAGE_CONSUMPTION,
+        average_consumption_unequiv=AVERAGE_CONSUMPTION,
         consumption_weight=WEIGHT_BY_TYPE,
         coefficient_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,

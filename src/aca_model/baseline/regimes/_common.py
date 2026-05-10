@@ -183,7 +183,7 @@ config = MODEL_CONFIG
 class Grids:
     assets: LinSpacedGrid
     aime: ContinuousGrid
-    consumption: ContinuousGrid
+    consumption_unequiv: ContinuousGrid
     wage_res: Any
     hcc_persistent: Any
     hcc_transitory: Any
@@ -195,12 +195,12 @@ class Grids:
 _AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
 
 
-MAX_CONSUMPTION: float = 300_000.0
-"""Upper bound of the runtime consumption grid in $/year.
+MAX_CONSUMPTION_UNEQUIV: float = 300_000.0
+"""Upper bound of the runtime consumption_unequiv grid in $/year.
 
 Lives here next to the other grid bounds (assets `stop=500_000.0`,
 AIME `stop=8_000.0`). The `create_model` factories attach this onto
-`model.max_consumption` so `inject_consumption_points` can read it
+`model.max_consumption_unequiv` so `inject_consumption_unequiv_points` can read it
 back at runtime. Routed via a Model attribute rather than
 `fixed_params` because pylcm validates `fixed_params` keys against
 the regime DAG and rejects entries no function consumes.
@@ -231,9 +231,9 @@ def build_grids(
     the grid floor must still be known at build time.
 
     `pref_type_grid` lets callers (e.g. the benchmark) substitute a
-    compact or partition-lifted `DiscreteGrid(...)` for the production
+    compact `DiscreteGrid(...)` for the production
     `DiscreteGrid(PrefType)`. When `None`, defaults to the production
-    3-type grid with the default `DispatchStrategy.FUSED_VMAP`.
+    3-type grid.
     """
     # Unit-variance standardised shocks: the total_costs / wage
     # formulas rescale these by fixed_params-level std parameters
@@ -276,8 +276,8 @@ def build_grids(
             batch_size=grid_config.n_assets_batch_size,
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
-        consumption=IrregSpacedGrid(
-            n_points=grid_config.n_consumption_gridpoints,
+        consumption_unequiv=IrregSpacedGrid(
+            n_points=grid_config.n_consumption_unequiv_gridpoints,
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
@@ -425,7 +425,7 @@ def build_actions(spec: dict[str, str], grids: Grids) -> dict:
         actions["labor_supply"] = DiscreteGrid(LaborSupply)
     if spec["his"] == "nongroup" and spec["mc"] == "nomc":
         actions["buy_private"] = DiscreteGrid(BuyPrivate)
-    actions["consumption"] = grids.consumption
+    actions["consumption_unequiv"] = grids.consumption_unequiv
     return actions
 
 

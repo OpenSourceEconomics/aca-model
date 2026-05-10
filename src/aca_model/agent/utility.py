@@ -19,7 +19,7 @@ from aca_model.agent import preferences
 
 
 def retired(
-    consumption: ContinuousAction,
+    consumption_unequiv: ContinuousAction,
     good_health: IntND,
     equivalence_scale: FloatND,
     pref_type: DiscreteState,
@@ -36,7 +36,7 @@ def retired(
         leisure_cost_of_bad_health=leisure_cost_of_bad_health,
     )
     return preferences.utility(
-        consumption=consumption,
+        consumption_unequiv=consumption_unequiv,
         leisure=lei,
         pref_type=pref_type,
         consumption_weight=consumption_weight,

@@ -40,13 +40,13 @@ def test_benchmark_model_simulates_end_to_end() -> None:
 
 @pytest.mark.long_running
 def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
-    """`consumption <= max(cash_on_hand, floor)` holds for every alive row.
+    """`consumption_unequiv <= max(cash_on_hand, floor)` holds for every alive row.
 
     The simulator only ever picks feasible actions — the borrowing
     constraint must hold post-hoc on the simulated panel. A regression
     that drops the constraint from a regime, replaces the floor with
     something looser, or lets an action grid skip the floor would
-    surface as a row with `consumption > max(cash_on_hand, floor)`.
+    surface as a row with `consumption_unequiv > max(cash_on_hand, floor)`.
 
     The constraint's RHS is `max(cash_on_hand, floor)` rather than
     `cash_on_hand + transfers`: the additive form rounds short by
@@ -77,10 +77,10 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
         additional_targets=["cash_on_hand", "equivalence_scale"]
     )
     alive = df.loc[df["regime"] != "dead"].copy()
-    consumption_floor = float(params["consumption_floor"])
-    floor = consumption_floor * alive["equivalence_scale"].to_numpy()
+    consumption_unequiv_floor = float(params["consumption_unequiv_floor"])
+    floor = consumption_unequiv_floor * alive["equivalence_scale"].to_numpy()
     rhs = np.maximum(alive["cash_on_hand"].to_numpy(), floor)
-    slack = rhs - alive["consumption"].to_numpy()
+    slack = rhs - alive["consumption_unequiv"].to_numpy()
     assert (slack >= 0).all(), (
         f"borrowing_constraint violated on {int((slack < 0).sum())} row(s); "
         f"min slack = {slack.min():.6g}"

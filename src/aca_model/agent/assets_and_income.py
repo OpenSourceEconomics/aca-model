@@ -26,25 +26,25 @@ def cash_on_hand(
     ssi_benefit: FloatND,
     hic_premium: FloatND,
 ) -> FloatND:
-    """Compute cash on hand available for consumption and saving.
+    """Compute cash on hand available for consumption_unequiv and saving.
 
     OOP health costs are NOT deducted here — they are deducted from
     next-period assets instead, matching the timing where HCC shocks are
-    integrated over (agent does not condition consumption on OOP).
+    integrated over (agent does not condition consumption_unequiv on OOP).
     """
     return assets + after_tax_income + ssi_benefit - hic_premium
 
 
 def transfers(
     cash_on_hand: FloatND,
-    consumption_floor: float,
+    consumption_unequiv_floor: float,
     equivalence_scale: FloatND,
 ) -> FloatND:
-    """Government transfers to enforce consumption floor.
+    """Government transfers to enforce consumption_unequiv floor.
 
     tr = max{0, C_min * equivalence_scale - cash_on_hand}
     """
-    floor = consumption_floor * equivalence_scale
+    floor = consumption_unequiv_floor * equivalence_scale
     return jnp.maximum(0.0, floor - cash_on_hand)
 
 
@@ -52,23 +52,23 @@ def next_assets(
     cash_on_hand: FloatND,
     transfers: FloatND,
     pension_assets_adjustment: FloatND,
-    consumption: ContinuousAction,
+    consumption_unequiv: ContinuousAction,
     oop_costs: FloatND,
 ) -> ContinuousState:
     """Compute beginning-of-next-period assets for non-terminal targets.
 
     OOP health costs are deducted here (not from cash_on_hand) so that the
-    consumption choice does not condition on the HCC shock realization.
+    consumption_unequiv choice does not condition on the HCC shock realization.
     """
     return (
-        cash_on_hand + transfers + pension_assets_adjustment - consumption - oop_costs
+        cash_on_hand + transfers + pension_assets_adjustment - consumption_unequiv - oop_costs
     )
 
 
 def next_assets_terminal(
     cash_on_hand: FloatND,
     transfers: FloatND,
-    consumption: ContinuousAction,
+    consumption_unequiv: ContinuousAction,
     oop_costs: FloatND,
 ) -> ContinuousState:
     """Compute beginning-of-next-period assets for the dead/terminal target.
@@ -79,18 +79,18 @@ def next_assets_terminal(
     (which would otherwise need to come from a transition `dead` does not
     have, since `aime` is not a state in the terminal regime).
     """
-    return cash_on_hand + transfers - consumption - oop_costs
+    return cash_on_hand + transfers - consumption_unequiv - oop_costs
 
 
 def borrowing_constraint(
-    consumption: ContinuousAction,
+    consumption_unequiv: ContinuousAction,
     cash_on_hand: FloatND,
-    consumption_floor: float,
+    consumption_unequiv_floor: float,
     equivalence_scale: FloatND,
 ) -> BoolND:
     """Consumption cannot exceed post-transfer resources.
 
-    Post-transfer resources are `max(cash_on_hand, consumption_floor *
+    Post-transfer resources are `max(cash_on_hand, consumption_unequiv_floor *
     equivalence_scale)`: the transfer system tops `cash_on_hand` to the
     floor when below, otherwise resources are unchanged. The algebraic
     identity is `cash_on_hand + transfers == max(cash_on_hand, floor)`;
@@ -104,7 +104,7 @@ def borrowing_constraint(
     wealth at a cross-HIS transition), and including it here can leave
     no feasible action at low-asset / mid-AIME corners. The correction
     enters `next_assets` instead — a post-decision shift that does not
-    gate the current consumption choice.
+    gate the current consumption_unequiv choice.
     """
-    floor = consumption_floor * equivalence_scale
-    return consumption <= jnp.maximum(cash_on_hand, floor)
+    floor = consumption_unequiv_floor * equivalence_scale
+    return consumption_unequiv <= jnp.maximum(cash_on_hand, floor)

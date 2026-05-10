@@ -17,7 +17,7 @@ from lcm import AgeGrid, DiscreteGrid, Model
 
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.regimes import RegimeId, build_all_regimes
-from aca_model.baseline.regimes._common import MAX_CONSUMPTION
+from aca_model.baseline.regimes._common import MAX_CONSUMPTION_UNEQUIV
 from aca_model.config import MODEL_CONFIG, GridConfig
 
 
@@ -51,9 +51,8 @@ def create_model(
             production values or `BENCHMARK_GRID_CONFIG` for the
             fast-but-structurally-faithful benchmark.
         pref_type_grid: Pref-type `DiscreteGrid`, or `None` to use
-            `DiscreteGrid(PrefType)`. Pass a custom grid (e.g. with a
-            `DispatchStrategy.PARTITION_SCAN` strategy) to substitute the
-            production layout.
+            `DiscreteGrid(PrefType)`. Pass a custom grid to substitute
+            the production layout (e.g. the 2-type benchmark variant).
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
@@ -92,7 +91,7 @@ def create_model(
         derived_categoricals=base_derived,
         n_subjects=n_subjects,
     )
-    # See `MAX_CONSUMPTION` in `baseline.regimes._common` for why this
+    # See `MAX_CONSUMPTION_UNEQUIV` in `baseline.regimes._common` for why this
     # rides on the Model instance instead of `fixed_params`.
-    model.max_consumption = MAX_CONSUMPTION
+    model.max_consumption_unequiv = MAX_CONSUMPTION_UNEQUIV
     return model

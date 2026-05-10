@@ -44,7 +44,7 @@ from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model
 from aca_model.config import BENCHMARK_GRID_CONFIG
-from aca_model.consumption_grid import inject_consumption_points
+from aca_model.consumption_unequiv_grid import inject_consumption_unequiv_points
 
 _PARAMS_FILE = (
     Path(__file__).resolve().parent / "_benchmark_data" / "benchmark_params.pkl"
@@ -115,11 +115,11 @@ def get_benchmark_params(
     `_N_BENCHMARK_PREF_TYPES` rows so they line up with
     `BenchmarkPrefType`'s categories.
 
-    When `model` is provided, consumption gridpoints are injected into
-    `params` for each regime that declares `consumption` as an
-    `IrregSpacedGrid` with runtime-supplied points. The lower bound is
-    read from `params["consumption_floor"]`. Pass `model=None` to skip
-    injection (e.g. when constructing the model with `fixed_params`).
+    When `model` is provided, consumption_unequiv gridpoints are injected
+    into `params` for each regime that declares `consumption_unequiv` as
+    an `IrregSpacedGrid` with runtime-supplied points. The lower bound is
+    read from `params["consumption_unequiv_floor"]`. Pass `model=None` to
+    skip injection (e.g. when constructing the model with `fixed_params`).
     """
     with _PARAMS_FILE.open("rb") as fh:
         data = cloudpickle.load(fh)
@@ -129,7 +129,7 @@ def get_benchmark_params(
     fixed_params = _add_shifted_imputation_arrays(fixed_params)
     params = _truncate_pref_type_indexed(data["params"])
     if model is not None:
-        params = inject_consumption_points(params=params, model=model)
+        params = inject_consumption_unequiv_points(params=params, model=model)
     return fixed_params, params
 
 

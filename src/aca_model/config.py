@@ -29,7 +29,7 @@ class ModelConfig:
 class GridConfig:
     n_assets_gridpoints: int = 24
     n_aime_gridpoints: int = 12
-    n_consumption_gridpoints: int = 70
+    n_consumption_unequiv_gridpoints: int = 70
     n_wage_res_gridpoints: int = 5
     n_hcc_persistent_gridpoints: int = 3
     n_hcc_transitory_gridpoints: int = 5
@@ -47,7 +47,7 @@ GRID_CONFIG = GridConfig()
 BENCHMARK_GRID_CONFIG = GridConfig(
     n_assets_gridpoints=3,
     n_aime_gridpoints=3,
-    n_consumption_gridpoints=5,
+    n_consumption_unequiv_gridpoints=5,
     n_wage_res_gridpoints=3,
     n_hcc_persistent_gridpoints=3,
     n_hcc_transitory_gridpoints=3,

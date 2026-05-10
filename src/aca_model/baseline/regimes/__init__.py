@@ -69,10 +69,9 @@ def build_all_regimes(
     `fixed_params` is forwarded to `build_grids` for data-driven AIME
     breakpoints; `wage_params` for the data-driven assets floor;
     either being `None` keeps the corresponding static fallback.
-    `pref_type_grid` lets callers inject a compact or partition-lifted
-    `DiscreteGrid(...)` (e.g. the benchmark uses a 2-type
-    `BenchmarkPrefType` with `DispatchStrategy.PARTITION_SCAN`); `None`
-    falls back to `DiscreteGrid(PrefType)`.
+    `pref_type_grid` lets callers inject a compact `DiscreteGrid(...)`
+    (e.g. the benchmark's 2-type `BenchmarkPrefType`); `None` falls
+    back to `DiscreteGrid(PrefType)`.
     """
     grids = build_grids(
         grid_config=grid_config,

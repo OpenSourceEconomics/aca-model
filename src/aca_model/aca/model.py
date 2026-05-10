@@ -13,7 +13,7 @@ from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.regimes import RegimeId
-from aca_model.baseline.regimes._common import MAX_CONSUMPTION
+from aca_model.baseline.regimes._common import MAX_CONSUMPTION_UNEQUIV
 from aca_model.config import MODEL_CONFIG, GridConfig
 
 
@@ -82,5 +82,5 @@ def create_model(
         derived_categoricals=base_derived,
         n_subjects=n_subjects,
     )
-    model.max_consumption = MAX_CONSUMPTION
+    model.max_consumption_unequiv = MAX_CONSUMPTION_UNEQUIV
     return model

@@ -10,7 +10,7 @@ from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes as _build_aca_regimes
 from aca_model.baseline.regimes import REGIME_SPECS, RegimeId
 from aca_model.baseline.regimes import build_regime as _build_regime
-from aca_model.baseline.regimes._common import MAX_CONSUMPTION, build_grids
+from aca_model.baseline.regimes._common import MAX_CONSUMPTION_UNEQUIV, build_grids
 from aca_model.config import GRID_CONFIG
 
 
@@ -70,7 +70,7 @@ def test_forcedout_regimes_no_labor_supply(name: str) -> None:
     regime = build_regime(name)
     assert "labor_supply" not in regime.actions
     assert "log_ft_wage_res" not in regime.states
-    assert "consumption" in regime.actions
+    assert "consumption_unequiv" in regime.actions
 
 
 @pytest.mark.parametrize(
@@ -270,6 +270,6 @@ def test_baseline_model_creates() -> None:
     assert len(model.regimes) == 19
 
 
-def test_max_consumption_attached_from_canonical_constant() -> None:
+def test_max_consumption_unequiv_attached_from_canonical_constant() -> None:
     model = make_baseline_model(n_subjects=1)
-    assert model.max_consumption == MAX_CONSUMPTION
+    assert model.max_consumption_unequiv == MAX_CONSUMPTION_UNEQUIV
