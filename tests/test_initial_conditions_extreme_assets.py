@@ -8,7 +8,6 @@ how negative starting assets are. The model's constraints — and pylcm's
 """
 
 import jax.numpy as jnp
-import pytest
 from lcm import DiscreteGrid
 from lcm.simulation.initial_conditions import validate_initial_conditions
 
@@ -83,11 +82,6 @@ def test_borrowing_constraint_admits_floor_at_million_dollar_negative_cash() -> 
     assert admitted
 
 
-@pytest.mark.skip(
-    reason="benchmark_params.pkl predates the consumption_unequiv rename "
-    "(carries `average_consumption` instead of `average_consumption_unequiv`). "
-    "Unskip once the benchmark snapshot is regenerated."
-)
 def test_extreme_negative_assets_subject_passes_validation() -> None:
     """A subject placed at `assets = -1_000_000` clears initial-conditions validation.
 
