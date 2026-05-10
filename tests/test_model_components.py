@@ -164,8 +164,8 @@ def test_next_aime_accrual() -> None:
     result = social_security.next_aime(
         aime=jnp.array(1000.0),
         labor_income=jnp.array(50000.0),
-        period=55,
-        age=55,
+        period=jnp.int32(55),
+        age=jnp.int32(55),
         benefit_withheld_fraction=jnp.array(0.0),
         earnings_test_credited_back=jnp.zeros(100),
         earnings_test_repealed_age=70,

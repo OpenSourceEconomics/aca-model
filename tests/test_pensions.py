@@ -42,8 +42,8 @@ SURVIVAL_PROBS = SURVIVAL_PROBS.at[29].set(0.98)
 def test_pension_benefit_zero_pia() -> None:
     result = pensions.benefit(
         pia=jnp.array(0.0),
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
         imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
@@ -59,8 +59,8 @@ def test_pension_benefit_zero_pia() -> None:
 def test_pension_benefit_below_kink_0() -> None:
     result = pensions.benefit(
         pia=jnp.array(500.0),
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
         imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
@@ -75,8 +75,8 @@ def test_pension_benefit_below_kink_0() -> None:
 def test_pension_benefit_between_kinks() -> None:
     result = pensions.benefit(
         pia=jnp.array(12000.0),
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
         imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
@@ -92,8 +92,8 @@ def test_pension_benefit_between_kinks() -> None:
 def test_pension_benefit_above_kink_1() -> None:
     result = pensions.benefit(
         pia=jnp.array(20000.0),
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
         imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
@@ -109,8 +109,8 @@ def test_pension_benefit_above_kink_1() -> None:
 def test_pension_accrual_no_income() -> None:
     result = pensions.accrual(
         labor_income=jnp.array(-1000.0),
-        period=20,
-        his=0,
+        period=jnp.int32(20),
+        his=jnp.int32(0),
         accrual_intercept=ACCRUAL_INTERCEPT,
         accrual_log_earnings=ACCRUAL_LOG_EARNINGS,
         accrual_prob_intercept=ACCRUAL_PROB_INTERCEPT,
@@ -123,8 +123,8 @@ def test_pension_accrual_no_income() -> None:
 def test_pension_accrual_positive() -> None:
     result = pensions.accrual(
         labor_income=jnp.array(10000.0),
-        period=20,
-        his=0,
+        period=jnp.int32(20),
+        his=jnp.int32(0),
         accrual_intercept=ACCRUAL_INTERCEPT,
         accrual_log_earnings=ACCRUAL_LOG_EARNINGS,
         accrual_prob_intercept=ACCRUAL_PROB_INTERCEPT,
@@ -148,7 +148,7 @@ def test_pension_wealth_next_accrual_only() -> None:
         pension_accrual=jnp.array(accrual),
         rate_of_return=r,
         unconditional_survival_prob=SURVIVAL_PROBS,
-        period=28,
+        period=jnp.int32(28),
     )
     assert jnp.isclose(result, accrual / 0.99, atol=ATOL)
 
@@ -164,7 +164,7 @@ def test_pension_wealth_next_with_benefit() -> None:
         pension_accrual=jnp.array(accrual),
         rate_of_return=r,
         unconditional_survival_prob=SURVIVAL_PROBS,
-        period=29,
+        period=jnp.int32(29),
     )
     expected = ((1 + r) * 3000 + accrual - 2000) / 0.98
     assert jnp.isclose(result, expected, atol=ATOL)
@@ -177,8 +177,8 @@ def test_convert_total_ben_to_pia_below_kink_0() -> None:
 
     pb = pensions.benefit(
         pia=pia_input,
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
         imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
@@ -190,8 +190,8 @@ def test_convert_total_ben_to_pia_below_kink_0() -> None:
     recovered = pensions.total_to_pia(
         pension_benefit=pb,
         pia=pia_input,
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         marginal_tax_rate=mtr,
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
@@ -210,8 +210,8 @@ def test_convert_total_ben_to_pia_between_kinks() -> None:
 
     pb = pensions.benefit(
         pia=pia_input,
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
         imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
@@ -223,8 +223,8 @@ def test_convert_total_ben_to_pia_between_kinks() -> None:
     recovered = pensions.total_to_pia(
         pension_benefit=pb,
         pia=pia_input,
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         marginal_tax_rate=mtr,
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
@@ -243,8 +243,8 @@ def test_convert_total_ben_to_pia_above_kink_1() -> None:
 
     pb = pensions.benefit(
         pia=pia_input,
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
         imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
@@ -256,8 +256,8 @@ def test_convert_total_ben_to_pia_above_kink_1() -> None:
     recovered = pensions.total_to_pia(
         pension_benefit=pb,
         pia=pia_input,
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         marginal_tax_rate=mtr,
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
@@ -276,8 +276,8 @@ def test_convert_total_ben_to_pia_zero_mtr() -> None:
 
     pb = pensions.benefit(
         pia=pia_input,
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,
         imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
@@ -289,8 +289,8 @@ def test_convert_total_ben_to_pia_zero_mtr() -> None:
     recovered = pensions.total_to_pia(
         pension_benefit=pb,
         pia=pia_input,
-        period=29,
-        his=0,
+        period=jnp.int32(29),
+        his=jnp.int32(0),
         marginal_tax_rate=mtr,
         imp_intercept=PW_IMP_INTERCEPT,
         imp_pia_coeff=PW_IMP_PIA,

@@ -5,6 +5,7 @@ Parameter values from French & Jones (2011) Appendix C.
 
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 from helpers.social_security import compute_di_dropout_scale, compute_pia_table
 
 from aca_model.agent.labor_market import LaborSupply
@@ -56,7 +57,12 @@ _RATIO_NP[69] = 0.7
 RATIO = jnp.array(_RATIO_NP)
 
 DI_SCALE = jnp.array(
-    compute_di_dropout_scale(_RATIO_NP, AIME_ACCRUAL_FACTOR, start_age=0, n_periods=100)
+    compute_di_dropout_scale(
+        pd.Series(_RATIO_NP),
+        AIME_ACCRUAL_FACTOR,
+        start_age=jnp.int32(0),
+        n_periods=100,
+    )
 )
 
 # Pre-computed PIA lookup table (4-point exact grid)
@@ -119,13 +125,13 @@ def test_next_aime_indexing_high_income() -> None:
     result = social_security.next_aime(
         benefit_withheld_fraction=jnp.array(0.0),
         earnings_test_credited_back=jnp.zeros(100),
-        earnings_test_repealed_age=70,
+        earnings_test_repealed_age=jnp.int32(70),
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
         aime=jnp.array(1000.0),
         labor_income=jnp.array(20000.0),
-        period=58,
-        age=58,
+        period=jnp.int32(58),
+        age=jnp.int32(58),
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
@@ -140,13 +146,13 @@ def test_next_aime_indexing_low_income() -> None:
     result = social_security.next_aime(
         benefit_withheld_fraction=jnp.array(0.0),
         earnings_test_credited_back=jnp.zeros(100),
-        earnings_test_repealed_age=70,
+        earnings_test_repealed_age=jnp.int32(70),
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
         aime=jnp.array(10000.0),
         labor_income=jnp.array(510.0),
-        period=58,
-        age=58,
+        period=jnp.int32(58),
+        age=jnp.int32(58),
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
@@ -160,13 +166,13 @@ def test_next_aime_no_indexing_high_income() -> None:
     result = social_security.next_aime(
         benefit_withheld_fraction=jnp.array(0.0),
         earnings_test_credited_back=jnp.zeros(100),
-        earnings_test_repealed_age=70,
+        earnings_test_repealed_age=jnp.int32(70),
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
         aime=jnp.array(1000.0),
         labor_income=jnp.array(20000.0),
-        period=62,
-        age=62,
+        period=jnp.int32(62),
+        age=jnp.int32(62),
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
@@ -181,13 +187,13 @@ def test_next_aime_no_indexing_low_income() -> None:
     result = social_security.next_aime(
         benefit_withheld_fraction=jnp.array(0.0),
         earnings_test_credited_back=jnp.zeros(100),
-        earnings_test_repealed_age=70,
+        earnings_test_repealed_age=jnp.int32(70),
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
         aime=jnp.array(1000.0),
         labor_income=jnp.array(99.0),
-        period=62,
-        age=62,
+        period=jnp.int32(62),
+        age=jnp.int32(62),
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
@@ -201,13 +207,13 @@ def test_next_aime_cap_high_aime_high_income() -> None:
     result = social_security.next_aime(
         benefit_withheld_fraction=jnp.array(0.0),
         earnings_test_credited_back=jnp.zeros(100),
-        earnings_test_repealed_age=70,
+        earnings_test_repealed_age=jnp.int32(70),
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
         aime=jnp.array(40000.0),
         labor_income=jnp.array(20000.0),
-        period=62,
-        age=62,
+        period=jnp.int32(62),
+        age=jnp.int32(62),
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
@@ -221,13 +227,13 @@ def test_next_aime_cap_high_aime_low_income() -> None:
     result = social_security.next_aime(
         benefit_withheld_fraction=jnp.array(0.0),
         earnings_test_credited_back=jnp.zeros(100),
-        earnings_test_repealed_age=70,
+        earnings_test_repealed_age=jnp.int32(70),
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
         aime=jnp.array(40000.0),
         labor_income=jnp.array(3500.0),
-        period=62,
-        age=62,
+        period=jnp.int32(62),
+        age=jnp.int32(62),
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
@@ -256,7 +262,7 @@ def test_pia_lookup_matches_formula() -> None:
 def test_ssdi_pia_matches_dropout_adjusted() -> None:
     """ssdi_pia lookup matches aime_to_pia(aime * di_dropout_scale[period])."""
     aime = jnp.array(5000.0)
-    period = 55
+    period = jnp.int32(55)
     adjusted_aime = aime * DI_SCALE[period]
 
     lookup = social_security.ssdi_pia(
@@ -292,17 +298,17 @@ def test_benefit_choose_post65_below_et_threshold() -> None:
     )
     result = social_security.benefit_choose_post65(
         pia=pia_val,
-        age=67,
-        period=0,
+        age=jnp.int32(67),
+        period=jnp.int32(0),
         claim_ss=jnp.array(ClaimedSS.yes),
         claimed_ss=jnp.array(ClaimedSS.no),
         labor_supply=jnp.array(LaborSupply.h2000),
         labor_income=jnp.array(4000.0),
         early_ret_adjustment=jnp.array([1.0]),
-        normal_retirement_age=66,
+        normal_retirement_age=jnp.int32(66),
         earnings_test_threshold=jnp.array([10000.0]),
         earnings_test_fraction=jnp.array([0.0]),
-        earnings_test_repealed_age=70,
+        earnings_test_repealed_age=jnp.int32(70),
     )
     assert jnp.isclose(result, pia_val, atol=ATOL)
 
@@ -316,17 +322,17 @@ def test_benefit_choose_post65_partially_reduced() -> None:
     )
     result = social_security.benefit_choose_post65(
         pia=pia_val,
-        age=60,
-        period=0,
+        age=jnp.int32(60),
+        period=jnp.int32(0),
         claim_ss=jnp.array(ClaimedSS.yes),
         claimed_ss=jnp.array(ClaimedSS.no),
         labor_supply=jnp.array(LaborSupply.h2000),
         labor_income=jnp.array(6000.0),
         early_ret_adjustment=jnp.array([1.0]),
-        normal_retirement_age=66,
+        normal_retirement_age=jnp.int32(66),
         earnings_test_threshold=jnp.array([2000.0]),
         earnings_test_fraction=jnp.array([0.2]),
-        earnings_test_repealed_age=70,
+        earnings_test_repealed_age=jnp.int32(70),
     )
     expected = pia_val - (6000 - 2000) * 0.2
     assert jnp.isclose(result, expected, atol=ATOL)
@@ -336,7 +342,7 @@ def test_benefit_inelig_pre65_disabled_below_sga() -> None:
     """Disabled agent below SGA: benefit = ssdi_pia."""
     ssdi_val = social_security.ssdi_pia(
         aime=jnp.array(5000.0),
-        period=55,
+        period=jnp.int32(55),
         di_dropout_scale=DI_SCALE,
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
@@ -354,7 +360,7 @@ def test_benefit_inelig_pre65_disabled_above_sga() -> None:
     """Disabled agent above SGA: benefit = 0."""
     ssdi_val = social_security.ssdi_pia(
         aime=jnp.array(5000.0),
-        period=55,
+        period=jnp.int32(55),
         di_dropout_scale=DI_SCALE,
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
@@ -385,12 +391,12 @@ def test_benefit_inelig_pre65_not_disabled() -> None:
 def test_di_dropout_round_trip_zero_years() -> None:
     aime = jnp.array(10000.0)
     scaled = aime * DI_SCALE[52]
-    round_tripped = social_security.adjust_aime_di_dropout_inv(52, scaled, DI_SCALE)
+    round_tripped = social_security.adjust_aime_di_dropout_inv(jnp.int32(52), scaled, DI_SCALE)
     assert jnp.isclose(aime, round_tripped, atol=ATOL)
 
 
 def test_di_dropout_round_trip_positive_years() -> None:
     aime = jnp.array(10000.0)
     scaled = aime * DI_SCALE[62]
-    round_tripped = social_security.adjust_aime_di_dropout_inv(62, scaled, DI_SCALE)
+    round_tripped = social_security.adjust_aime_di_dropout_inv(jnp.int32(62), scaled, DI_SCALE)
     assert jnp.isclose(aime, round_tripped, rtol=0.0002)

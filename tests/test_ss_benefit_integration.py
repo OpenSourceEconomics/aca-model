@@ -43,7 +43,7 @@ def test_earnings_test_reduces_benefit_before_fra() -> None:
     n_periods = 45
     ssdi_pia_val = social_security.ssdi_pia(
         aime=jnp.array(3000.0),
-        period=12,
+        period=jnp.int32(12),
         di_dropout_scale=jnp.ones(n_periods + 1),
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
@@ -52,36 +52,36 @@ def test_earnings_test_reduces_benefit_before_fra() -> None:
     benefit_working = social_security.benefit_choose_pre65(
         pia=pia_val,
         ssdi_pia=ssdi_pia_val,
-        age=63,
-        period=0,
+        age=jnp.int32(63),
+        period=jnp.int32(0),
         claim_ss=jnp.array(ClaimedSS.yes),
         claimed_ss=jnp.array(ClaimedSS.no),
         health=jnp.array(2),
         labor_supply=jnp.array(LaborSupply.h2000),
         labor_income=jnp.array(30000.0),
         early_ret_adjustment=jnp.array([0.75]),
-        normal_retirement_age=66,
+        normal_retirement_age=jnp.int32(66),
         earnings_test_threshold=jnp.array([17640.0]),
         earnings_test_fraction=jnp.array([0.5]),
-        earnings_test_repealed_age=66,
+        earnings_test_repealed_age=jnp.int32(66),
         ssdi_substantial_gainful_activity=13560.0,
     )
 
     benefit_not_working = social_security.benefit_choose_pre65(
         pia=pia_val,
         ssdi_pia=ssdi_pia_val,
-        age=63,
-        period=0,
+        age=jnp.int32(63),
+        period=jnp.int32(0),
         claim_ss=jnp.array(ClaimedSS.yes),
         claimed_ss=jnp.array(ClaimedSS.no),
         health=jnp.array(2),
         labor_supply=jnp.array(LaborSupply.do_not_work),
         labor_income=jnp.array(0.0),
         early_ret_adjustment=jnp.array([0.75]),
-        normal_retirement_age=66,
+        normal_retirement_age=jnp.int32(66),
         earnings_test_threshold=jnp.array([17640.0]),
         earnings_test_fraction=jnp.array([0.5]),
-        earnings_test_repealed_age=66,
+        earnings_test_repealed_age=jnp.int32(66),
         ssdi_substantial_gainful_activity=13560.0,
     )
 
@@ -99,32 +99,32 @@ def test_earnings_test_not_applied_after_fra() -> None:
 
     benefit_post65 = social_security.benefit_choose_post65(
         pia=pia_val,
-        age=67,
-        period=0,
+        age=jnp.int32(67),
+        period=jnp.int32(0),
         claim_ss=jnp.array(ClaimedSS.yes),
         claimed_ss=jnp.array(ClaimedSS.no),
         labor_supply=jnp.array(LaborSupply.h2000),
         labor_income=jnp.array(50000.0),
         early_ret_adjustment=jnp.array([1.0]),
-        normal_retirement_age=66,
+        normal_retirement_age=jnp.int32(66),
         earnings_test_threshold=jnp.array([17640.0]),
         earnings_test_fraction=jnp.array([0.5]),
-        earnings_test_repealed_age=66,
+        earnings_test_repealed_age=jnp.int32(66),
     )
 
     benefit_not_working = social_security.benefit_choose_post65(
         pia=pia_val,
-        age=67,
-        period=0,
+        age=jnp.int32(67),
+        period=jnp.int32(0),
         claim_ss=jnp.array(ClaimedSS.yes),
         claimed_ss=jnp.array(ClaimedSS.no),
         labor_supply=jnp.array(LaborSupply.do_not_work),
         labor_income=jnp.array(0.0),
         early_ret_adjustment=jnp.array([1.0]),
-        normal_retirement_age=66,
+        normal_retirement_age=jnp.int32(66),
         earnings_test_threshold=jnp.array([17640.0]),
         earnings_test_fraction=jnp.array([0.5]),
-        earnings_test_repealed_age=66,
+        earnings_test_repealed_age=jnp.int32(66),
     )
 
     assert jnp.isclose(benefit_post65, benefit_not_working, atol=ATOL)
