@@ -12,14 +12,11 @@ CONSUMPTION_WEIGHT = 0.6
 TIME_DISCOUNT_FACTOR = 0.85
 TIME_ENDOWMENT = 5000.0
 FIXED_COST_INTERCEPT = 0.0
-FIXED_COST_AGE_TREND = 50.0
 AVERAGE_CONSUMPTION = 10000.0
 RATE_OF_RETURN = 0.01
 BEQUEST_WEIGHT = 0.02
 BEQUEST_SHIFTER = 500_000.0
-SCALE_REFERENCE_HOURS = 500.0
-REFERENCE_AGE = 50
-SCALE_REFERENCE_AGE = 60
+REFERENCE_HOURS = 500.0
 
 # Pref-type-indexed params: three identical entries so pref_type=0 selects
 # the struct-ret scalar value used by the regression tests.
@@ -39,12 +36,9 @@ def test_utility_scale_factor_crra() -> None:
         coefficients_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
-        fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
-        scale_reference_hours=SCALE_REFERENCE_HOURS,
-        reference_age=REFERENCE_AGE,
-        scale_reference_age=SCALE_REFERENCE_AGE,
+        reference_hours=REFERENCE_HOURS,
     )
-    assert jnp.isclose(result, 9_233_279_397_806_166.0, rtol=1e-6)
+    assert jnp.isclose(result, 1.114_807_837_680_009_4e16, rtol=1e-6)
 
 
 def test_utility_scale_factor_log() -> None:
@@ -55,12 +49,9 @@ def test_utility_scale_factor_log() -> None:
         coefficients_rra=RRA_1_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
-        fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
-        scale_reference_hours=SCALE_REFERENCE_HOURS,
-        reference_age=REFERENCE_AGE,
-        scale_reference_age=SCALE_REFERENCE_AGE,
+        reference_hours=REFERENCE_HOURS,
     )
-    assert jnp.isclose(result, 0.113_073_257_794_546_72, rtol=1e-6)
+    assert jnp.isclose(result, 0.112_474_080_852_230_33, rtol=1e-6)
 
 
 # --- scaled_bequest_weight ---
@@ -113,10 +104,7 @@ def test_utility_log_regression() -> None:
         coefficients_rra=RRA_1_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
-        fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
-        scale_reference_hours=SCALE_REFERENCE_HOURS,
-        reference_age=REFERENCE_AGE,
-        scale_reference_age=SCALE_REFERENCE_AGE,
+        reference_hours=REFERENCE_HOURS,
     )
     result = preferences.utility(
         consumption_equiv=jnp.array(50000.0),
@@ -126,7 +114,7 @@ def test_utility_log_regression() -> None:
         coefficients_rra=RRA_1_BY_TYPE,
         utility_scale_factor=scale,
     )
-    assert jnp.isclose(result, 1.005_046_313_660_588_5, rtol=1e-5)
+    assert jnp.isclose(result, 0.999_720_557_696_258_7, rtol=1e-5)
 
 
 def test_utility_crra_regression() -> None:
@@ -137,10 +125,7 @@ def test_utility_crra_regression() -> None:
         coefficients_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
-        fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
-        scale_reference_hours=SCALE_REFERENCE_HOURS,
-        reference_age=REFERENCE_AGE,
-        scale_reference_age=SCALE_REFERENCE_AGE,
+        reference_hours=REFERENCE_HOURS,
     )
     result = preferences.utility(
         consumption_equiv=jnp.array(50000.0),
@@ -150,7 +135,7 @@ def test_utility_crra_regression() -> None:
         coefficients_rra=RRA_5_BY_TYPE,
         utility_scale_factor=scale,
     )
-    assert jnp.isclose(result, -0.836_511_642_073_019_1, rtol=1e-5)
+    assert jnp.isclose(result, -1.009_987_562_073_720_9, rtol=1e-5)
 
 
 def test_utility_married_equivalence() -> None:
@@ -162,10 +147,7 @@ def test_utility_married_equivalence() -> None:
         coefficients_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
-        fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
-        scale_reference_hours=SCALE_REFERENCE_HOURS,
-        reference_age=REFERENCE_AGE,
-        scale_reference_age=SCALE_REFERENCE_AGE,
+        reference_hours=REFERENCE_HOURS,
     )
     single = preferences.utility(
         consumption_equiv=jnp.array(50000.0),
@@ -197,10 +179,7 @@ def test_bequest_log_regression() -> None:
         coefficients_rra=RRA_1_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
-        fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
-        scale_reference_hours=SCALE_REFERENCE_HOURS,
-        reference_age=REFERENCE_AGE,
-        scale_reference_age=SCALE_REFERENCE_AGE,
+        reference_hours=REFERENCE_HOURS,
     )
     bwt = preferences.scaled_bequest_weight(
         bequest_weight=BEQUEST_WEIGHT,
@@ -219,7 +198,7 @@ def test_bequest_log_regression() -> None:
         coefficients_rra=RRA_1_BY_TYPE,
         utility_scale_factor=scale,
     )
-    assert jnp.isclose(result, 86.539_249_963_643_88, rtol=1e-5)
+    assert jnp.isclose(result, 86.080_677_139_309_2, rtol=1e-5)
 
 
 def test_bequest_crra_regression() -> None:
@@ -230,10 +209,7 @@ def test_bequest_crra_regression() -> None:
         coefficients_rra=RRA_5_BY_TYPE,
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
-        fixed_cost_of_work_age_trend=FIXED_COST_AGE_TREND,
-        scale_reference_hours=SCALE_REFERENCE_HOURS,
-        reference_age=REFERENCE_AGE,
-        scale_reference_age=SCALE_REFERENCE_AGE,
+        reference_hours=REFERENCE_HOURS,
     )
     bwt = preferences.scaled_bequest_weight(
         bequest_weight=BEQUEST_WEIGHT,
@@ -252,4 +228,4 @@ def test_bequest_crra_regression() -> None:
         coefficients_rra=RRA_5_BY_TYPE,
         utility_scale_factor=scale,
     )
-    assert jnp.isclose(result, -37.932_748_117_035_63, rtol=1e-5)
+    assert jnp.isclose(result, -45.799_247_573_576_66, rtol=1e-5)

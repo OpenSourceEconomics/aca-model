@@ -175,10 +175,7 @@ def utility_scale_factor(
     coefficients_rra: FloatND,
     time_endowment: float,
     fixed_cost_of_work_intercept: float,
-    fixed_cost_of_work_age_trend: float,
-    scale_reference_hours: float,
-    reference_age: int,
-    scale_reference_age: int,
+    reference_hours: float,
 ) -> FloatND:
     """Compute the scale factor so utility is approximately 1 at typical values.
 
@@ -191,12 +188,7 @@ def utility_scale_factor(
     """
     consumption_weight = consumption_weights[pref_type]
     coefficient_rra = coefficients_rra[pref_type]
-    age_offset = scale_reference_age - reference_age
-    average_leisure = (
-        time_endowment
-        - scale_reference_hours
-        - (fixed_cost_of_work_intercept + fixed_cost_of_work_age_trend * age_offset)
-    )
+    average_leisure = time_endowment - reference_hours - fixed_cost_of_work_intercept
     u_cons = average_consumption_unequiv**consumption_weight
     u_leisure = average_leisure ** (1.0 - consumption_weight)
 
