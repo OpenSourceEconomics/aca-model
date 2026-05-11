@@ -77,7 +77,7 @@ def test_leisure_bad_health() -> None:
 
 
 def test_utility_positive_leisure() -> None:
-    result = preferences.utility(
+    result = preferences.u_working_life(
         consumption_equiv=jnp.array(10000.0),
         leisure=jnp.array(3000.0),
         pref_type=jnp.array(0),
@@ -89,7 +89,7 @@ def test_utility_positive_leisure() -> None:
 
 
 def test_utility_log_case() -> None:
-    result = preferences.utility(
+    result = preferences.u_working_life(
         consumption_equiv=jnp.array(10000.0),
         leisure=jnp.array(3000.0),
         pref_type=jnp.array(0),

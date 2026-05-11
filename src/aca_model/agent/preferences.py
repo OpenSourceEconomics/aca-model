@@ -129,7 +129,7 @@ def consumption_equiv(
     return consumption_unequiv / equivalence_scale
 
 
-def utility(
+def u_working_life(
     consumption_equiv: FloatND,
     leisure: FloatND,
     pref_type: DiscreteState,
@@ -137,7 +137,7 @@ def utility(
     coefficients_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
-    """Within-period utility: CES aggregator over consumption and leisure."""
+    """Within-period utility for canwork regimes: CES over consumption and leisure."""
     consumption_weight = consumption_weights[pref_type]
     coefficient_rra = coefficients_rra[pref_type]
     composite = consumption_equiv**consumption_weight * leisure ** (
@@ -153,6 +153,53 @@ def utility(
         composite**one_minus_rra / one_minus_rra,
     )
     return u * utility_scale_factor
+
+
+def u_retired(
+    consumption_equiv: FloatND,
+    good_health: IntND,
+    pref_type: DiscreteState,
+    consumption_weights: FloatND,
+    coefficients_rra: FloatND,
+    utility_scale_factor: FloatND,
+    time_endowment: float,
+    leisure_cost_of_bad_health: float,
+) -> FloatND:
+    """Within-period utility for forcedout regimes (no work, retired leisure)."""
+    leisure = leisure_retired(
+        good_health=good_health,
+        time_endowment=time_endowment,
+        leisure_cost_of_bad_health=leisure_cost_of_bad_health,
+    )
+    return u_working_life(
+        consumption_equiv=consumption_equiv,
+        leisure=leisure,
+        pref_type=pref_type,
+        consumption_weights=consumption_weights,
+        coefficients_rra=coefficients_rra,
+        utility_scale_factor=utility_scale_factor,
+    )
+
+
+def u_dead(
+    assets: ContinuousState,
+    pref_type: DiscreteState,
+    bequest_shifter: float,
+    scaled_bequest_weight: float,
+    consumption_weights: FloatND,
+    coefficients_rra: FloatND,
+    utility_scale_factor: FloatND,
+) -> FloatND:
+    """Terminal bequest utility for the dead regime."""
+    return bequest(
+        assets=assets,
+        pref_type=pref_type,
+        bequest_shifter=bequest_shifter,
+        scaled_bequest_weight=scaled_bequest_weight,
+        consumption_weights=consumption_weights,
+        coefficients_rra=coefficients_rra,
+        utility_scale_factor=utility_scale_factor,
+    )
 
 
 def discount_factor(

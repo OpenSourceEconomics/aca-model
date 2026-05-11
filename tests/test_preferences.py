@@ -106,7 +106,7 @@ def test_utility_log_regression() -> None:
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         reference_hours=REFERENCE_HOURS,
     )
-    result = preferences.utility(
+    result = preferences.u_working_life(
         consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
@@ -127,7 +127,7 @@ def test_utility_crra_regression() -> None:
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         reference_hours=REFERENCE_HOURS,
     )
-    result = preferences.utility(
+    result = preferences.u_working_life(
         consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
@@ -149,7 +149,7 @@ def test_utility_married_equivalence() -> None:
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         reference_hours=REFERENCE_HOURS,
     )
-    single = preferences.utility(
+    single = preferences.u_working_life(
         consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),
@@ -157,7 +157,7 @@ def test_utility_married_equivalence() -> None:
         coefficients_rra=RRA_5_BY_TYPE,
         utility_scale_factor=scale,
     )
-    married = preferences.utility(
+    married = preferences.u_working_life(
         consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         pref_type=jnp.array(0),

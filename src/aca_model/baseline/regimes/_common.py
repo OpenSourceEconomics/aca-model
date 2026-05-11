@@ -29,7 +29,6 @@ from aca_model.agent import (
     health,
     labor_market,
     preferences,
-    utility,
 )
 from aca_model.agent.health import Health, HealthWithDisability
 from aca_model.agent.labor_market import LaborSupply, LaggedLaborSupply, SpousalIncome
@@ -444,7 +443,7 @@ def build_dead_regime(grids: Grids) -> Regime:
     return Regime(
         transition=None,
         functions={
-            "utility": utility.dead,
+            "utility": preferences.u_dead,
             "utility_scale_factor": preferences.utility_scale_factor,
         },
         states={
@@ -471,8 +470,8 @@ def select_ss_benefit(spec: dict[str, str]) -> Callable[..., Any]:
 def select_utility(spec: dict[str, str]) -> Callable[..., Any]:
     """Select the utility function for a regime."""
     if spec["canwork"] != "canwork":
-        return utility.retired
-    return preferences.utility
+        return preferences.u_retired
+    return preferences.u_working_life
 
 
 def _select_leisure(spec: dict[str, str]) -> Callable[..., Any]:
