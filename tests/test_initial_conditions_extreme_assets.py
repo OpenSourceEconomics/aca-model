@@ -104,7 +104,7 @@ def test_extreme_negative_assets_subject_passes_validation() -> None:
         n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
-    _, params = get_benchmark_params(model=model)
+    _, _, params = get_benchmark_params(model=model)
 
     initial_conditions = get_benchmark_initial_conditions(
         model=model, n_subjects=n_subjects, seed=0

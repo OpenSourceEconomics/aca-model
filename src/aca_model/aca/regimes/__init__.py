@@ -4,7 +4,7 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
-from lcm import Regime
+from lcm import DiscreteGrid, Regime
 
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes._overrides import apply_aca_overrides
@@ -17,15 +17,16 @@ def build_all_regimes(
     *,
     policy: PolicyVariant,
     grid_config: GridConfig,
-    fixed_params: Mapping[str, Any] | None,
-    wage_params: Mapping[str, Any] | None,
+    fixed_params: Mapping[str, Any],
+    wage_params: Mapping[str, Any],
+    pref_type_grid: DiscreteGrid,
 ) -> dict[str, Regime]:
     """Build all 19 regimes with ACA policy overrides."""
     regimes = baseline_build_all_regimes(
         grid_config=grid_config,
         fixed_params=fixed_params,
         wage_params=wage_params,
-        pref_type_grid=None,
+        pref_type_grid=pref_type_grid,
     )
     result = {}
     for name, regime in regimes.items():

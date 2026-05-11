@@ -60,18 +60,16 @@ def build_regime(name: str, grids: Grids) -> Regime:
 def build_all_regimes(
     *,
     grid_config: GridConfig,
-    fixed_params: Mapping[str, Any] | None,
-    wage_params: Mapping[str, Any] | None,
-    pref_type_grid: DiscreteGrid | None,
+    fixed_params: Mapping[str, Any],
+    wage_params: Mapping[str, Any],
+    pref_type_grid: DiscreteGrid,
 ) -> dict[str, Regime]:
     """Build all 19 baseline regimes (18 non-terminal + dead).
 
-    `fixed_params` is forwarded to `build_grids` for data-driven AIME
-    breakpoints; `wage_params` for the data-driven assets floor;
-    either being `None` keeps the corresponding static fallback.
-    `pref_type_grid` lets callers inject a compact `DiscreteGrid(...)`
-    (e.g. the benchmark's 2-type `BenchmarkPrefType`); `None` falls
-    back to `DiscreteGrid(PrefType)`.
+    `fixed_params` carries the PIA bends for the AIME piecewise grid;
+    `wage_params` sizes the assets-floor to `-max_annual_labor_income`;
+    `pref_type_grid` selects the pref-type cardinality (production
+    `DiscreteGrid(PrefType)` or the benchmark's 2-type variant).
     """
     grids = build_grids(
         grid_config=grid_config,

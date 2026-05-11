@@ -4,30 +4,36 @@ from collections.abc import Mapping
 
 import pytest
 from helpers.model import make_aca_model, make_baseline_model
+from lcm import DiscreteGrid
 
 from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes as _build_aca_regimes
+from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.regimes import REGIME_SPECS, RegimeId
 from aca_model.baseline.regimes import build_regime as _build_regime
 from aca_model.baseline.regimes._common import build_grids
-from aca_model.config import GRID_CONFIG
+from aca_model.benchmark import get_benchmark_params
+from aca_model.config import BENCHMARK_GRID_CONFIG
+
+_FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
 
 def build_aca_regimes(policy: PolicyVariant) -> dict:
     return _build_aca_regimes(
         policy=policy,
-        grid_config=GRID_CONFIG,
-        fixed_params=None,
-        wage_params=None,
+        grid_config=BENCHMARK_GRID_CONFIG,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
 
 
 _GRIDS = build_grids(
-    grid_config=GRID_CONFIG,
-    fixed_params=None,
-    wage_params=None,
-    pref_type_grid=None,
+    grid_config=BENCHMARK_GRID_CONFIG,
+    fixed_params=_FIXED_PARAMS,
+    wage_params=_WAGE_PARAMS,
+    pref_type_grid=DiscreteGrid(BenchmarkPrefType),
 )
 
 

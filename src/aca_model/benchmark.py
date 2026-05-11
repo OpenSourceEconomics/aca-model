@@ -50,7 +50,6 @@ _DERIVED_CATEGORICALS = {
     "good_health": DiscreteGrid(GoodHealth),
     "is_married": DiscreteGrid(IsMarried),
     "his": DiscreteGrid(HealthInsuranceState),
-    "target_his": DiscreteGrid(HealthInsuranceState),
     "pref_type": DiscreteGrid(BenchmarkPrefType),
 }
 
@@ -84,11 +83,11 @@ def create_benchmark_model(
             functions for that batch shape.
         pref_type_grid: Pref-type grid; pass `DiscreteGrid(BenchmarkPrefType)`.
     """
-    fixed_params, _ = get_benchmark_params(model=None)
+    fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return create_model(
         grid_config=BENCHMARK_GRID_CONFIG,
         fixed_params=fixed_params,
-        wage_params=None,
+        wage_params=wage_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
         pref_type_grid=pref_type_grid,
         n_subjects=n_subjects,
@@ -97,8 +96,8 @@ def create_benchmark_model(
 
 def get_benchmark_params(
     *, model: Model | None
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Load the frozen `(fixed_params, params)` snapshot.
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Load the frozen `(fixed_params, wage_params, params)` snapshot.
 
     When `model` is provided, consumption_unequiv gridpoints are injected
     into `params` for each regime that declares `consumption_unequiv` as
@@ -109,10 +108,11 @@ def get_benchmark_params(
     with _PARAMS_FILE.open("rb") as fh:
         data = cloudpickle.load(fh)
     fixed_params = data["fixed_params"]
+    wage_params = data["wage_params"]
     params = data["params"]
     if model is not None:
         params = inject_consumption_unequiv_points(params=params, model=model)
-    return fixed_params, params
+    return fixed_params, wage_params, params
 
 
 def get_benchmark_initial_conditions(

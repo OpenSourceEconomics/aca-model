@@ -19,7 +19,7 @@ def test_benchmark_model_simulates_end_to_end() -> None:
         n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
-    _, params = get_benchmark_params(model=model)
+    _, _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
         model=model, n_subjects=n_subjects, seed=0
     )
@@ -59,7 +59,7 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
         n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
-    _, params = get_benchmark_params(model=model)
+    _, _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
         model=model, n_subjects=n_subjects, seed=0
     )

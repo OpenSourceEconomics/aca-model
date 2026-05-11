@@ -5,7 +5,7 @@ represents pre-ACA rules (no individual mandate, no ACA subsidies).
 
 Usage:
     from aca_model.baseline.model import create_model
-    model = create_model(n_subjects=...)
+    model = create_model(n_subjects=..., fixed_params=..., wage_params=..., ...)
     params = get_default_params()
     V = model.solve(params)
 """
@@ -15,7 +15,7 @@ from typing import Any
 
 from lcm import AgeGrid, DiscreteGrid, Model
 
-from aca_model.baseline.health_insurance import HealthInsuranceState
+from aca_model.baseline.derived_categoricals import BASE_DERIVED_CATEGORICALS
 from aca_model.baseline.regimes import RegimeId, build_all_regimes
 from aca_model.config import MODEL_CONFIG, GridConfig
 
@@ -23,35 +23,36 @@ from aca_model.config import MODEL_CONFIG, GridConfig
 def create_model(
     *,
     n_subjects: int,
-    fixed_params: Mapping[str, Any] | None,
-    wage_params: Mapping[str, Any] | None,
-    derived_categoricals: Mapping[str, DiscreteGrid] | None,
+    fixed_params: Mapping[str, Any],
+    wage_params: Mapping[str, Any],
+    derived_categoricals: Mapping[str, DiscreteGrid],
     grid_config: GridConfig,
-    pref_type_grid: DiscreteGrid | None,
+    pref_type_grid: DiscreteGrid,
 ) -> Model:
     """Create the baseline structural retirement model.
 
     Args:
         n_subjects: Forwarded to `lcm.Model(n_subjects=...)`.
-        fixed_params: Parameters to fix at model creation time, or `None`
-            to skip. Fixed params are partialled into compiled functions
-            and removed from the params template. Pass data-derived
-            constants here; only estimation parameters should go through
+        fixed_params: Parameters to fix at model creation time. Fixed
+            params are partialled into compiled functions and removed
+            from the params template. Pass data-derived constants here;
+            only estimation parameters should go through
             `model.simulate(params=...)`.
         wage_params: Data-derived wage profile dict (`log_ft_wage_mean`,
             `log_ft_wage_std`, `adj_wage_hours_*`) used only at grid-build
             time to size the assets-floor to `-max_annual_labor_income`.
-            Not routed to the pylcm Model. `None` skips the floor sizing.
+            Not routed to the pylcm Model.
         derived_categoricals: Extra categorical mappings for derived
-            variables not in the model's state/action grids, or `None`.
-            Needed when `fixed_params` contains `pd.Series` indexed by DAG
-            function outputs.
+            variables not in the model's state/action grids. Needed when
+            `fixed_params` contains `pd.Series` indexed by DAG function
+            outputs. `target_his` is added automatically via
+            `BASE_DERIVED_CATEGORICALS`.
         grid_config: Continuous-grid point counts. Pass `GRID_CONFIG` for
             production values or `BENCHMARK_GRID_CONFIG` for the
             fast-but-structurally-faithful benchmark.
-        pref_type_grid: Pref-type `DiscreteGrid`, or `None` to use
-            `DiscreteGrid(PrefType)`. Pass a custom grid to substitute
-            the production layout (e.g. the 2-type benchmark variant).
+        pref_type_grid: Pref-type `DiscreteGrid`. Pass
+            `DiscreteGrid(PrefType)` for the production 3-type layout,
+            or a compact variant (e.g. `DiscreteGrid(BenchmarkPrefType)`).
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
@@ -70,19 +71,12 @@ def create_model(
         pref_type_grid=pref_type_grid,
     )
 
-    # `target_his` is a state subsumed into regimes.
-    base_derived: dict[str, DiscreteGrid] = {
-        "target_his": DiscreteGrid(HealthInsuranceState),
-    }
-    if derived_categoricals is not None:
-        base_derived.update(derived_categoricals)
-
     return Model(
         regimes=regimes,
         ages=ages,
         regime_id_class=RegimeId,
         description="Baseline structural retirement model (pre-ACA)",
-        fixed_params=fixed_params or {},
-        derived_categoricals=base_derived,
+        fixed_params=fixed_params,
+        derived_categoricals={**BASE_DERIVED_CATEGORICALS, **derived_categoricals},
         n_subjects=n_subjects,
     )

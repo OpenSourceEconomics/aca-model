@@ -32,7 +32,6 @@ from aca_model.agent import (
 )
 from aca_model.agent.health import Health, HealthWithDisability
 from aca_model.agent.labor_market import LaborSupply, LaggedLaborSupply, SpousalIncome
-from aca_model.agent.preferences import PrefType
 from aca_model.baseline import health_insurance
 from aca_model.baseline.health_insurance import BuyPrivate
 from aca_model.config import MODEL_CONFIG, GridConfig
@@ -207,30 +206,22 @@ consumes, so this stays a module constant.
 def build_grids(
     *,
     grid_config: GridConfig,
-    fixed_params: Mapping[str, Any] | None,
-    wage_params: Mapping[str, Any] | None,
-    pref_type_grid: DiscreteGrid | None,
+    fixed_params: Mapping[str, Any],
+    wage_params: Mapping[str, Any],
+    pref_type_grid: DiscreteGrid,
 ) -> Grids:
     """Build continuous-state/action grids from a `GridConfig`.
 
-    When `fixed_params` carries `pia_aime_grid`, the AIME grid becomes
-    a `PiecewiseLinSpacedGrid` breakpointed at the PIA bends (total 32
-    points). When `wage_params` provides `log_ft_wage_mean` and friends
-    (as produced by `aca_data.task_wages`), the assets grid's lower
-    bound is set to `-max_annual_labor_income` so that the worst shock
-    lands on a gridpoint inside the support. Without `fixed_params` /
-    `wage_params` (bare model for tests / compile-only paths), both
-    grids fall back to their historical static shapes.
+    The AIME grid is `PiecewiseLinSpacedGrid` breakpointed at the PIA
+    bends from `fixed_params["pia_aime_grid"]` (total 32 points). The
+    assets grid's lower bound is `-max_annual_labor_income` computed
+    from `wage_params` (`log_ft_wage_mean`, `log_ft_wage_std`,
+    `adj_wage_hours_*`).
 
     `wage_params` is passed separately rather than via `fixed_params`
     because `log_ft_wage_mean` is a per-iteration param at estimation
     time (reconstructed from `wage_bias_coeffs_*`), not a fixed one;
     the grid floor must still be known at build time.
-
-    `pref_type_grid` lets callers (e.g. the benchmark) substitute a
-    compact `DiscreteGrid(...)` for the production
-    `DiscreteGrid(PrefType)`. When `None`, defaults to the production
-    3-type grid.
     """
     # Unit-variance standardised shocks: the total_costs / wage
     # formulas rescale these by fixed_params-level std parameters
@@ -245,13 +236,7 @@ def build_grids(
         sigma=(1.0 - _WAGE_RHO**2) ** 0.5,
         mu=0.0,
     )
-    _HCC_RHO = 0.925
-    hcc_persistent = lcm.shocks.ar1.Rouwenhorst(
-        n_points=grid_config.n_hcc_persistent_gridpoints,
-        rho=_HCC_RHO,
-        sigma=(1.0 - _HCC_RHO**2) ** 0.5,
-        mu=0.0,
-    )
+    hcc_persistent = get_hcc_persistent_shock(grid_config=grid_config)
     hcc_transitory = lcm.shocks.iid.Normal(
         n_points=grid_config.n_hcc_transitory_gridpoints,
         gauss_hermite=True,
@@ -259,11 +244,9 @@ def build_grids(
         sigma=1.0,
     )
 
-    assets_start = 0.0
-    if wage_params is not None and _has_required_wage_keys(wage_params=wage_params):
-        assets_start = -_compute_max_annual_labor_income(
-            wage_params=wage_params, wage_res_grid=wage_res
-        )
+    assets_start = -_compute_max_annual_labor_income(
+        wage_params=wage_params, wage_res_grid=wage_res
+    )
 
     return Grids(
         assets=LinSpacedGrid(
@@ -279,28 +262,44 @@ def build_grids(
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
         hcc_transitory=hcc_transitory,
-        pref_type=pref_type_grid or DiscreteGrid(PrefType),
+        pref_type=pref_type_grid,
     )
 
 
+_HCC_RHO = 0.925
+
+
+def get_hcc_persistent_shock(*, grid_config: GridConfig) -> lcm.shocks.ar1.Rouwenhorst:
+    """Return the persistent-HCC AR(1) shock grid for a given `grid_config`.
+
+    Exposed so callers that need the shock's gridpoints / transition
+    probs (e.g. `assemble_fixed_params`, the HCC insurer predictor)
+    can derive them from `grid_config` alone without instantiating a
+    full `Model`.
+    """
+    return lcm.shocks.ar1.Rouwenhorst(
+        n_points=grid_config.n_hcc_persistent_gridpoints,
+        rho=_HCC_RHO,
+        sigma=(1.0 - _HCC_RHO**2) ** 0.5,
+        mu=0.0,
+    )
+
+
+def get_hcc_persistent_grid_points(*, grid_config: GridConfig) -> FloatND:
+    """Materialise the persistent-HCC shock gridpoints for `grid_config`."""
+    return get_hcc_persistent_shock(grid_config=grid_config).to_jax()
+
+
 def _build_aime_grid(
-    *, grid_config: GridConfig, fixed_params: Mapping[str, Any] | None
+    *, grid_config: GridConfig, fixed_params: Mapping[str, Any]
 ) -> ContinuousGrid:
     """Return the AIME grid.
 
-    With `pia_aime_grid` available, the grid is piecewise-linspaced with
-    breakpoints at the PIA bends and `_AIME_PIECE_N_POINTS` in each
-    segment. `n_aime_gridpoints` from `grid_config` is ignored on this
-    path; the total is fixed by the PIA structure (32 points). Without
-    the fixed params, falls back to the historical `LinSpacedGrid`.
+    The grid is piecewise-linspaced with breakpoints at the PIA bends
+    in `fixed_params["pia_aime_grid"]` and `_AIME_PIECE_N_POINTS` in
+    each segment. `n_aime_gridpoints` from `grid_config` is ignored on
+    this path; the total is fixed by the PIA structure (32 points).
     """
-    if fixed_params is None or "pia_aime_grid" not in fixed_params:
-        return LinSpacedGrid(
-            start=0.0,
-            stop=8_000.0,
-            n_points=grid_config.n_aime_gridpoints,
-            batch_size=grid_config.n_aime_batch_size,
-        )
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
     pieces = (
         Piece(interval=f"[{kinks[0]}, {kinks[1]})", n_points=_AIME_PIECE_N_POINTS[0]),
@@ -309,18 +308,6 @@ def _build_aime_grid(
     )
     return PiecewiseLinSpacedGrid(
         pieces=pieces, batch_size=grid_config.n_aime_batch_size
-    )
-
-
-def _has_required_wage_keys(*, wage_params: Mapping[str, Any]) -> bool:
-    return all(
-        key in wage_params
-        for key in (
-            "log_ft_wage_mean",
-            "log_ft_wage_std",
-            "adj_wage_hours_exp",
-            "adj_wage_hours_int",
-        )
     )
 
 

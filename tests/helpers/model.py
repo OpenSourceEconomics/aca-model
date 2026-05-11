@@ -1,38 +1,52 @@
-"""Tiny factories that wrap `create_model` with `None` for every optional input.
+"""Tiny factories that wrap `create_model` with the benchmark snapshot.
 
-Used by tests that don't need fixed params, wage params, or a custom pref-type
-grid. These helpers exist so production `create_model` factories can stay
-default-free without forcing every test call site to spell out
-`fixed_params=None, wage_params=None, ...` six times.
+Used by tests that need a structurally faithful model without spelling
+out fixed_params, wage_params, and a pref-type grid at every call site.
+Production callers (aca-estimation, scripts) assemble these explicitly.
 """
 
-from lcm import Model
+from lcm import DiscreteGrid, Model
 
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.model import create_model as _create_aca_model
+from aca_model.agent.health import GoodHealth
+from aca_model.agent.labor_market import IsMarried
+from aca_model.agent.preferences import BenchmarkPrefType
+from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model as _create_baseline_model
-from aca_model.config import GRID_CONFIG
+from aca_model.benchmark import get_benchmark_params
+from aca_model.config import BENCHMARK_GRID_CONFIG
+
+_DERIVED_CATEGORICALS = {
+    "good_health": DiscreteGrid(GoodHealth),
+    "is_married": DiscreteGrid(IsMarried),
+    "his": DiscreteGrid(HealthInsuranceState),
+    "pref_type": DiscreteGrid(BenchmarkPrefType),
+}
 
 
 def make_baseline_model(*, n_subjects: int) -> Model:
-    """Baseline model with `GRID_CONFIG` and no fixed/wage/derived params."""
+    """Baseline model on `BENCHMARK_GRID_CONFIG` with the benchmark snapshot params."""
+    fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return _create_baseline_model(
         n_subjects=n_subjects,
-        fixed_params=None,
-        wage_params=None,
-        derived_categoricals=None,
-        grid_config=GRID_CONFIG,
-        pref_type_grid=None,
+        fixed_params=fixed_params,
+        wage_params=wage_params,
+        derived_categoricals=_DERIVED_CATEGORICALS,
+        grid_config=BENCHMARK_GRID_CONFIG,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
 
 
 def make_aca_model(*, n_subjects: int, policy: PolicyVariant) -> Model:
-    """ACA model with `GRID_CONFIG` and no fixed/wage/derived params."""
+    """ACA model on `BENCHMARK_GRID_CONFIG` with the benchmark snapshot params."""
+    fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return _create_aca_model(
         n_subjects=n_subjects,
         policy=policy,
-        fixed_params=None,
-        wage_params=None,
-        derived_categoricals=None,
-        grid_config=GRID_CONFIG,
+        fixed_params=fixed_params,
+        wage_params=wage_params,
+        derived_categoricals=_DERIVED_CATEGORICALS,
+        grid_config=BENCHMARK_GRID_CONFIG,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
