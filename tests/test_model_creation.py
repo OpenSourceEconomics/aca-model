@@ -268,5 +268,3 @@ def test_baseline_model_creates() -> None:
     """Baseline model creates successfully without PolicyVariant."""
     model = make_baseline_model(n_subjects=1)
     assert len(model.regimes) == 19
-
-

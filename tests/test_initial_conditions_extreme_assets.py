@@ -72,11 +72,11 @@ def test_borrowing_constraint_rejects_consumption_unequiv_above_post_transfer_re
 def test_borrowing_constraint_admits_floor_at_million_dollar_negative_cash() -> None:
     """The kink-boundary check survives sub-ULP rounding at `|cash_on_hand| ~ 1e6`.
 
-    Reproduces the production failure mode at `assets=-$1{,}000{,}000$` (HRS
-    bottom-code): the algebraically equivalent `cash_on_hand + transfers`
-    form rounds to `floor - 5.7e-11` at fp64, flipping `consumption_unequiv <= ...`
-    for the lowest consumption_unequiv gridpoint. The `max(cash_on_hand, floor)`
-    form returns `floor` exactly.
+    At large negative `assets`, the algebraically equivalent
+    `cash_on_hand + transfers` form rounds to `floor - 5.7e-11` at fp64,
+    flipping `consumption_unequiv <= ...` for the lowest
+    consumption_unequiv gridpoint. The `max(cash_on_hand, floor)` form
+    returns `floor` exactly.
     """
     consumption_unequiv_floor = jnp.asarray(1597.0921419521899)  # production value
     cash_on_hand = jnp.asarray(-1_000_000.0)
@@ -95,9 +95,9 @@ def test_borrowing_constraint_admits_floor_at_million_dollar_negative_cash() -> 
 def test_extreme_negative_assets_subject_passes_validation() -> None:
     """A subject placed at `assets = -1_000_000` clears initial-conditions validation.
 
-    HRS bottom-codes very-large-negative net wealth at exactly $-1{,}000{,}000$.
-    Such subjects should remain in the simulated population: the consumption
-    floor / transfer system absorbs them, with `c = c_floor` always feasible.
+    A large-but-reasonable negative value (very bad draws for both HCC shocks)
+    should remain in the simulated population: the consumption floor /
+    transfer system absorbs them, with `c = c_floor` always feasible.
     """
     n_subjects = 1
     model = create_benchmark_model(

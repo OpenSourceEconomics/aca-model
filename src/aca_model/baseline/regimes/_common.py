@@ -666,7 +666,7 @@ def _build_per_target_next_assets(
 ) -> dict[RegimeName, Callable[..., FloatND]]:
     """Build per-target assets transitions.
 
-    The `dead` target uses `next_assets_terminal` (no
+    The `dead` target uses `next_assets_when_dead` (no
     `pension_assets_adjustment`), so the dead per-target DAG does not
     pull in the `next_aime`-dependent imputation chain — `dead` has no
     `aime` state and pylcm cannot resolve `next_aime` there. Non-dead
@@ -687,7 +687,7 @@ def _build_per_target_next_assets(
             continue
         result[target_name] = assets_and_income.next_assets
 
-    result["dead"] = assets_and_income.next_assets_terminal
+    result["dead"] = assets_and_income.next_assets_when_dead
     return result
 
 

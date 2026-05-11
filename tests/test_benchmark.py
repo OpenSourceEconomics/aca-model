@@ -1,5 +1,6 @@
 """Integration test: the benchmark-sized baseline solves + simulates end-to-end."""
 
+import numpy as np
 import pytest
 from lcm import DiscreteGrid
 
@@ -53,8 +54,6 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     sub-ULP at extreme `|cash_on_hand|`, so the post-hoc check would
     also flip on the same kink.
     """
-    import numpy as np
-
     n_subjects = 4
     model = create_benchmark_model(
         n_subjects=n_subjects,
@@ -73,9 +72,7 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
         check_initial_conditions=False,
     )
 
-    df = result.to_dataframe(
-        additional_targets=["cash_on_hand", "equivalence_scale"]
-    )
+    df = result.to_dataframe(additional_targets=["cash_on_hand", "equivalence_scale"])
     alive = df.loc[df["regime"] != "dead"].copy()
     consumption_unequiv_floor = float(params["consumption_unequiv_floor"])
     floor = consumption_unequiv_floor * alive["equivalence_scale"].to_numpy()

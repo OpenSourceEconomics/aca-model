@@ -3,8 +3,8 @@
 The borrowing constraint in `agent.assets_and_income.borrowing_constraint`
 compares the lowest consumption_unequiv action against
 `max(cash_on_hand, consumption_unequiv_floor)`. For subjects with cash
-below the floor (HRS bottom-coded `assets=-$1{,}000{,}000$`,
-moderate-negative-asset retirees, etc.) this RHS collapses to exactly
+below the floor (large-negative-asset subjects, moderate-negative-asset
+retirees, etc.) this RHS collapses to exactly
 `consumption_unequiv_floor`. The constraint is feasible iff the
 relevant household-floor gridpoint is `<= consumption_unequiv_floor`.
 
@@ -30,6 +30,7 @@ back to the married floor exactly. Test those invariants directly.
 import jax.numpy as jnp
 import pytest
 
+from aca_model.baseline.regimes._common import MAX_CONSUMPTION_UNEQUIV
 from aca_model.consumption_unequiv_grid import _compute_consumption_unequiv_points
 
 EXPONENT = 0.7  # production value (env_constants["exponent"])
@@ -77,8 +78,6 @@ def test_compute_consumption_unequiv_points_strictly_increasing() -> None:
 
 def test_compute_consumption_unequiv_points_last_equals_max() -> None:
     """The final point is the configured upper bound."""
-    from aca_model.baseline.regimes._common import MAX_CONSUMPTION_UNEQUIV
-
     pts = _compute_consumption_unequiv_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
         exponent=jnp.asarray(EXPONENT),

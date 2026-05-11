@@ -391,12 +391,16 @@ def test_benefit_inelig_pre65_not_disabled() -> None:
 def test_di_dropout_round_trip_zero_years() -> None:
     aime = jnp.array(10000.0)
     scaled = aime * DI_SCALE[52]
-    round_tripped = social_security.adjust_aime_di_dropout_inv(jnp.int32(52), scaled, DI_SCALE)
+    round_tripped = social_security.adjust_aime_di_dropout_inv(
+        jnp.int32(52), scaled, DI_SCALE
+    )
     assert jnp.isclose(aime, round_tripped, atol=ATOL)
 
 
 def test_di_dropout_round_trip_positive_years() -> None:
     aime = jnp.array(10000.0)
     scaled = aime * DI_SCALE[62]
-    round_tripped = social_security.adjust_aime_di_dropout_inv(jnp.int32(62), scaled, DI_SCALE)
+    round_tripped = social_security.adjust_aime_di_dropout_inv(
+        jnp.int32(62), scaled, DI_SCALE
+    )
     assert jnp.isclose(aime, round_tripped, rtol=0.0002)

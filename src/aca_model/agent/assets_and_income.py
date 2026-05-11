@@ -39,15 +39,7 @@ def consumption_unequiv_floor(
     consumption_equiv_floor: float,
     equivalence_scale: FloatND,
 ) -> FloatND:
-    """Per-household $-floor on consumption.
-
-    Lifts the per-equivalent floor parameter to the household-$ level
-    by scaling with `equivalence_scale`. Singles keep
-    `consumption_equiv_floor`, married households face
-    `consumption_equiv_floor * 2 ** exponent` — the same two values
-    that get pinned exactly on the runtime consumption_unequiv grid
-    (see `aca_model.consumption_unequiv_grid`).
-    """
+    """Per-household $-floor on consumption."""
     return consumption_equiv_floor * equivalence_scale
 
 
@@ -55,10 +47,7 @@ def transfers(
     cash_on_hand: FloatND,
     consumption_unequiv_floor: FloatND,
 ) -> FloatND:
-    """Government transfers to enforce the consumption floor.
-
-    tr = max{0, consumption_unequiv_floor - cash_on_hand}
-    """
+    """Government transfers to enforce the consumption floor."""
     return jnp.maximum(0.0, consumption_unequiv_floor - cash_on_hand)
 
 
@@ -75,11 +64,15 @@ def next_assets(
     consumption choice does not condition on the HCC shock realization.
     """
     return (
-        cash_on_hand + transfers + pension_assets_adjustment - consumption_unequiv - oop_costs
+        cash_on_hand
+        + transfers
+        + pension_assets_adjustment
+        - consumption_unequiv
+        - oop_costs
     )
 
 
-def next_assets_terminal(
+def next_assets_when_dead(
     cash_on_hand: FloatND,
     transfers: FloatND,
     consumption_unequiv: ContinuousAction,
@@ -109,14 +102,7 @@ def borrowing_constraint(
     `cash_on_hand + transfers == max(cash_on_hand, floor)`; the `max`
     form is preferred because the additive form rounds to `floor + ε`
     (with `|ε| ~ ULP(|cash_on_hand|)`) at extreme cash, which flips
-    the kink-boundary comparison for HRS-bottom-coded subjects at
-    `assets=-$1{,}000{,}000`. The `max` form returns `floor` exactly.
-
-    `pension_assets_adjustment` is excluded from the constraint: it can
-    be negative (e.g. when the imputation overstates next-period pension
-    wealth at a cross-HIS transition), and including it here can leave
-    no feasible action at low-asset / mid-AIME corners. The correction
-    enters `next_assets` instead — a post-decision shift that does not
-    gate the current consumption choice.
+    the kink-boundary comparison at large negative values of `assets`.
+    The `max` form returns `floor` exactly.
     """
     return consumption_unequiv <= jnp.maximum(cash_on_hand, consumption_unequiv_floor)

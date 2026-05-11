@@ -36,33 +36,49 @@ def inject_consumption_unequiv_points(
 ) -> dict[str, Any]:
     """Inject consumption_unequiv gridpoints into per-regime params.
 
-    Walks every regime, finds the action whose grid is an
-    `IrregSpacedGrid` with runtime-supplied points, and writes
-    `params[regime_name]["consumption_unequiv"] = {"points": <pts>}`.
+    Walks every regime, reads its `consumption_unequiv` action grid,
+    and writes `params[regime_name]["consumption_unequiv"] = {"points": <pts>}`.
 
     The lower two gridpoints are the single and married unequiv
-    transfer floors (`consumption_equiv_floor` and
-    `consumption_equiv_floor * 2 ** exponent`); the rest are
-    geomspaced from the married floor up to `MAX_CONSUMPTION_UNEQUIV`.
+    transfer floors; the rest are geomspaced from the married floor up
+    to `MAX_CONSUMPTION_UNEQUIV`.
 
     Args:
         params: Existing params mapping with `consumption_equiv_floor`
             (per-equivalent floor, varies per iteration). Returned as a
             new dict; the input is not mutated.
-        model: Model whose regime specs determine which regimes need points
-            and whose `fixed_params["exponent"]` sets the married
+        model: Model whose regimes carry the runtime-points grid and
+            whose `fixed_params["exponent"]` sets the married
             equivalence-scale exponent.
 
     Returns:
         New params dict with consumption_unequiv points injected.
+
+    Raises:
+        ValueError: If a regime is missing the `consumption_unequiv`
+            action, or its grid is not an `IrregSpacedGrid` with
+            `pass_points_at_runtime=True`.
     """
     consumption_equiv_floor = jnp.asarray(params["consumption_equiv_floor"])
     exponent = jnp.asarray(model.fixed_params["exponent"])
     out: dict[str, Any] = dict(params)
     for regime_name, regime in model.regimes.items():
-        grid = regime.actions.get("consumption_unequiv")
-        if not (isinstance(grid, IrregSpacedGrid) and grid.pass_points_at_runtime):
+        if regime.terminal:
             continue
+        grid = regime.actions.get("consumption_unequiv")
+        if grid is None:
+            msg = (
+                f"Regime {regime_name!r} is missing the `consumption_unequiv` "
+                f"action — the runtime-points grid must be on every regime."
+            )
+            raise ValueError(msg)
+        if not (isinstance(grid, IrregSpacedGrid) and grid.pass_points_at_runtime):
+            msg = (
+                f"Regime {regime_name!r} has a `consumption_unequiv` action "
+                f"whose grid is not an `IrregSpacedGrid(pass_points_at_runtime=True)`; "
+                f"got {type(grid).__name__}."
+            )
+            raise ValueError(msg)
         # Runtime-points grids always have `n_points` set (the constructor
         # rejects the (points=None, n_points=None) combo); narrow for ty.
         assert grid.n_points is not None
@@ -86,18 +102,14 @@ def _compute_consumption_unequiv_points(
     """Return log-spaced consumption_unequiv gridpoints with both floors pinned.
 
     Single and married households face different unequiv (in-$) floors
-    (`consumption_equiv_floor` and `consumption_equiv_floor *
-    2 ** exponent` respectively). Both must land exactly on the action
-    grid so the borrowing constraint's `max(cash_on_hand, floor)` kink
-    boundary is a feasible action; otherwise sub-ULP drift can flip
-    the `<=` comparison for subjects with very negative cash. The
-    geomspace tail starts at the married floor and runs to
+    (`consumption_equiv_floor` and the married-scaled twin
+    respectively). Both must land exactly on the action grid so the
+    borrowing constraint's `max(cash_on_hand, floor)` kink boundary is
+    a feasible action; otherwise sub-ULP drift can flip the `<=`
+    comparison for subjects with very negative cash. The geomspace
+    tail starts at the married floor and runs to
     `MAX_CONSUMPTION_UNEQUIV` so the two pinned points stay strictly
     increasing.
-
-    All arithmetic stays in jax — multiplying `consumption_equiv_floor`
-    by `2 ** exponent` in jnp keeps both pinned floors at the canonical
-    float dtype the model uses everywhere else.
     """
     married_unequiv_floor = consumption_equiv_floor * jnp.asarray(2.0) ** exponent
     tail = jnp.geomspace(

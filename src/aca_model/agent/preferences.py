@@ -125,7 +125,7 @@ def consumption_equiv(
     consumption_unequiv: ContinuousAction,
     equivalence_scale: FloatND,
 ) -> FloatND:
-    """Per-equivalent consumption: total $ divided by household equivalence scale."""
+    """Utility-equivalized consumption."""
     return consumption_unequiv / equivalence_scale
 
 
@@ -137,22 +137,11 @@ def utility(
     coefficients_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
-    """Within-period utility: CES aggregator over consumption and leisure.
-
-    u = utility_scale_factor *
-        (consumption_equiv^consumption_weight * leisure^(1 - consumption_weight))^(1 - coefficient_rra)
-        / (1 - coefficient_rra)
-    with log case for coefficient_rra=1. `consumption_weights` and
-    `coefficients_rra` are pref-type-indexed Series sourced directly
-    from params; `utility_scale_factor` is a regime-function output
-    (already a per-cell scalar — must NOT be re-indexed by pref_type,
-    see `aca_model.agent.preferences.utility_scale_factor` for why).
-    """
+    """Within-period utility: CES aggregator over consumption and leisure."""
     consumption_weight = consumption_weights[pref_type]
     coefficient_rra = coefficients_rra[pref_type]
-    composite = (
-        consumption_equiv**consumption_weight
-        * leisure ** (1.0 - consumption_weight)
+    composite = consumption_equiv**consumption_weight * leisure ** (
+        1.0 - consumption_weight
     )
 
     one_minus_rra = jnp.where(

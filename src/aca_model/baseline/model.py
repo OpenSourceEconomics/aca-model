@@ -70,11 +70,7 @@ def create_model(
         pref_type_grid=pref_type_grid,
     )
 
-    # `target_his` is a DAG output of `health_insurance.target_his` (set on
-    # nongroup/tied/retiree regimes). The pension imputation correction
-    # (`imputed_pension_wealth_next_period`) indexes shifted arrays by
-    # `arr[period, target_his]`; pylcm needs the categorical declared so
-    # `pd.Series` fixed_params with a `target_his` index level resolve.
+    # `target_his` is a state subsumed into regimes.
     base_derived: dict[str, DiscreteGrid] = {
         "target_his": DiscreteGrid(HealthInsuranceState),
     }
