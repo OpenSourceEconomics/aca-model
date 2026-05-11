@@ -22,20 +22,21 @@ A positive drift above the floor flips the kink-boundary `<=` and
 rejects every action for the affected subjects.
 
 `_compute_consumption_dollars_points` therefore prepends the singles'
-floor as `pts[0]`, runs `geomspace` from the married floor up to
-`MAX_CONSUMPTION_DOLLARS` for the rest, and pins the geomspace start
-back to the married floor exactly. Test those invariants directly.
+floor as `pts[0]`, runs `geomspace` from the married floor up to the
+caller-supplied `max_consumption_dollars` for the rest, and pins the
+geomspace start back to the married floor exactly. Test those invariants
+directly.
 """
 
 import jax.numpy as jnp
 import pytest
 
-from aca_model.baseline.regimes._common import MAX_CONSUMPTION_DOLLARS
 from aca_model.consumption_dollars_grid import _compute_consumption_dollars_points
 
 EXPONENT = 0.7  # production value (env_constants["exponent"])
 SINGLE_FLOOR = 1597.0921419521899  # production value
 MARRIED_SCALE = 2.0**EXPONENT
+MAX_CONSUMPTION_DOLLARS = 300_000.0  # production value (env_constants)
 
 
 @pytest.mark.parametrize("n_points", [5, 16, 64, 70, 100])
@@ -46,6 +47,7 @@ def test_compute_consumption_dollars_points_first_equals_singles_floor(
     pts = _compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
         exponent=jnp.asarray(EXPONENT),
+        max_consumption_dollars=jnp.asarray(MAX_CONSUMPTION_DOLLARS),
         n_points=n_points,
     )
     assert float(pts[0]) == SINGLE_FLOOR
@@ -59,6 +61,7 @@ def test_compute_consumption_dollars_points_second_equals_married_floor(
     pts = _compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
         exponent=jnp.asarray(EXPONENT),
+        max_consumption_dollars=jnp.asarray(MAX_CONSUMPTION_DOLLARS),
         n_points=n_points,
     )
     expected = float(jnp.asarray(SINGLE_FLOOR) * jnp.asarray(2.0) ** EXPONENT)
@@ -70,6 +73,7 @@ def test_compute_consumption_dollars_points_strictly_increasing() -> None:
     pts = _compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
         exponent=jnp.asarray(EXPONENT),
+        max_consumption_dollars=jnp.asarray(MAX_CONSUMPTION_DOLLARS),
         n_points=70,
     )
     diffs = jnp.diff(pts)
@@ -81,6 +85,7 @@ def test_compute_consumption_dollars_points_last_equals_max() -> None:
     pts = _compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
         exponent=jnp.asarray(EXPONENT),
+        max_consumption_dollars=jnp.asarray(MAX_CONSUMPTION_DOLLARS),
         n_points=70,
     )
     assert float(pts[-1]) == pytest.approx(MAX_CONSUMPTION_DOLLARS)
