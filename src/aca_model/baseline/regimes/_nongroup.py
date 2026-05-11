@@ -7,7 +7,7 @@ Already nongroup, so no SSI/Medicaid override needed for HIS transitions.
 from collections.abc import Callable
 
 from lcm import MarkovTransition, Regime
-from lcm.typing import DiscreteAction, FloatND, Period
+from lcm.typing import Age, DiscreteAction, FloatND, Period
 
 from aca_model.agent import assets_and_income, preferences
 from aca_model.agent.labor_market import LaborSupply
@@ -25,7 +25,6 @@ from aca_model.baseline.regimes._common import (
     make_targets,
     select_ss_benefit,
     select_target_for_age,
-    select_utility,
 )
 from aca_model.environment import pensions
 
@@ -41,7 +40,7 @@ def _make_transition_canwork(
     """
 
     def transition(
-        age: int,
+        age: Age,
         period: Period,
         labor_supply: DiscreteAction,
         survival_probs: FloatND,
@@ -65,7 +64,7 @@ def _make_transition_forcedout(
     """
 
     def transition(
-        age: int,
+        age: Age,
         period: Period,
         survival_probs: FloatND,
     ) -> FloatND:
@@ -80,7 +79,6 @@ def _build_functions(spec: RegimeSpec) -> dict:
     can_work = spec["canwork"] == "canwork"
     functions = build_common_functions(spec)
 
-    functions["utility"] = select_utility(spec)
     functions["ss_benefit"] = select_ss_benefit(spec)
 
     # his and gets_medicare are fixed params (constants per regime),

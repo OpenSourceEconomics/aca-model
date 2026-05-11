@@ -12,7 +12,7 @@ from aca_model.agent import assets_and_income
 from aca_model.environment import pensions
 
 ATOL = 0.01
-RATE_OF_RETURN = 0.03
+RATE_OF_RETURN = jnp.asarray(0.03)
 
 # Pension imputation coefficients — two HIS types with different intercepts.
 # HIS 0 (retiree): intercept = -50, HIS 1 (nongroup): intercept = -80.

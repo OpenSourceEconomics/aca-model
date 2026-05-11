@@ -12,6 +12,7 @@ from lcm.typing import (
     FloatND,
     IntND,
     Period,
+    ScalarFloat,
 )
 
 
@@ -52,8 +53,8 @@ def income(
     good_health: IntND,
     log_ft_wage_mean: FloatND,
     log_ft_wage_std: FloatND,
-    adj_wage_hours_exp: float,
-    adj_wage_hours_int: float,
+    adj_wage_hours_exp: ScalarFloat,
+    adj_wage_hours_int: ScalarFloat,
 ) -> FloatND:
     """Labor income with wage-hours interaction (French & Jones 2011).
 

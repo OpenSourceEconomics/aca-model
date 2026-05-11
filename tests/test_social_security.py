@@ -23,10 +23,11 @@ PIA_CONVERSION_RATE_1 = 0.32
 PIA_CONVERSION_RATE_2 = 0.15
 PIA_KINK_0 = 5151.6
 PIA_KINK_1 = 14359.9
-AIME_ACCRUAL_FACTOR = 0.025
-AGGREGATE_WAGE_GROWTH = 0.03
-AIME_LAST_AGE_WITH_INDEXING = 59
-SSDI_SGA = 12840.0
+AIME_ACCRUAL_FACTOR = jnp.asarray(0.025)
+AGGREGATE_WAGE_GROWTH = jnp.asarray(0.03)
+AIME_LAST_AGE_WITH_INDEXING = jnp.int32(59)
+AIME_KINK_2_SCALAR = jnp.asarray(AIME_KINK_2)
+SSDI_SGA = jnp.asarray(12840.0)
 
 PIA_PARAMS = {
     "aime_kink_0": AIME_KINK_0,
@@ -59,8 +60,8 @@ RATIO = jnp.array(_RATIO_NP)
 DI_SCALE = jnp.array(
     compute_di_dropout_scale(
         pd.Series(_RATIO_NP),
-        AIME_ACCRUAL_FACTOR,
-        start_age=jnp.int32(0),
+        AIME_ACCRUAL_FACTOR.item(),
+        start_age=0,
         n_periods=100,
     )
 )
@@ -135,7 +136,7 @@ def test_next_aime_indexing_high_income() -> None:
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
-        aime_kink_2=AIME_KINK_2,
+        aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
     expected = 1000 * 1.03 + (20000 - 0.2 * 1000 * 1.03) * 0.025
@@ -156,7 +157,7 @@ def test_next_aime_indexing_low_income() -> None:
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
-        aime_kink_2=AIME_KINK_2,
+        aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
     assert jnp.isclose(result, 10000 * 1.03, atol=ATOL)
@@ -176,7 +177,7 @@ def test_next_aime_no_indexing_high_income() -> None:
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
-        aime_kink_2=AIME_KINK_2,
+        aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
     expected = 1000 + (20000 - 0.4 * 1000) * 0.025
@@ -197,7 +198,7 @@ def test_next_aime_no_indexing_low_income() -> None:
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
-        aime_kink_2=AIME_KINK_2,
+        aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
     assert jnp.isclose(result, 1000, atol=ATOL)
@@ -217,7 +218,7 @@ def test_next_aime_cap_high_aime_high_income() -> None:
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
-        aime_kink_2=AIME_KINK_2,
+        aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
     assert jnp.isclose(result, 39000, atol=ATOL)
@@ -237,7 +238,7 @@ def test_next_aime_cap_high_aime_low_income() -> None:
         aime_accrual_factor=AIME_ACCRUAL_FACTOR,
         aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
         aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
-        aime_kink_2=AIME_KINK_2,
+        aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
     assert jnp.isclose(result, 39000, atol=ATOL)

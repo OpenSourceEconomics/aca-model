@@ -64,7 +64,7 @@ def test_earnings_test_reduces_benefit_before_fra() -> None:
         earnings_test_threshold=jnp.array([17640.0]),
         earnings_test_fraction=jnp.array([0.5]),
         earnings_test_repealed_age=jnp.int32(66),
-        ssdi_substantial_gainful_activity=13560.0,
+        ssdi_substantial_gainful_activity=jnp.asarray(13560.0),
     )
 
     benefit_not_working = social_security.benefit_choose_pre65(
@@ -82,7 +82,7 @@ def test_earnings_test_reduces_benefit_before_fra() -> None:
         earnings_test_threshold=jnp.array([17640.0]),
         earnings_test_fraction=jnp.array([0.5]),
         earnings_test_repealed_age=jnp.int32(66),
-        ssdi_substantial_gainful_activity=13560.0,
+        ssdi_substantial_gainful_activity=jnp.asarray(13560.0),
     )
 
     assert benefit_working < benefit_not_working

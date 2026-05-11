@@ -213,6 +213,13 @@ TODO: route through `fixed_params` once pylcm#348 lands (so the bound
 can vary across optimizer iterations without re-importing this module).
 """
 
+# AR(1) persistence of the Rouwenhorst shocks. Calibrated once; not
+# routed through fixed_params because they shape the grid topology
+# rather than feed any DAG function. The Rouwenhorst innovation std is
+# `sqrt(1 - rho**2)` so the grid carries unit unconditional variance.
+_HCC_RHO = 0.925
+_WAGE_RHO = 0.977
+
 
 def build_grids(
     *,
@@ -240,7 +247,6 @@ def build_grids(
     # grid to have unconditional variance 1, the Rouwenhorst innovation
     # std must be √(1 − ρ²). Passing the σ_y itself (≈0.577 for hcc,
     # 0.5627 for wage) would mis-scale the grid.
-    _WAGE_RHO = 0.977
     wage_res = lcm.shocks.ar1.Rouwenhorst(
         n_points=grid_config.n_wage_res_gridpoints,
         rho=_WAGE_RHO,
@@ -275,9 +281,6 @@ def build_grids(
         hcc_transitory=hcc_transitory,
         pref_type=pref_type_grid,
     )
-
-
-_HCC_RHO = 0.925
 
 
 def get_hcc_persistent_shock(*, grid_config: GridConfig) -> lcm.shocks.ar1.Rouwenhorst:
@@ -442,7 +445,7 @@ def build_dead_regime(grids: Grids) -> Regime:
     return Regime(
         transition=None,
         functions={
-            "utility": preferences.u_dead,
+            "utility": preferences.bequest,
             "consumption_weight": preferences.consumption_weight,
             "coefficient_rra": preferences.coefficient_rra,
             "utility_scale_factor": preferences.utility_scale_factor,
@@ -468,18 +471,13 @@ def select_ss_benefit(spec: RegimeSpec) -> Callable[..., Any]:
     return social_security.benefit_inelig_pre65
 
 
-def select_utility(spec: RegimeSpec) -> Callable[..., Any]:
-    """Select the utility function for a regime."""
-    if spec["canwork"] != "canwork":
-        return preferences.u_cannot_work
-    return preferences.u_can_work
-
-
 def _select_leisure(spec: RegimeSpec) -> Callable[..., Any]:
-    """Select the leisure function for a canwork regime."""
+    """Select the leisure function for a non-dead regime."""
+    if spec["canwork"] == "forcedout":
+        return preferences.leisure_forcedout
     if spec["his"] == "tied":
-        return preferences.leisure_tied
-    return preferences.leisure
+        return preferences.leisure_canwork_tied
+    return preferences.leisure_canwork_retiree_or_nongroup
 
 
 def build_common_functions(spec: RegimeSpec) -> dict:
@@ -503,9 +501,11 @@ def build_common_functions(spec: RegimeSpec) -> dict:
 
     if can_work:
         functions["working_hours_value"] = labor_market.working_hours_value
-        functions["leisure"] = _select_leisure(spec)
         functions["labor_income"] = labor_market.income
+        functions["fixed_cost_of_work"] = preferences.fixed_cost_of_work
 
+    functions["leisure"] = _select_leisure(spec)
+    functions["utility"] = preferences.u_alive
     functions["capital_income"] = assets_and_income.capital_income
     # spousal_income_amounts is a lookup table param, not a DAG function
     functions["is_married"] = labor_market.is_married
