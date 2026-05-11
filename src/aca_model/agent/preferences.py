@@ -132,14 +132,11 @@ def consumption_equiv(
 def u_working_life(
     consumption_equiv: FloatND,
     leisure: FloatND,
-    pref_type: DiscreteState,
-    consumption_weights: FloatND,
-    coefficients_rra: FloatND,
+    consumption_weight: FloatND,
+    coefficient_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
     """Within-period utility for canwork regimes: CES over consumption and leisure."""
-    consumption_weight = consumption_weights[pref_type]
-    coefficient_rra = coefficients_rra[pref_type]
     composite = consumption_equiv**consumption_weight * leisure ** (
         1.0 - consumption_weight
     )
@@ -158,9 +155,8 @@ def u_working_life(
 def u_retired(
     consumption_equiv: FloatND,
     good_health: IntND,
-    pref_type: DiscreteState,
-    consumption_weights: FloatND,
-    coefficients_rra: FloatND,
+    consumption_weight: FloatND,
+    coefficient_rra: FloatND,
     utility_scale_factor: FloatND,
     time_endowment: float,
     leisure_cost_of_bad_health: float,
@@ -174,32 +170,53 @@ def u_retired(
     return u_working_life(
         consumption_equiv=consumption_equiv,
         leisure=leisure,
-        pref_type=pref_type,
-        consumption_weights=consumption_weights,
-        coefficients_rra=coefficients_rra,
+        consumption_weight=consumption_weight,
+        coefficient_rra=coefficient_rra,
         utility_scale_factor=utility_scale_factor,
     )
 
 
 def u_dead(
     assets: ContinuousState,
-    pref_type: DiscreteState,
     bequest_shifter: float,
     scaled_bequest_weight: float,
-    consumption_weights: FloatND,
-    coefficients_rra: FloatND,
+    consumption_weight: FloatND,
+    coefficient_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
     """Terminal bequest utility for the dead regime."""
     return bequest(
         assets=assets,
-        pref_type=pref_type,
         bequest_shifter=bequest_shifter,
         scaled_bequest_weight=scaled_bequest_weight,
-        consumption_weights=consumption_weights,
-        coefficients_rra=coefficients_rra,
+        consumption_weight=consumption_weight,
+        coefficient_rra=coefficient_rra,
         utility_scale_factor=utility_scale_factor,
     )
+
+
+def consumption_weight(
+    consumption_weights: FloatND,
+    pref_type: DiscreteState,
+) -> FloatND:
+    """Per-type consumption weight indexed by preference type.
+
+    Wired as a DAG function so pylcm broadcasts the scalar to every cell;
+    mirrors `discount_factor`.
+    """
+    return consumption_weights[pref_type]
+
+
+def coefficient_rra(
+    coefficients_rra: FloatND,
+    pref_type: DiscreteState,
+) -> FloatND:
+    """Per-type CRRA coefficient indexed by preference type.
+
+    Wired as a DAG function so pylcm broadcasts the scalar to every cell;
+    mirrors `discount_factor`.
+    """
+    return coefficients_rra[pref_type]
 
 
 def discount_factor(
@@ -216,25 +233,14 @@ def discount_factor(
 
 
 def utility_scale_factor(
-    pref_type: DiscreteState,
     average_consumption_unequiv: float,
-    consumption_weights: FloatND,
-    coefficients_rra: FloatND,
+    consumption_weight: FloatND,
+    coefficient_rra: FloatND,
     time_endowment: float,
     fixed_cost_of_work_intercept: float,
     reference_hours: float,
 ) -> FloatND:
-    """Compute the scale factor so utility is approximately 1 at typical values.
-
-    Returns the scalar for the cell's `pref_type`. Mirrors the `discount_factor`
-    pattern: take the state as input, return a per-cell scalar. Registering this
-    as a regime function and then doing `utility_scale_factor[pref_type]` in a
-    downstream consumer is invalid — pylcm broadcasts function outputs to
-    per-cell scalars before consumption, and the validator in
-    `lcm.regime_building.validation` raises on that clash.
-    """
-    consumption_weight = consumption_weights[pref_type]
-    coefficient_rra = coefficients_rra[pref_type]
+    """Compute the scale factor so utility is approximately 1 at typical values."""
     average_leisure = time_endowment - reference_hours - fixed_cost_of_work_intercept
     u_cons = average_consumption_unequiv**consumption_weight
     u_leisure = average_leisure ** (1.0 - consumption_weight)
@@ -277,11 +283,10 @@ def scaled_bequest_weight(
 
 def bequest(
     assets: ContinuousState,
-    pref_type: DiscreteState,
     bequest_shifter: float,
     scaled_bequest_weight: float,
-    consumption_weights: FloatND,
-    coefficients_rra: FloatND,
+    consumption_weight: FloatND,
+    coefficient_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
     """Bequest function for terminal/dead states.
@@ -289,13 +294,7 @@ def bequest(
     bequest = scale * bwt *
         (max(0,a) + shifter)^(consumption_weight*(1 - coefficient_rra))
         / (1 - coefficient_rra)
-    `consumption_weights` and `coefficients_rra` are pref-type-indexed
-    Series from params; `utility_scale_factor` is a regime-function
-    output (already a per-cell scalar — must NOT be re-indexed by
-    pref_type).
     """
-    consumption_weight = consumption_weights[pref_type]
-    coefficient_rra = coefficients_rra[pref_type]
     assets_shifted = jnp.maximum(0.0, assets) + bequest_shifter
 
     one_minus_rra = jnp.where(

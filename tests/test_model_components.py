@@ -80,9 +80,8 @@ def test_utility_positive_leisure() -> None:
     result = preferences.u_working_life(
         consumption_equiv=jnp.array(10000.0),
         leisure=jnp.array(3000.0),
-        pref_type=jnp.array(0),
-        consumption_weights=jnp.array([0.4, 0.4, 0.4]),
-        coefficients_rra=jnp.array([2.0, 2.0, 2.0]),
+        consumption_weight=jnp.array(0.4),
+        coefficient_rra=jnp.array(2.0),
         utility_scale_factor=jnp.array(1.0),
     )
     assert jnp.isfinite(result)
@@ -92,9 +91,8 @@ def test_utility_log_case() -> None:
     result = preferences.u_working_life(
         consumption_equiv=jnp.array(10000.0),
         leisure=jnp.array(3000.0),
-        pref_type=jnp.array(0),
-        consumption_weights=jnp.array([0.4, 0.4, 0.4]),
-        coefficients_rra=jnp.array([1.0, 1.0, 1.0]),
+        consumption_weight=jnp.array(0.4),
+        coefficient_rra=jnp.array(1.0),
         utility_scale_factor=jnp.array(1.0),
     )
     composite = 10000.0**0.4 * 3000.0**0.6
@@ -105,11 +103,10 @@ def test_utility_log_case() -> None:
 def test_bequest_positive_assets() -> None:
     result = preferences.bequest(
         assets=jnp.array(100000.0),
-        pref_type=jnp.array(0),
         bequest_shifter=5000.0,
         scaled_bequest_weight=0.5,
-        consumption_weights=jnp.array([0.4, 0.4, 0.4]),
-        coefficients_rra=jnp.array([2.0, 2.0, 2.0]),
+        consumption_weight=jnp.array(0.4),
+        coefficient_rra=jnp.array(2.0),
         utility_scale_factor=jnp.array(1.0),
     )
     assert jnp.isfinite(result)
@@ -118,11 +115,10 @@ def test_bequest_positive_assets() -> None:
 def test_bequest_zero_assets() -> None:
     result = preferences.bequest(
         assets=jnp.array(0.0),
-        pref_type=jnp.array(0),
         bequest_shifter=5000.0,
         scaled_bequest_weight=0.5,
-        consumption_weights=jnp.array([0.4, 0.4, 0.4]),
-        coefficients_rra=jnp.array([2.0, 2.0, 2.0]),
+        consumption_weight=jnp.array(0.4),
+        coefficient_rra=jnp.array(2.0),
         utility_scale_factor=jnp.array(1.0),
     )
     assert jnp.isfinite(result)

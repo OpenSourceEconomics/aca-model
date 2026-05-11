@@ -436,14 +436,17 @@ def build_regime_probs(target: FloatND, survival: FloatND) -> FloatND:
 def build_dead_regime(grids: Grids) -> Regime:
     """Build the terminal dead regime.
 
-    `pref_type` is retained as a state so type-indexed preference params
-    (`consumption_weight`, `coefficient_rra`, `utility_scale_factor`) can
-    be indexed by it in the bequest utility.
+    `pref_type` is retained as a state so the pref-type-indexed DAG
+    functions (`consumption_weight`, `coefficient_rra`,
+    `utility_scale_factor`) can resolve their per-cell scalar in the
+    bequest utility.
     """
     return Regime(
         transition=None,
         functions={
             "utility": preferences.u_dead,
+            "consumption_weight": preferences.consumption_weight,
+            "coefficient_rra": preferences.coefficient_rra,
             "utility_scale_factor": preferences.utility_scale_factor,
         },
         states={
@@ -510,9 +513,11 @@ def build_common_functions(spec: dict[str, str]) -> dict:
     functions["is_married"] = labor_market.is_married
     functions["equivalence_scale"] = preferences.equivalence_scale
     functions["utility_scale_factor"] = preferences.utility_scale_factor
-    # `discount_factor` is a DAG function that indexes the per-type
-    # Series by the pref_type state and returns a scalar. pylcm's
-    # default H picks the scalar up as a DAG-output H input.
+    # Pref-type-indexed scalars: DAG functions resolve the per-cell
+    # value from the params Series so downstream consumers get a
+    # scalar broadcast to every cell.
+    functions["consumption_weight"] = preferences.consumption_weight
+    functions["coefficient_rra"] = preferences.coefficient_rra
     functions["discount_factor"] = preferences.discount_factor
 
     # PIA from pre-computed lookup table
