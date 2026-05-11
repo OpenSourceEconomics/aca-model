@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import DiscreteGrid, Regime
+from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import _nongroup as nongroup
 from aca_model.baseline.regimes import _retiree as retiree
@@ -60,7 +61,7 @@ def build_regime(name: str, grids: Grids) -> Regime:
 def build_all_regimes(
     *,
     grid_config: GridConfig,
-    fixed_params: Mapping[str, Any],
+    fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
 ) -> dict[str, Regime]:

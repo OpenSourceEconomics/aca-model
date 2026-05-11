@@ -1,12 +1,12 @@
-"""Runtime-supplied gridpoints for the consumption_unequiv action.
+"""Runtime-supplied gridpoints for the consumption_dollars action.
 
 Consumption is declared as `IrregSpacedGrid(n_points=N)` in
 `baseline.regimes._common.build_grids` so the bounds can track
 runtime parameters: the lower bound from the per-iteration
 `consumption_equiv_floor` parameter (and its couples-scaled twin),
-the upper bound from `MAX_CONSUMPTION_UNEQUIV` in
+the upper bound from `MAX_CONSUMPTION_DOLLARS` in
 `baseline.regimes._common`. Callers must inject the actual gridpoints
-into `params` via `inject_consumption_unequiv_points` before calling
+into `params` via `inject_consumption_dollars_points` before calling
 `model.solve()` / `model.simulate()`.
 
 The grid pins the two regime-relevant transfer-floor levels exactly
@@ -16,7 +16,7 @@ both single and married households:
 
 - `pts[0] = consumption_equiv_floor` (single household: equiv_scale=1)
 - `pts[1] = consumption_equiv_floor * 2 ** exponent` (married)
-- `pts[2:] = geomspace(pts[1], MAX_CONSUMPTION_UNEQUIV, n_points - 1)`
+- `pts[2:] = geomspace(pts[1], MAX_CONSUMPTION_DOLLARS, n_points - 1)`
 """
 
 from collections.abc import Mapping
@@ -26,22 +26,22 @@ import jax.numpy as jnp
 from jax import Array
 from lcm import IrregSpacedGrid, Model
 
-from aca_model.baseline.regimes._common import MAX_CONSUMPTION_UNEQUIV
+from aca_model.baseline.regimes._common import MAX_CONSUMPTION_DOLLARS
 
 
-def inject_consumption_unequiv_points(
+def inject_consumption_dollars_points(
     *,
     params: Mapping[str, Any],
     model: Model,
 ) -> dict[str, Any]:
-    """Inject consumption_unequiv gridpoints into per-regime params.
+    """Inject consumption_dollars gridpoints into per-regime params.
 
-    Walks every regime, reads its `consumption_unequiv` action grid,
-    and writes `params[regime_name]["consumption_unequiv"] = {"points": <pts>}`.
+    Walks every regime, reads its `consumption_dollars` action grid,
+    and writes `params[regime_name]["consumption_dollars"] = {"points": <pts>}`.
 
     The lower two gridpoints are the single and married unequiv
     transfer floors; the rest are geomspaced from the married floor up
-    to `MAX_CONSUMPTION_UNEQUIV`.
+    to `MAX_CONSUMPTION_DOLLARS`.
 
     Args:
         params: Existing params mapping with `consumption_equiv_floor`
@@ -52,10 +52,10 @@ def inject_consumption_unequiv_points(
             equivalence-scale exponent.
 
     Returns:
-        New params dict with consumption_unequiv points injected.
+        New params dict with consumption_dollars points injected.
 
     Raises:
-        ValueError: If a regime is missing the `consumption_unequiv`
+        ValueError: If a regime is missing the `consumption_dollars`
             action, or its grid is not an `IrregSpacedGrid` with
             `pass_points_at_runtime=True`.
     """
@@ -65,16 +65,16 @@ def inject_consumption_unequiv_points(
     for regime_name, regime in model.regimes.items():
         if regime.terminal:
             continue
-        grid = regime.actions.get("consumption_unequiv")
+        grid = regime.actions.get("consumption_dollars")
         if grid is None:
             msg = (
-                f"Regime {regime_name!r} is missing the `consumption_unequiv` "
+                f"Regime {regime_name!r} is missing the `consumption_dollars` "
                 f"action — the runtime-points grid must be on every regime."
             )
             raise ValueError(msg)
         if not (isinstance(grid, IrregSpacedGrid) and grid.pass_points_at_runtime):
             msg = (
-                f"Regime {regime_name!r} has a `consumption_unequiv` action "
+                f"Regime {regime_name!r} has a `consumption_dollars` action "
                 f"whose grid is not an `IrregSpacedGrid(pass_points_at_runtime=True)`; "
                 f"got {type(grid).__name__}."
             )
@@ -82,24 +82,24 @@ def inject_consumption_unequiv_points(
         # Runtime-points grids always have `n_points` set (the constructor
         # rejects the (points=None, n_points=None) combo); narrow for ty.
         assert grid.n_points is not None
-        points = _compute_consumption_unequiv_points(
+        points = _compute_consumption_dollars_points(
             consumption_equiv_floor=consumption_equiv_floor,
             exponent=exponent,
             n_points=grid.n_points,
         )
         regime_entry = dict(out.get(regime_name, {}))
-        regime_entry["consumption_unequiv"] = {"points": points}
+        regime_entry["consumption_dollars"] = {"points": points}
         out[regime_name] = regime_entry
     return out
 
 
-def _compute_consumption_unequiv_points(
+def _compute_consumption_dollars_points(
     *,
     consumption_equiv_floor: Array,
     exponent: Array,
     n_points: int,
 ) -> Array:
-    """Return log-spaced consumption_unequiv gridpoints with both floors pinned.
+    """Return log-spaced consumption_dollars gridpoints with both floors pinned.
 
     Single and married households face different unequiv (in-$) floors
     (`consumption_equiv_floor` and the married-scaled twin
@@ -108,12 +108,12 @@ def _compute_consumption_unequiv_points(
     a feasible action; otherwise sub-ULP drift can flip the `<=`
     comparison for subjects with very negative cash. The geomspace
     tail starts at the married floor and runs to
-    `MAX_CONSUMPTION_UNEQUIV` so the two pinned points stay strictly
+    `MAX_CONSUMPTION_DOLLARS` so the two pinned points stay strictly
     increasing.
     """
     married_unequiv_floor = consumption_equiv_floor * jnp.asarray(2.0) ** exponent
     tail = jnp.geomspace(
-        married_unequiv_floor, MAX_CONSUMPTION_UNEQUIV, num=n_points - 1
+        married_unequiv_floor, MAX_CONSUMPTION_DOLLARS, num=n_points - 1
     )
     pts = jnp.concatenate([consumption_equiv_floor[None], tail])
     # `jnp.geomspace` returns `start * r^0` for the first tail element,

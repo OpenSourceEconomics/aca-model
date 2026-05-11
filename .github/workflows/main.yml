@@ -26,10 +26,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pylcm from main (PyPI release lags)
+      - name: Install pylcm
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@99a5e31"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@main"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest

@@ -122,14 +122,14 @@ def leisure_retired(
 
 
 def consumption_equiv(
-    consumption_unequiv: ContinuousAction,
+    consumption_dollars: ContinuousAction,
     equivalence_scale: FloatND,
 ) -> FloatND:
     """Utility-equivalized consumption."""
-    return consumption_unequiv / equivalence_scale
+    return consumption_dollars / equivalence_scale
 
 
-def u_working_life(
+def u_can_work(
     consumption_equiv: FloatND,
     leisure: FloatND,
     consumption_weight: FloatND,
@@ -152,7 +152,7 @@ def u_working_life(
     return u * utility_scale_factor
 
 
-def u_retired(
+def u_cannot_work(
     consumption_equiv: FloatND,
     good_health: IntND,
     consumption_weight: FloatND,
@@ -167,7 +167,7 @@ def u_retired(
         time_endowment=time_endowment,
         leisure_cost_of_bad_health=leisure_cost_of_bad_health,
     )
-    return u_working_life(
+    return u_can_work(
         consumption_equiv=consumption_equiv,
         leisure=leisure,
         consumption_weight=consumption_weight,
@@ -233,7 +233,7 @@ def discount_factor(
 
 
 def utility_scale_factor(
-    average_consumption_unequiv: float,
+    average_consumption_dollars: float,
     consumption_weight: FloatND,
     coefficient_rra: FloatND,
     time_endowment: float,
@@ -242,7 +242,7 @@ def utility_scale_factor(
 ) -> FloatND:
     """Compute the scale factor so utility is approximately 1 at typical values."""
     average_leisure = time_endowment - reference_hours - fixed_cost_of_work_intercept
-    u_cons = average_consumption_unequiv**consumption_weight
+    u_cons = average_consumption_dollars**consumption_weight
     u_leisure = average_leisure ** (1.0 - consumption_weight)
 
     one_minus_rra = jnp.where(

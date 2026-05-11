@@ -38,7 +38,7 @@ from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model
 from aca_model.config import BENCHMARK_GRID_CONFIG
-from aca_model.consumption_unequiv_grid import inject_consumption_unequiv_points
+from aca_model.consumption_dollars_grid import inject_consumption_dollars_points
 
 _PARAMS_FILE = (
     Path(__file__).resolve().parent / "_benchmark_data" / "benchmark_params.pkl"
@@ -50,6 +50,7 @@ _DERIVED_CATEGORICALS = {
     "good_health": DiscreteGrid(GoodHealth),
     "is_married": DiscreteGrid(IsMarried),
     "his": DiscreteGrid(HealthInsuranceState),
+    "target_his": DiscreteGrid(HealthInsuranceState),
     "pref_type": DiscreteGrid(BenchmarkPrefType),
 }
 
@@ -99,10 +100,10 @@ def get_benchmark_params(
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Load the frozen `(fixed_params, wage_params, params)` snapshot.
 
-    When `model` is provided, consumption_unequiv gridpoints are injected
-    into `params` for each regime that declares `consumption_unequiv` as
+    When `model` is provided, consumption_dollars gridpoints are injected
+    into `params` for each regime that declares `consumption_dollars` as
     an `IrregSpacedGrid` with runtime-supplied points. The lower bound is
-    read from `params["consumption_unequiv_floor"]`. Pass `model=None` to
+    read from `params["consumption_dollars_floor"]`. Pass `model=None` to
     skip injection (e.g. when constructing the model with `fixed_params`).
     """
     with _PARAMS_FILE.open("rb") as fh:
@@ -111,7 +112,7 @@ def get_benchmark_params(
     wage_params = data["wage_params"]
     params = data["params"]
     if model is not None:
-        params = inject_consumption_unequiv_points(params=params, model=model)
+        params = inject_consumption_dollars_points(params=params, model=model)
     return fixed_params, wage_params, params
 
 

@@ -76,7 +76,7 @@ def test_forcedout_regimes_no_labor_supply(name: str) -> None:
     regime = build_regime(name)
     assert "labor_supply" not in regime.actions
     assert "log_ft_wage_res" not in regime.states
-    assert "consumption_unequiv" in regime.actions
+    assert "consumption_dollars" in regime.actions
 
 
 @pytest.mark.parametrize(

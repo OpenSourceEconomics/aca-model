@@ -16,7 +16,7 @@ AVERAGE_CONSUMPTION = 10000.0
 RATE_OF_RETURN = 0.01
 BEQUEST_WEIGHT = 0.02
 BEQUEST_SHIFTER = 500_000.0
-REFERENCE_HOURS = 500.0
+REFERENCE_HOURS = 1000.0
 
 
 # --- utility_scale_factor ---
@@ -24,26 +24,26 @@ REFERENCE_HOURS = 500.0
 
 def test_utility_scale_factor_crra() -> None:
     result = preferences.utility_scale_factor(
-        average_consumption_unequiv=AVERAGE_CONSUMPTION,
+        average_consumption_dollars=AVERAGE_CONSUMPTION,
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(5.0),
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         reference_hours=REFERENCE_HOURS,
     )
-    assert jnp.isclose(result, 1.114_807_837_680_009_4e16, rtol=1e-6)
+    assert jnp.isclose(result, 9_233_279_397_806_166.0, rtol=1e-6)
 
 
 def test_utility_scale_factor_log() -> None:
     result = preferences.utility_scale_factor(
-        average_consumption_unequiv=AVERAGE_CONSUMPTION,
+        average_consumption_dollars=AVERAGE_CONSUMPTION,
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(1.0),
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         reference_hours=REFERENCE_HOURS,
     )
-    assert jnp.isclose(result, 0.112_474_080_852_230_33, rtol=1e-6)
+    assert jnp.isclose(result, 0.113_073_257_794_546_72, rtol=1e-6)
 
 
 # --- scaled_bequest_weight ---
@@ -90,60 +90,60 @@ def test_scaled_bequest_weight_zero() -> None:
 
 def test_utility_log_regression() -> None:
     scale = preferences.utility_scale_factor(
-        average_consumption_unequiv=AVERAGE_CONSUMPTION,
+        average_consumption_dollars=AVERAGE_CONSUMPTION,
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(1.0),
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         reference_hours=REFERENCE_HOURS,
     )
-    result = preferences.u_working_life(
+    result = preferences.u_can_work(
         consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(1.0),
         utility_scale_factor=scale,
     )
-    assert jnp.isclose(result, 0.999_720_557_696_258_7, rtol=1e-5)
+    assert jnp.isclose(result, 1.005_046_313_660_588_5, rtol=1e-5)
 
 
 def test_utility_crra_regression() -> None:
     scale = preferences.utility_scale_factor(
-        average_consumption_unequiv=AVERAGE_CONSUMPTION,
+        average_consumption_dollars=AVERAGE_CONSUMPTION,
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(5.0),
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         reference_hours=REFERENCE_HOURS,
     )
-    result = preferences.u_working_life(
+    result = preferences.u_can_work(
         consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(5.0),
         utility_scale_factor=scale,
     )
-    assert jnp.isclose(result, -1.009_987_562_073_720_9, rtol=1e-5)
+    assert jnp.isclose(result, -0.836_511_642_073_019_1, rtol=1e-5)
 
 
 def test_utility_married_equivalence() -> None:
-    """Married with equiv-scaled consumption_unequiv should equal single utility."""
+    """Married with equiv-scaled consumption_dollars should equal single utility."""
     scale = preferences.utility_scale_factor(
-        average_consumption_unequiv=AVERAGE_CONSUMPTION,
+        average_consumption_dollars=AVERAGE_CONSUMPTION,
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(5.0),
         time_endowment=TIME_ENDOWMENT,
         fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
         reference_hours=REFERENCE_HOURS,
     )
-    single = preferences.u_working_life(
+    single = preferences.u_can_work(
         consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(5.0),
         utility_scale_factor=scale,
     )
-    married = preferences.u_working_life(
+    married = preferences.u_can_work(
         consumption_equiv=jnp.array(50000.0),
         leisure=jnp.array(400.0),
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
@@ -158,7 +158,7 @@ def test_utility_married_equivalence() -> None:
 
 def test_bequest_log_regression() -> None:
     scale = preferences.utility_scale_factor(
-        average_consumption_unequiv=AVERAGE_CONSUMPTION,
+        average_consumption_dollars=AVERAGE_CONSUMPTION,
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(1.0),
         time_endowment=TIME_ENDOWMENT,
@@ -181,12 +181,12 @@ def test_bequest_log_regression() -> None:
         coefficient_rra=jnp.array(1.0),
         utility_scale_factor=scale,
     )
-    assert jnp.isclose(result, 86.080_677_139_309_2, rtol=1e-5)
+    assert jnp.isclose(result, 86.539_249_963_643_88, rtol=1e-5)
 
 
 def test_bequest_crra_regression() -> None:
     scale = preferences.utility_scale_factor(
-        average_consumption_unequiv=AVERAGE_CONSUMPTION,
+        average_consumption_dollars=AVERAGE_CONSUMPTION,
         consumption_weight=jnp.array(CONSUMPTION_WEIGHT),
         coefficient_rra=jnp.array(5.0),
         time_endowment=TIME_ENDOWMENT,
@@ -209,4 +209,4 @@ def test_bequest_crra_regression() -> None:
         coefficient_rra=jnp.array(5.0),
         utility_scale_factor=scale,
     )
-    assert jnp.isclose(result, -45.799_247_573_576_66, rtol=1e-5)
+    assert jnp.isclose(result, -37.932_748_117_035_63, rtol=1e-5)

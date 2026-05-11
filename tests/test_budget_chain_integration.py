@@ -108,7 +108,7 @@ def test_retired_agent_with_pension() -> None:
 
 
 def test_transfers_kick_in_below_floor() -> None:
-    """When cash_on_hand < consumption_unequiv_floor, transfers fill the gap."""
+    """When cash_on_hand < consumption_dollars_floor, transfers fill the gap."""
     functions = {
         "cash_on_hand": assets_and_income.cash_on_hand,
         "transfers": assets_and_income.transfers,
@@ -126,9 +126,9 @@ def test_transfers_kick_in_below_floor() -> None:
         ssi_benefit=jnp.array(0.0),
         hic_premium=jnp.array(0.0),
         oop_costs=jnp.array(0.0),
-        consumption_unequiv_floor=jnp.array(5000.0),
+        consumption_dollars_floor=jnp.array(5000.0),
         pension_assets_adjustment=jnp.array(0.0),
-        consumption_unequiv=jnp.array(4000.0),
+        consumption_dollars=jnp.array(4000.0),
     )
 
     # cash_on_hand = 500 + 200 = 700

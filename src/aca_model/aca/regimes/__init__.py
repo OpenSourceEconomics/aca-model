@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import DiscreteGrid, Regime
+from lcm.typing import UserParams
 
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes._overrides import apply_aca_overrides
@@ -17,7 +18,7 @@ def build_all_regimes(
     *,
     policy: PolicyVariant,
     grid_config: GridConfig,
-    fixed_params: Mapping[str, Any],
+    fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
 ) -> dict[str, Regime]:

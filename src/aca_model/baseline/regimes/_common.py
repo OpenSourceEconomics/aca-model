@@ -7,7 +7,7 @@ build_common_functions. No policy logic, no HIS-specific conditionals.
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import jax.numpy as jnp
 import lcm.shocks.ar1
@@ -23,7 +23,7 @@ from lcm import (
 )
 from lcm.grids.continuous import ContinuousGrid
 from lcm.grids.piecewise import Piece, PiecewiseLinSpacedGrid
-from lcm.typing import BoolND, FloatND, RegimeName
+from lcm.typing import BoolND, FloatND, RegimeName, UserParams
 
 from aca_model.agent import (
     assets_and_income,
@@ -34,7 +34,7 @@ from aca_model.agent import (
 from aca_model.agent.health import Health, HealthWithDisability
 from aca_model.agent.labor_market import LaborSupply, LaggedLaborSupply, SpousalIncome
 from aca_model.baseline import health_insurance
-from aca_model.baseline.health_insurance import BuyPrivate
+from aca_model.baseline.health_insurance import BuyPrivate, HealthInsuranceState
 from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment import social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
@@ -66,10 +66,10 @@ class RegimeId:
 class RegimeSpec(TypedDict):
     """Structural decomposition of a regime: (HIS, Medicare, SS, work) axes."""
 
-    his: str
-    mc: str
-    ss: str
-    canwork: str
+    his: Literal["retiree", "tied", "nongroup"]
+    mc: Literal["nomc", "dimc", "oamc"]
+    ss: Literal["inelig", "choose", "forced"]
+    canwork: Literal["canwork", "forcedout"]
 
 
 # {his}_{mc}_{ss}_{canwork}
@@ -191,7 +191,7 @@ config = MODEL_CONFIG
 class Grids:
     assets: LinSpacedGrid
     aime: ContinuousGrid
-    consumption_unequiv: ContinuousGrid
+    consumption_dollars: ContinuousGrid
     wage_res: Any
     hcc_persistent: Any
     hcc_transitory: Any
@@ -203,20 +203,21 @@ class Grids:
 _AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
 
 
-MAX_CONSUMPTION_UNEQUIV: float = 300_000.0
-"""Upper bound of the runtime consumption_unequiv grid in $/year.
+MAX_CONSUMPTION_DOLLARS: float = 300_000.0
+"""Upper bound of the runtime consumption_dollars grid in $/year.
 
 Lives here next to the other grid bounds (assets `stop=500_000.0`,
-AIME `stop=8_000.0`). `inject_consumption_unequiv_points` imports it
-directly — pylcm rejects `fixed_params` entries no DAG function
-consumes, so this stays a module constant.
+AIME `stop=8_000.0`).
+
+TODO: route through `fixed_params` once pylcm#348 lands (so the bound
+can vary across optimizer iterations without re-importing this module).
 """
 
 
 def build_grids(
     *,
     grid_config: GridConfig,
-    fixed_params: Mapping[str, Any],
+    fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
 ) -> Grids:
@@ -266,8 +267,8 @@ def build_grids(
             batch_size=grid_config.n_assets_batch_size,
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
-        consumption_unequiv=IrregSpacedGrid(
-            n_points=grid_config.n_consumption_unequiv_gridpoints,
+        consumption_dollars=IrregSpacedGrid(
+            n_points=grid_config.n_consumption_dollars_gridpoints,
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
@@ -301,7 +302,7 @@ def get_hcc_persistent_grid_points(*, grid_config: GridConfig) -> FloatND:
 
 
 def _build_aime_grid(
-    *, grid_config: GridConfig, fixed_params: Mapping[str, Any]
+    *, grid_config: GridConfig, fixed_params: UserParams
 ) -> ContinuousGrid:
     """Return the AIME grid.
 
@@ -419,7 +420,7 @@ def build_actions(spec: RegimeSpec, grids: Grids) -> dict:
         actions["labor_supply"] = DiscreteGrid(LaborSupply)
     if spec["his"] == "nongroup" and spec["mc"] == "nomc":
         actions["buy_private"] = DiscreteGrid(BuyPrivate)
-    actions["consumption_unequiv"] = grids.consumption_unequiv
+    actions["consumption_dollars"] = grids.consumption_dollars
     return actions
 
 
@@ -470,8 +471,8 @@ def select_ss_benefit(spec: RegimeSpec) -> Callable[..., Any]:
 def select_utility(spec: RegimeSpec) -> Callable[..., Any]:
     """Select the utility function for a regime."""
     if spec["canwork"] != "canwork":
-        return preferences.u_retired
-    return preferences.u_working_life
+        return preferences.u_cannot_work
+    return preferences.u_can_work
 
 
 def _select_leisure(spec: RegimeSpec) -> Callable[..., Any]:
@@ -510,9 +511,6 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     functions["is_married"] = labor_market.is_married
     functions["equivalence_scale"] = preferences.equivalence_scale
     functions["utility_scale_factor"] = preferences.utility_scale_factor
-    # Pref-type-indexed scalars: DAG functions resolve the per-cell
-    # value from the params Series so downstream consumers get a
-    # scalar broadcast to every cell.
     functions["consumption_weight"] = preferences.consumption_weight
     functions["coefficient_rra"] = preferences.coefficient_rra
     functions["discount_factor"] = preferences.discount_factor
@@ -546,7 +544,7 @@ def build_common_functions(spec: RegimeSpec) -> dict:
 
     # Cash on hand and transfers
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
-    functions["consumption_unequiv_floor"] = assets_and_income.consumption_unequiv_floor
+    functions["consumption_dollars_floor"] = assets_and_income.consumption_dollars_floor
     functions["transfers"] = assets_and_income.transfers
     functions["consumption_equiv"] = preferences.consumption_equiv
 
@@ -646,8 +644,14 @@ def select_target_for_age(
 def build_state_transitions(spec: RegimeSpec) -> dict:
     """Build the state transitions dict for a non-dead regime."""
     transitions: dict = {}
+    transitions["assets"] = _build_per_target_regime_assets(spec)
     transitions["health"] = _build_per_target_regime_health(spec)
-    transitions["assets"] = _build_per_target_regime_next_assets(spec)
+    claimed_ss_transition = _build_per_target_regime_claimed_ss(spec)
+    if claimed_ss_transition:
+        transitions["claimed_ss"] = claimed_ss_transition
+    lagged_labor_supply_transition = _build_per_target_regime_lagged_labor_supply(spec)
+    if lagged_labor_supply_transition:
+        transitions["lagged_labor_supply"] = lagged_labor_supply_transition
     transitions["pref_type"] = None
     transitions["aime"] = (
         social_security.next_aime
@@ -655,16 +659,10 @@ def build_state_transitions(spec: RegimeSpec) -> dict:
         else social_security.next_aime_disabled
     )
     transitions["spousal_income"] = MarkovTransition(labor_market.next_spousal_income)
-    lagged_supply_transition = _build_per_target_regime_lagged_labor_supply(spec)
-    if lagged_supply_transition:
-        transitions["lagged_labor_supply"] = lagged_supply_transition
-    claimed_ss_transition = _build_per_target_regime_claimed_ss(spec)
-    if claimed_ss_transition:
-        transitions["claimed_ss"] = claimed_ss_transition
     return transitions
 
 
-def _build_per_target_regime_next_assets(
+def _build_per_target_regime_assets(
     spec: RegimeSpec,
 ) -> dict[RegimeName, Callable[..., FloatND]]:
     """Build per-target assets transitions.

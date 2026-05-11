@@ -8,10 +8,10 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import AgeGrid, DiscreteGrid, Model
+from lcm.typing import UserParams
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
-from aca_model.baseline.derived_categoricals import BASE_DERIVED_CATEGORICALS
 from aca_model.baseline.regimes import RegimeId
 from aca_model.config import MODEL_CONFIG, GridConfig
 
@@ -20,7 +20,7 @@ def create_model(
     *,
     n_subjects: int,
     policy: PolicyVariant,
-    fixed_params: Mapping[str, Any],
+    fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     derived_categoricals: Mapping[str, DiscreteGrid],
     grid_config: GridConfig,
@@ -39,14 +39,15 @@ def create_model(
             `log_ft_wage_std`, `adj_wage_hours_*`) used only at grid-build
             time to size the assets-floor to `-max_annual_labor_income`.
             Not routed to the pylcm Model.
-        derived_categoricals: Extra categorical mappings for derived
-            variables not in the model's state/action grids. `target_his`
-            is added automatically via `BASE_DERIVED_CATEGORICALS`.
+        derived_categoricals: Categorical mappings for `pd.Series`
+            fixed_params index levels that aren't model state/action
+            grids — `target_his`, `his`, `good_health`, `is_married`,
+            `pref_type`.
         grid_config: Continuous-grid point counts.
         pref_type_grid: Pref-type `DiscreteGrid`.
 
     Returns:
-        pylcm Model with ACA-specific function overrides.
+        pylcm Model.
 
     """
     ages = AgeGrid(
@@ -68,6 +69,6 @@ def create_model(
         regime_id_class=RegimeId,
         description=f"Structural retirement model ({policy.name})",
         fixed_params=fixed_params,
-        derived_categoricals={**BASE_DERIVED_CATEGORICALS, **derived_categoricals},
+        derived_categoricals=derived_categoricals,
         n_subjects=n_subjects,
     )

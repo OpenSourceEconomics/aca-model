@@ -14,8 +14,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import AgeGrid, DiscreteGrid, Model
+from lcm.typing import UserParams
 
-from aca_model.baseline.derived_categoricals import BASE_DERIVED_CATEGORICALS
 from aca_model.baseline.regimes import RegimeId, build_all_regimes
 from aca_model.config import MODEL_CONFIG, GridConfig
 
@@ -23,7 +23,7 @@ from aca_model.config import MODEL_CONFIG, GridConfig
 def create_model(
     *,
     n_subjects: int,
-    fixed_params: Mapping[str, Any],
+    fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     derived_categoricals: Mapping[str, DiscreteGrid],
     grid_config: GridConfig,
@@ -42,11 +42,10 @@ def create_model(
             `log_ft_wage_std`, `adj_wage_hours_*`) used only at grid-build
             time to size the assets-floor to `-max_annual_labor_income`.
             Not routed to the pylcm Model.
-        derived_categoricals: Extra categorical mappings for derived
-            variables not in the model's state/action grids. Needed when
-            `fixed_params` contains `pd.Series` indexed by DAG function
-            outputs. `target_his` is added automatically via
-            `BASE_DERIVED_CATEGORICALS`.
+        derived_categoricals: Categorical mappings for `pd.Series`
+            fixed_params index levels that aren't model state/action
+            grids — `target_his`, `his`, `good_health`, `is_married`,
+            `pref_type`.
         grid_config: Continuous-grid point counts. Pass `GRID_CONFIG` for
             production values or `BENCHMARK_GRID_CONFIG` for the
             fast-but-structurally-faithful benchmark.
@@ -77,6 +76,6 @@ def create_model(
         regime_id_class=RegimeId,
         description="Baseline structural retirement model (pre-ACA)",
         fixed_params=fixed_params,
-        derived_categoricals={**BASE_DERIVED_CATEGORICALS, **derived_categoricals},
+        derived_categoricals=derived_categoricals,
         n_subjects=n_subjects,
     )

@@ -95,7 +95,7 @@ def test_next_assets_includes_pension_adjustment() -> None:
         cash_on_hand=jnp.array(100_000.0),
         transfers=jnp.array(0.0),
         pension_assets_adjustment=jnp.array(5_000.0),
-        consumption_unequiv=jnp.array(80_000.0),
+        consumption_dollars=jnp.array(80_000.0),
         oop_costs=jnp.array(0.0),
     )
     assert jnp.isclose(result, 25_000.0, atol=ATOL)

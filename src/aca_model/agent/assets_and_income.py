@@ -35,7 +35,7 @@ def cash_on_hand(
     return assets + after_tax_income + ssi_benefit - hic_premium
 
 
-def consumption_unequiv_floor(
+def consumption_dollars_floor(
     consumption_equiv_floor: float,
     equivalence_scale: FloatND,
 ) -> FloatND:
@@ -45,17 +45,17 @@ def consumption_unequiv_floor(
 
 def transfers(
     cash_on_hand: FloatND,
-    consumption_unequiv_floor: FloatND,
+    consumption_dollars_floor: FloatND,
 ) -> FloatND:
     """Government transfers to enforce the consumption floor."""
-    return jnp.maximum(0.0, consumption_unequiv_floor - cash_on_hand)
+    return jnp.maximum(0.0, consumption_dollars_floor - cash_on_hand)
 
 
 def next_assets(
     cash_on_hand: FloatND,
     transfers: FloatND,
     pension_assets_adjustment: FloatND,
-    consumption_unequiv: ContinuousAction,
+    consumption_dollars: ContinuousAction,
     oop_costs: FloatND,
 ) -> ContinuousState:
     """Compute beginning-of-next-period assets for non-terminal targets.
@@ -67,7 +67,7 @@ def next_assets(
         cash_on_hand
         + transfers
         + pension_assets_adjustment
-        - consumption_unequiv
+        - consumption_dollars
         - oop_costs
     )
 
@@ -75,7 +75,7 @@ def next_assets(
 def next_assets_when_dead(
     cash_on_hand: FloatND,
     transfers: FloatND,
-    consumption_unequiv: ContinuousAction,
+    consumption_dollars: ContinuousAction,
     oop_costs: FloatND,
 ) -> ContinuousState:
     """Compute beginning-of-next-period assets for the dead/terminal target.
@@ -86,17 +86,17 @@ def next_assets_when_dead(
     (which would otherwise need to come from a transition `dead` does not
     have, since `aime` is not a state in the terminal regime).
     """
-    return cash_on_hand + transfers - consumption_unequiv - oop_costs
+    return cash_on_hand + transfers - consumption_dollars - oop_costs
 
 
 def borrowing_constraint(
-    consumption_unequiv: ContinuousAction,
+    consumption_dollars: ContinuousAction,
     cash_on_hand: FloatND,
-    consumption_unequiv_floor: FloatND,
+    consumption_dollars_floor: FloatND,
 ) -> BoolND:
     """Consumption cannot exceed post-transfer resources.
 
-    Post-transfer resources are `max(cash_on_hand, consumption_unequiv_floor)`:
+    Post-transfer resources are `max(cash_on_hand, consumption_dollars_floor)`:
     the transfer system tops `cash_on_hand` to the floor when below,
     otherwise resources are unchanged. The algebraic identity is
     `cash_on_hand + transfers == max(cash_on_hand, floor)`; the `max`
@@ -105,4 +105,4 @@ def borrowing_constraint(
     the kink-boundary comparison at large negative values of `assets`.
     The `max` form returns `floor` exactly.
     """
-    return consumption_unequiv <= jnp.maximum(cash_on_hand, consumption_unequiv_floor)
+    return consumption_dollars <= jnp.maximum(cash_on_hand, consumption_dollars_floor)
