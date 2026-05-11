@@ -6,7 +6,8 @@ build_common_functions. No policy logic, no HIS-specific conditionals.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from types import MappingProxyType
+from typing import Any, TypedDict
 
 import jax.numpy as jnp
 import lcm.shocks.ar1
@@ -62,8 +63,17 @@ class RegimeId:
     dead: int
 
 
+class RegimeSpec(TypedDict):
+    """Structural decomposition of a regime: (HIS, Medicare, SS, work) axes."""
+
+    his: str
+    mc: str
+    ss: str
+    canwork: str
+
+
 # {his}_{mc}_{ss}_{canwork}
-REGIME_SPECS: dict[str, dict[str, str]] = {
+REGIME_SPECS: dict[str, RegimeSpec] = {
     "retiree_nomc_inelig_canwork": {
         "his": "retiree",
         "mc": "nomc",
@@ -367,7 +377,7 @@ _ACTIVE_PREDICATES: dict[tuple[str, str, str], Callable[..., Any]] = {
 }
 
 
-def make_active_func(spec: dict[str, str]) -> Callable[..., Any]:
+def make_active_func(spec: RegimeSpec) -> Callable[..., Any]:
     """Return the age predicate for a regime spec."""
     key = (spec["mc"], spec["ss"], spec["canwork"])
     predicate = _ACTIVE_PREDICATES.get(key)
@@ -377,7 +387,7 @@ def make_active_func(spec: dict[str, str]) -> Callable[..., Any]:
     return predicate
 
 
-def build_states(spec: dict[str, str], grids: Grids) -> dict:
+def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     """Build the state dict for a non-dead regime."""
     can_work = spec["canwork"] == "canwork"
 
@@ -400,7 +410,7 @@ def build_states(spec: dict[str, str], grids: Grids) -> dict:
     return states
 
 
-def build_actions(spec: dict[str, str], grids: Grids) -> dict:
+def build_actions(spec: RegimeSpec, grids: Grids) -> dict:
     """Build the action dict for a non-dead regime."""
     actions: dict = {}
     if spec["ss"] == "choose":
@@ -444,7 +454,7 @@ def build_dead_regime(grids: Grids) -> Regime:
     )
 
 
-def select_ss_benefit(spec: dict[str, str]) -> Callable[..., Any]:
+def select_ss_benefit(spec: RegimeSpec) -> Callable[..., Any]:
     """Select the appropriate SS benefit function for a regime."""
     ss = spec["ss"]
 
@@ -457,21 +467,21 @@ def select_ss_benefit(spec: dict[str, str]) -> Callable[..., Any]:
     return social_security.benefit_inelig_pre65
 
 
-def select_utility(spec: dict[str, str]) -> Callable[..., Any]:
+def select_utility(spec: RegimeSpec) -> Callable[..., Any]:
     """Select the utility function for a regime."""
     if spec["canwork"] != "canwork":
         return preferences.u_retired
     return preferences.u_working_life
 
 
-def _select_leisure(spec: dict[str, str]) -> Callable[..., Any]:
+def _select_leisure(spec: RegimeSpec) -> Callable[..., Any]:
     """Select the leisure function for a canwork regime."""
     if spec["his"] == "tied":
         return preferences.leisure_tied
     return preferences.leisure
 
 
-def build_common_functions(spec: dict[str, str]) -> dict:
+def build_common_functions(spec: RegimeSpec) -> dict:
     """Build the shared functions dict for a non-dead regime.
 
     Contains all functions common to every HIS type. Per-HIS modules add
@@ -543,7 +553,7 @@ def build_common_functions(spec: dict[str, str]) -> dict:
     return functions
 
 
-def precompute_targets(spec: Mapping[str, str]) -> dict[str, int]:
+def precompute_target_regimes(spec: RegimeSpec) -> MappingProxyType[str, int]:
     """Pre-compute target regime IDs for each next-age bracket."""
 
     def _resolve(his_val: str, mc_val: str, ss_val: str, canwork_val: str) -> int:
@@ -559,22 +569,24 @@ def precompute_targets(spec: Mapping[str, str]) -> dict[str, int]:
 
     ng_his = "nongroup" if spec["his"] == "tied" else spec["his"]
 
-    return {
-        "forcedout": _resolve(ng_his, "oamc", "forced", "forcedout"),
-        "forcedout_ng": _resolve("nongroup", "oamc", "forced", "forcedout"),
-        "forced_forced": _resolve(spec["his"], "oamc", "forced", "canwork"),
-        "forced_forced_ng": _resolve("nongroup", "oamc", "forced", "canwork"),
-        "forced_choose": _resolve(spec["his"], "oamc", "choose", "canwork"),
-        "forced_choose_ng": _resolve("nongroup", "oamc", "choose", "canwork"),
-        "dimc_choose": _resolve(spec["his"], "dimc", "choose", "canwork"),
-        "dimc_choose_ng": _resolve("nongroup", "dimc", "choose", "canwork"),
-        "nomc_choose": _resolve(spec["his"], "nomc", "choose", "canwork"),
-        "nomc_choose_ng": _resolve("nongroup", "nomc", "choose", "canwork"),
-        "dimc_inelig": _resolve(spec["his"], "dimc", "inelig", "canwork"),
-        "dimc_inelig_ng": _resolve("nongroup", "dimc", "inelig", "canwork"),
-        "nomc_inelig": _resolve(spec["his"], "nomc", "inelig", "canwork"),
-        "nomc_inelig_ng": _resolve("nongroup", "nomc", "inelig", "canwork"),
-    }
+    return MappingProxyType(
+        {
+            "forcedout": _resolve(ng_his, "oamc", "forced", "forcedout"),
+            "forcedout_ng": _resolve("nongroup", "oamc", "forced", "forcedout"),
+            "forced_forced": _resolve(spec["his"], "oamc", "forced", "canwork"),
+            "forced_forced_ng": _resolve("nongroup", "oamc", "forced", "canwork"),
+            "forced_choose": _resolve(spec["his"], "oamc", "choose", "canwork"),
+            "forced_choose_ng": _resolve("nongroup", "oamc", "choose", "canwork"),
+            "dimc_choose": _resolve(spec["his"], "dimc", "choose", "canwork"),
+            "dimc_choose_ng": _resolve("nongroup", "dimc", "choose", "canwork"),
+            "nomc_choose": _resolve(spec["his"], "nomc", "choose", "canwork"),
+            "nomc_choose_ng": _resolve("nongroup", "nomc", "choose", "canwork"),
+            "dimc_inelig": _resolve(spec["his"], "dimc", "inelig", "canwork"),
+            "dimc_inelig_ng": _resolve("nongroup", "dimc", "inelig", "canwork"),
+            "nomc_inelig": _resolve(spec["his"], "nomc", "inelig", "canwork"),
+            "nomc_inelig_ng": _resolve("nongroup", "nomc", "inelig", "canwork"),
+        }
+    )
 
 
 _TARGET_KEYS = (
@@ -590,9 +602,9 @@ _TARGET_KEYS = (
 
 def make_targets(name: str) -> tuple[dict[str, int], dict[str, int]]:
     """Build own and nongroup target subsets for a regime name."""
-    tgts = precompute_targets(REGIME_SPECS[name])
-    own = {k: tgts[k] for k in _TARGET_KEYS}
-    ng = {k: tgts[k + "_ng"] for k in _TARGET_KEYS}
+    target_regimes = precompute_target_regimes(REGIME_SPECS[name])
+    own = {k: target_regimes[k] for k in _TARGET_KEYS}
+    ng = {k: target_regimes[k + "_ng"] for k in _TARGET_KEYS}
     return own, ng
 
 
@@ -631,11 +643,11 @@ def select_target_for_age(
     )
 
 
-def build_state_transitions(spec: dict[str, str]) -> dict:
+def build_state_transitions(spec: RegimeSpec) -> dict:
     """Build the state transitions dict for a non-dead regime."""
     transitions: dict = {}
-    transitions["health"] = _build_per_target_health(spec)
-    transitions["assets"] = _build_per_target_next_assets(spec)
+    transitions["health"] = _build_per_target_regime_health(spec)
+    transitions["assets"] = _build_per_target_regime_next_assets(spec)
     transitions["pref_type"] = None
     transitions["aime"] = (
         social_security.next_aime
@@ -643,17 +655,17 @@ def build_state_transitions(spec: dict[str, str]) -> dict:
         else social_security.next_aime_disabled
     )
     transitions["spousal_income"] = MarkovTransition(labor_market.next_spousal_income)
-    lagged_supply_transition = _build_per_target_lagged_labor_supply(spec)
+    lagged_supply_transition = _build_per_target_regime_lagged_labor_supply(spec)
     if lagged_supply_transition:
         transitions["lagged_labor_supply"] = lagged_supply_transition
-    claimed_ss_transition = _build_per_target_claimed_ss(spec)
+    claimed_ss_transition = _build_per_target_regime_claimed_ss(spec)
     if claimed_ss_transition:
         transitions["claimed_ss"] = claimed_ss_transition
     return transitions
 
 
-def _build_per_target_next_assets(
-    spec: Mapping[str, str],
+def _build_per_target_regime_next_assets(
+    spec: RegimeSpec,
 ) -> dict[RegimeName, Callable[..., FloatND]]:
     """Build per-target assets transitions.
 
@@ -663,13 +675,13 @@ def _build_per_target_next_assets(
     `aime` state and pylcm cannot resolve `next_aime` there. Non-dead
     targets use the full `next_assets` with the pension correction.
     """
-    targets = precompute_targets(spec)
+    target_regimes = precompute_target_regimes(spec)
     id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
 
     result: dict[RegimeName, Callable[..., FloatND]] = {}
     seen_ids: set[int] = set()
 
-    for target_id in targets.values():
+    for target_id in target_regimes.values():
         if target_id in seen_ids:
             continue
         seen_ids.add(target_id)
@@ -682,21 +694,21 @@ def _build_per_target_next_assets(
     return result
 
 
-def _build_per_target_health(
-    spec: Mapping[str, str],
+def _build_per_target_regime_health(
+    spec: RegimeSpec,
 ) -> dict[RegimeName, MarkovTransition]:
     """Build per-target health transitions.
 
     Pre-65 regimes use HealthWithDisability (3-state), post-65 use Health (2-state).
     Cross-grid transitions (3->2) happen at the age-65 boundary.
     """
-    targets = precompute_targets(spec)
+    target_regimes = precompute_target_regimes(spec)
     id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
 
     result: dict[RegimeName, MarkovTransition] = {}
     seen_ids: set[int] = set()
 
-    for target_id in targets.values():
+    for target_id in target_regimes.values():
         if target_id == RegimeId.dead or target_id in seen_ids:
             continue
         seen_ids.add(target_id)
@@ -714,8 +726,8 @@ def _build_per_target_health(
     return result
 
 
-def _build_per_target_claimed_ss(
-    spec: Mapping[str, str],
+def _build_per_target_regime_claimed_ss(
+    spec: RegimeSpec,
 ) -> dict[RegimeName, Callable[..., BoolND]]:
     """Build per-target claimed_ss transitions.
 
@@ -726,13 +738,13 @@ def _build_per_target_claimed_ss(
     if spec["ss"] in ("forced", "forcedout"):
         return {}
 
-    targets = precompute_targets(spec)
+    target_regimes = precompute_target_regimes(spec)
     id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
 
     result: dict[RegimeName, Callable[..., BoolND]] = {}
     seen_ids: set[int] = set()
 
-    for target_id in targets.values():
+    for target_id in target_regimes.values():
         if target_id == RegimeId.dead or target_id in seen_ids:
             continue
         seen_ids.add(target_id)
@@ -751,8 +763,8 @@ def _build_per_target_claimed_ss(
     return result
 
 
-def _build_per_target_lagged_labor_supply(
-    spec: Mapping[str, str],
+def _build_per_target_regime_lagged_labor_supply(
+    spec: RegimeSpec,
 ) -> dict[RegimeName, Callable[..., BoolND]]:
     """Build per-target lagged_labor_supply transitions.
 
@@ -767,13 +779,13 @@ def _build_per_target_lagged_labor_supply(
     if spec["canwork"] != "canwork":
         return {}
 
-    targets = precompute_targets(spec)
+    target_regimes = precompute_target_regimes(spec)
     id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
 
     result: dict[RegimeName, Callable[..., BoolND]] = {}
     seen_ids: set[int] = set()
 
-    for target_id in targets.values():
+    for target_id in target_regimes.values():
         if target_id == RegimeId.dead or target_id in seen_ids:
             continue
         seen_ids.add(target_id)

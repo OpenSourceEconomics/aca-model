@@ -17,6 +17,7 @@ from aca_model.baseline import health_insurance
 from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
     Grids,
+    RegimeSpec,
     build_actions,
     build_common_functions,
     build_regime_probs,
@@ -65,7 +66,7 @@ def _make_transition_canwork(
     return transition
 
 
-def _build_functions(spec: dict[str, str]) -> dict:
+def _build_functions(spec: RegimeSpec) -> dict:
     """Build functions dict for a tied regime."""
     functions = build_common_functions(spec)
 
