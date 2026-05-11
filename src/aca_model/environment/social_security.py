@@ -25,8 +25,8 @@ from aca_model.agent.labor_market import LaborSupply
 
 @categorical(ordered=False)
 class ClaimedSS:
-    no: int
-    yes: int
+    no: ScalarInt
+    yes: ScalarInt
 
 
 def next_claimed_ss(

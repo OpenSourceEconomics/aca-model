@@ -24,9 +24,9 @@ from aca_model.agent.labor_market import LaggedLaborSupply
 class PrefType:
     """Unobserved preference type for heterogeneity in estimation."""
 
-    type_0: int
-    type_1: int
-    type_2: int
+    type_0: ScalarInt
+    type_1: ScalarInt
+    type_2: ScalarInt
 
 
 @categorical(ordered=False)
@@ -40,8 +40,8 @@ class BenchmarkPrefType:
     measured.
     """
 
-    type_0: int
-    type_1: int
+    type_0: ScalarInt
+    type_1: ScalarInt
 
 
 def positive_leisure(leisure: FloatND) -> BoolND:

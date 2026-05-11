@@ -13,29 +13,30 @@ from lcm.typing import (
     IntND,
     Period,
     ScalarFloat,
+    ScalarInt,
 )
 
 
 @categorical(ordered=True)
 class LaborSupply:
-    do_not_work: int
-    h1000: int
-    h1500: int
-    h2000: int
-    h2500: int
+    do_not_work: ScalarInt
+    h1000: ScalarInt
+    h1500: ScalarInt
+    h2000: ScalarInt
+    h2500: ScalarInt
 
 
 @categorical(ordered=False)
 class LaggedLaborSupply:
-    did_not_work: int
-    worked: int
+    did_not_work: ScalarInt
+    worked: ScalarInt
 
 
 @categorical(ordered=False)
 class SpousalIncome:
-    single: int
-    married_no_inc: int
-    married_has_inc: int
+    single: ScalarInt
+    married_no_inc: ScalarInt
+    married_has_inc: ScalarInt
 
 
 HOURS_VALUES = jnp.array([0.0, 1000.0, 1500.0, 2000.0, 2500.0])
@@ -89,8 +90,8 @@ def next_lagged_supply(labor_supply: DiscreteAction) -> DiscreteState:
 class IsMarried:
     """Derived categorical for is_married DAG output (0=no, 1=yes)."""
 
-    no: int
-    yes: int
+    no: ScalarInt
+    yes: ScalarInt
 
 
 def is_married(spousal_income: DiscreteState) -> IntND:

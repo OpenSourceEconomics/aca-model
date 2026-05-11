@@ -25,6 +25,7 @@ from lcm.typing import (
     Period,
     ScalarBool,
     ScalarFloat,
+    ScalarInt,
 )
 
 from aca_model.agent.labor_market import LaborSupply
@@ -32,15 +33,15 @@ from aca_model.agent.labor_market import LaborSupply
 
 @categorical(ordered=False)
 class BuyPrivate:
-    no: int
-    yes: int
+    no: ScalarInt
+    yes: ScalarInt
 
 
 @categorical(ordered=False)
 class HealthInsuranceState:
-    retiree: int
-    tied: int
-    nongroup: int
+    retiree: ScalarInt
+    tied: ScalarInt
+    nongroup: ScalarInt
 
 
 def countable_income(

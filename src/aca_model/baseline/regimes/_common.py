@@ -23,7 +23,7 @@ from lcm import (
 )
 from lcm.grids.continuous import ContinuousGrid
 from lcm.grids.piecewise import Piece, PiecewiseLinSpacedGrid
-from lcm.typing import BoolND, FloatND, RegimeName, UserParams
+from lcm.typing import BoolND, FloatND, RegimeName, ScalarInt, UserParams
 
 from aca_model.agent import (
     assets_and_income,
@@ -42,25 +42,25 @@ from aca_model.environment.social_security import ClaimedSS
 
 @categorical(ordered=False)
 class RegimeId:
-    retiree_nomc_inelig_canwork: int
-    tied_nomc_inelig_canwork: int
-    nongroup_nomc_inelig_canwork: int
-    retiree_dimc_inelig_canwork: int
-    nongroup_dimc_inelig_canwork: int
-    retiree_nomc_choose_canwork: int
-    tied_nomc_choose_canwork: int
-    nongroup_nomc_choose_canwork: int
-    retiree_dimc_choose_canwork: int
-    nongroup_dimc_choose_canwork: int
-    retiree_oamc_choose_canwork: int
-    tied_oamc_choose_canwork: int
-    nongroup_oamc_choose_canwork: int
-    retiree_oamc_forced_canwork: int
-    tied_oamc_forced_canwork: int
-    nongroup_oamc_forced_canwork: int
-    retiree_oamc_forced_forcedout: int
-    nongroup_oamc_forced_forcedout: int
-    dead: int
+    retiree_nomc_inelig_canwork: ScalarInt
+    tied_nomc_inelig_canwork: ScalarInt
+    nongroup_nomc_inelig_canwork: ScalarInt
+    retiree_dimc_inelig_canwork: ScalarInt
+    nongroup_dimc_inelig_canwork: ScalarInt
+    retiree_nomc_choose_canwork: ScalarInt
+    tied_nomc_choose_canwork: ScalarInt
+    nongroup_nomc_choose_canwork: ScalarInt
+    retiree_dimc_choose_canwork: ScalarInt
+    nongroup_dimc_choose_canwork: ScalarInt
+    retiree_oamc_choose_canwork: ScalarInt
+    tied_oamc_choose_canwork: ScalarInt
+    nongroup_oamc_choose_canwork: ScalarInt
+    retiree_oamc_forced_canwork: ScalarInt
+    tied_oamc_forced_canwork: ScalarInt
+    nongroup_oamc_forced_canwork: ScalarInt
+    retiree_oamc_forced_forcedout: ScalarInt
+    nongroup_oamc_forced_forcedout: ScalarInt
+    dead: ScalarInt
 
 
 class RegimeSpec(TypedDict):
@@ -552,7 +552,12 @@ def build_common_functions(spec: RegimeSpec) -> dict:
 
 
 def precompute_target_regimes(spec: RegimeSpec) -> MappingProxyType[str, int]:
-    """Pre-compute target regime IDs for each next-age bracket."""
+    """Pre-compute target regime IDs for each next-age bracket.
+
+    Coerces each `RegimeId.<name>` (`ScalarInt`, post-pylcm#349) to a
+    Python `int` so the returned mapping's values can serve as dict
+    keys and `in`-set members downstream.
+    """
 
     def _resolve(his_val: str, mc_val: str, ss_val: str, canwork_val: str) -> int:
         for name, s in REGIME_SPECS.items():
@@ -562,8 +567,8 @@ def precompute_target_regimes(spec: RegimeSpec) -> MappingProxyType[str, int]:
                 and s["ss"] == ss_val
                 and s["canwork"] == canwork_val
             ):
-                return getattr(RegimeId, name)
-        return RegimeId.dead
+                return int(getattr(RegimeId, name))
+        return int(RegimeId.dead)
 
     ng_his = "nongroup" if spec["his"] == "tied" else spec["his"]
 
@@ -674,7 +679,7 @@ def _build_per_target_regime_assets(
     targets use the full `next_assets` with the pension correction.
     """
     target_regimes = precompute_target_regimes(spec)
-    id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
+    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
     result: dict[RegimeName, Callable[..., FloatND]] = {}
     seen_ids: set[int] = set()
@@ -701,7 +706,7 @@ def _build_per_target_regime_health(
     Cross-grid transitions (3->2) happen at the age-65 boundary.
     """
     target_regimes = precompute_target_regimes(spec)
-    id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
+    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
     result: dict[RegimeName, MarkovTransition] = {}
     seen_ids: set[int] = set()
@@ -737,7 +742,7 @@ def _build_per_target_regime_claimed_ss(
         return {}
 
     target_regimes = precompute_target_regimes(spec)
-    id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
+    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
     result: dict[RegimeName, Callable[..., BoolND]] = {}
     seen_ids: set[int] = set()
@@ -778,7 +783,7 @@ def _build_per_target_regime_lagged_labor_supply(
         return {}
 
     target_regimes = precompute_target_regimes(spec)
-    id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
+    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
     result: dict[RegimeName, Callable[..., BoolND]] = {}
     seen_ids: set[int] = set()
