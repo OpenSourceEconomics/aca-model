@@ -29,7 +29,7 @@ jobs:
       - name: Install pylcm (unreleased feature branch required)
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@ca66ba9"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@99a5e31"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest
