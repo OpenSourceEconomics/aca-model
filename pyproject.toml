@@ -1,10 +1,9 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = [ "hatchling" ]
+requires = [ "hatch-vcs", "hatchling" ]
 
 [project]
 name = "aca-model"
-version = "0.0.0"
 description = "Core lifecycle model for the ACA structural retirement project."
 readme = { file = "README.md", content-type = "text/markdown" }
 keywords = [
@@ -23,8 +22,10 @@ classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.14",
 ]
+dynamic = [ "version" ]
 dependencies = [
   "attrs",
+  "beartype",
   "cloudpickle",
   "dags",
   "estimagic",
@@ -43,13 +44,19 @@ email = "hmgaudecker@uni-bonn.de"
 [[project.maintainers]]
 name = "Hans-Martin von Gaudecker"
 email = "hmgaudecker@uni-bonn.de"
+[project.urls]
+Github = "https://github.com/OpenSourceEconomics/aca-model"
+Repository = "https://github.com/OpenSourceEconomics/aca-model"
+Tracker = "https://github.com/OpenSourceEconomics/aca-model/issues"
 
 [tool.hatch]
+build.hooks.vcs.version-file = "src/aca_model/_version.py"
 build.targets.sdist.exclude = [ "tests" ]
 build.targets.sdist.only-packages = true
 build.targets.wheel.only-include = [ "src" ]
 build.targets.wheel.sources = [ "src" ]
 metadata.allow-direct-references = true
+version.source = "vcs"
 
 [tool.ruff]
 fix = true
@@ -84,9 +91,21 @@ extend-ignore = [
   "RUF002",  # Ambiguous Unicode in docstrings (Greek letters in math)
   "RUF003",  # Ambiguous Unicode in comments (Greek letters in math)
 ]
-per-file-ignores."src/aca_model/models/*" = [ "E501" ]
-per-file-ignores."task_*.py" = [ "ANN", "ARG001" ]
-per-file-ignores."tests/*" = [ "D", "E501", "INP001", "PD011", "PLR2004", "S101" ]
+per-file-ignores."src/aca_model/models/*" = [
+  "E501", # Line too long (generated model files)
+]
+per-file-ignores."task_*.py" = [
+  "ANN",    # Type annotations (use ty instead)
+  "ARG001", # Unused function argument (pytask signatures)
+]
+per-file-ignores."tests/*" = [
+  "D",       # Docstrings
+  "E501",    # Line too long
+  "INP001",  # Implicit namespace package
+  "PD011",   # Use of .values (false positives on non-pandas objects)
+  "PLR2004", # Magic value used in comparison
+  "S101",    # Use of assert
+]
 pydocstyle.convention = "google"
 
 [tool.pyproject-fmt]

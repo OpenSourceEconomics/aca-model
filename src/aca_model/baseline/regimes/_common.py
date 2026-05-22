@@ -10,20 +10,21 @@ from types import MappingProxyType
 from typing import Any, Literal, TypedDict
 
 import jax.numpy as jnp
-import lcm.shocks.ar1
-import lcm.shocks.iid
 import numpy as np
+from _lcm.grids.continuous import ContinuousGrid
 from lcm import (
     DiscreteGrid,
     IrregSpacedGrid,
     LinSpacedGrid,
     MarkovTransition,
+    NormalIIDProcess,
+    PiecewiseGridSegment,
+    PiecewiseLinSpacedGrid,
     Regime,
+    RouwenhorstAR1Process,
     categorical,
 )
-from lcm.grids.continuous import ContinuousGrid
-from lcm.grids.piecewise import Piece, PiecewiseLinSpacedGrid
-from lcm.typing import BoolND, FloatND, RegimeName, ScalarInt, UserParams
+from lcm.typing import BoolND, FloatND, IntND, RegimeName, ScalarInt, UserParams
 
 from aca_model.agent import (
     assets_and_income,
@@ -34,7 +35,7 @@ from aca_model.agent import (
 from aca_model.agent.health import Health, HealthWithDisability
 from aca_model.agent.labor_market import LaborSupply, LaggedLaborSupply, SpousalIncome
 from aca_model.baseline import health_insurance
-from aca_model.baseline.health_insurance import BuyPrivate, HealthInsuranceState
+from aca_model.baseline.health_insurance import BuyPrivate
 from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment import social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
@@ -237,14 +238,14 @@ def build_grids(
     # grid to have unconditional variance 1, the Rouwenhorst innovation
     # std must be √(1 − ρ²). Passing the σ_y itself (≈0.577 for hcc,
     # 0.5627 for wage) would mis-scale the grid.
-    wage_res = lcm.shocks.ar1.Rouwenhorst(
+    wage_res = RouwenhorstAR1Process(
         n_points=grid_config.n_wage_res_gridpoints,
         rho=_WAGE_RHO,
         sigma=(1.0 - _WAGE_RHO**2) ** 0.5,
         mu=0.0,
     )
     hcc_persistent = get_hcc_persistent_shock(grid_config=grid_config)
-    hcc_transitory = lcm.shocks.iid.Normal(
+    hcc_transitory = NormalIIDProcess(
         n_points=grid_config.n_hcc_transitory_gridpoints,
         gauss_hermite=True,
         mu=0.0,
@@ -261,11 +262,11 @@ def build_grids(
             stop=500_000.0,
             n_points=grid_config.n_assets_gridpoints,
             batch_size=grid_config.n_assets_batch_size,
+            distributed=True,
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         consumption_dollars=IrregSpacedGrid(
             n_points=grid_config.n_consumption_dollars_gridpoints,
-            extra_param_names=("max_consumption_dollars",),
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
@@ -274,7 +275,7 @@ def build_grids(
     )
 
 
-def get_hcc_persistent_shock(*, grid_config: GridConfig) -> lcm.shocks.ar1.Rouwenhorst:
+def get_hcc_persistent_shock(*, grid_config: GridConfig) -> RouwenhorstAR1Process:
     """Return the persistent-HCC AR(1) shock grid for a given `grid_config`.
 
     Exposed so callers that need the shock's gridpoints / transition
@@ -282,7 +283,7 @@ def get_hcc_persistent_shock(*, grid_config: GridConfig) -> lcm.shocks.ar1.Rouwe
     can derive them from `grid_config` alone without instantiating a
     full `Model`.
     """
-    return lcm.shocks.ar1.Rouwenhorst(
+    return RouwenhorstAR1Process(
         n_points=grid_config.n_hcc_persistent_gridpoints,
         rho=_HCC_RHO,
         sigma=(1.0 - _HCC_RHO**2) ** 0.5,
@@ -306,20 +307,26 @@ def _build_aime_grid(
     this path; the total is fixed by the PIA structure (32 points).
     """
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
-    pieces = (
-        Piece(interval=f"[{kinks[0]}, {kinks[1]})", n_points=_AIME_PIECE_N_POINTS[0]),
-        Piece(interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]),
-        Piece(interval=f"[{kinks[2]}, {kinks[3]}]", n_points=_AIME_PIECE_N_POINTS[2]),
+    segments = (
+        PiecewiseGridSegment(
+            interval=f"[{kinks[0]}, {kinks[1]})", n_points=_AIME_PIECE_N_POINTS[0]
+        ),
+        PiecewiseGridSegment(
+            interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]
+        ),
+        PiecewiseGridSegment(
+            interval=f"[{kinks[2]}, {kinks[3]}]", n_points=_AIME_PIECE_N_POINTS[2]
+        ),
     )
     return PiecewiseLinSpacedGrid(
-        pieces=pieces, batch_size=grid_config.n_aime_batch_size
+        segments=segments, batch_size=grid_config.n_aime_batch_size
     )
 
 
 def _compute_max_annual_labor_income(
     *,
     wage_params: Mapping[str, Any],
-    wage_res_grid: lcm.shocks.ar1.Rouwenhorst,
+    wage_res_grid: RouwenhorstAR1Process,
 ) -> float:
     """Return the annual labor income at the top of the wage grid.
 
@@ -418,7 +425,7 @@ def build_actions(spec: RegimeSpec, grids: Grids) -> dict:
     return actions
 
 
-def build_regime_probs(target: FloatND, survival: FloatND) -> FloatND:
+def build_regime_probs(target: IntND, survival: FloatND) -> FloatND:
     """Build regime transition probability vector."""
     probs = jnp.zeros(19)
     probs = probs.at[RegimeId.dead].set(1.0 - survival)
@@ -603,10 +610,10 @@ def make_targets(name: str) -> tuple[dict[str, int], dict[str, int]]:
 
 
 def select_target_for_age(
-    next_age: int | FloatND,
+    next_age: int | IntND | FloatND,
     mc_next: bool | BoolND,
     tgts: dict[str, int],
-) -> FloatND:
+) -> IntND:
     """Select target regime ID based on next-period age bracket."""
     ss_choose = jnp.where(
         jnp.array(mc_next),

@@ -43,7 +43,7 @@ def build_regime(name: str):
 
 def test_model_creates_successfully() -> None:
     model = make_baseline_model(n_subjects=1)
-    assert len(model.regimes) == 19
+    assert len(model.user_regimes) == 19
     assert model.n_periods == 45
 
 
@@ -55,13 +55,13 @@ def test_model_age_range() -> None:
 
 def test_dead_regime_is_terminal() -> None:
     model = make_baseline_model(n_subjects=1)
-    assert model.regimes["dead"].terminal
+    assert model.user_regimes["dead"].terminal
 
 
 def test_non_terminal_regimes_not_terminal() -> None:
     model = make_baseline_model(n_subjects=1)
     for name in REGIME_SPECS:
-        assert not model.regimes[name].terminal
+        assert not model.user_regimes[name].terminal
 
 
 def test_regime_id_dead_is_last() -> None:
@@ -192,7 +192,7 @@ def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
 
 def test_aca_model_creates_successfully() -> None:
     model = make_aca_model(n_subjects=1, policy=PolicyVariant.ACA)
-    assert len(model.regimes) == 19
+    assert len(model.user_regimes) == 19
     assert model.n_periods == 45
 
 
@@ -233,7 +233,7 @@ def test_aca_other_regimes_have_no_aca_policy_keys() -> None:
 def test_all_policy_variants_create(policy: PolicyVariant) -> None:
     """All policy variants create valid models."""
     model = make_aca_model(n_subjects=1, policy=policy)
-    assert len(model.regimes) == 19
+    assert len(model.user_regimes) == 19
 
 
 def test_aca_no_medicaid_expansion_keeps_baseline_medicaid() -> None:
@@ -273,4 +273,4 @@ def test_aca_only_medicaid_expansion() -> None:
 def test_baseline_model_creates() -> None:
     """Baseline model creates successfully without PolicyVariant."""
     model = make_baseline_model(n_subjects=1)
-    assert len(model.regimes) == 19
+    assert len(model.user_regimes) == 19

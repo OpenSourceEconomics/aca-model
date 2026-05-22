@@ -1,14 +1,13 @@
 """Runtime-supplied gridpoints for the consumption_dollars action.
 
-Consumption is declared as `IrregSpacedGrid(n_points=N,
-extra_param_names=("max_consumption_dollars",))` in
+Consumption is declared as `IrregSpacedGrid(n_points=N)` in
 `baseline.regimes._common.build_grids` so the bounds can track
 runtime parameters: the lower bound from the per-iteration
 `consumption_equiv_floor` parameter (and its couples-scaled twin),
-the upper bound from `max_consumption_dollars` carried through
-`fixed_params` (per pylcm#348). Callers must inject the actual
-gridpoints into `params` via `inject_consumption_dollars_points`
-before calling `model.solve()` / `model.simulate()`.
+the upper bound from `max_consumption_dollars` supplied directly
+by the caller. Callers must inject the actual gridpoints into
+`params` via `inject_consumption_dollars_points` before calling
+`model.solve()` / `model.simulate()`.
 
 The grid pins the two regime-relevant transfer-floor levels exactly
 on the action grid so the borrowing constraint's
@@ -32,6 +31,7 @@ def inject_consumption_dollars_points(
     *,
     params: Mapping[str, Any],
     model: Model,
+    max_consumption_dollars: float,
 ) -> dict[str, Any]:
     """Inject consumption_dollars gridpoints into per-regime params.
 
@@ -40,7 +40,7 @@ def inject_consumption_dollars_points(
 
     The lower two gridpoints are the single and married Dollar-valued
     transfer floors; the rest are geomspaced from the married floor up
-    to `model.fixed_params["max_consumption_dollars"]`.
+    to `max_consumption_dollars`.
 
     Args:
         params: Existing params mapping with `consumption_equiv_floor`
@@ -48,8 +48,11 @@ def inject_consumption_dollars_points(
             new dict; the input is not mutated.
         model: Model whose regimes carry the runtime-points grid and
             whose `fixed_params` supplies `exponent` (married
-            equivalence-scale exponent) and `max_consumption_dollars`
-            (grid upper bound).
+            equivalence-scale exponent).
+        max_consumption_dollars: Grid upper bound. Sourced from the
+            caller (e.g. aca-data's `environment_constants.pkl`); not
+            routed through pylcm's params machinery because no DAG
+            function consumes it.
 
     Returns:
         New params dict with consumption_dollars points injected.
@@ -61,11 +64,9 @@ def inject_consumption_dollars_points(
     """
     consumption_equiv_floor = jnp.asarray(params["consumption_equiv_floor"])
     exponent = jnp.asarray(model.fixed_params["exponent"])
-    max_consumption_dollars = jnp.asarray(
-        model.fixed_params["max_consumption_dollars"]
-    )
+    max_consumption_dollars_arr = jnp.asarray(max_consumption_dollars)
     out: dict[str, Any] = dict(params)
-    for regime_name, regime in model.regimes.items():
+    for regime_name, regime in model.user_regimes.items():
         if regime.terminal:
             continue
         grid = regime.actions.get("consumption_dollars")
@@ -88,7 +89,7 @@ def inject_consumption_dollars_points(
         points = _compute_consumption_dollars_points(
             consumption_equiv_floor=consumption_equiv_floor,
             exponent=exponent,
-            max_consumption_dollars=max_consumption_dollars,
+            max_consumption_dollars=max_consumption_dollars_arr,
             n_points=grid.n_points,
         )
         regime_entry = dict(out.get(regime_name, {}))

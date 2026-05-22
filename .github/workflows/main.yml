@@ -1,5 +1,9 @@
 ---
 name: main
+# aca-model is a git submodule of the aca-dev workspace and has no pixi config
+# of its own — the pixi environments live in the parent workspace, whose
+# `tests-cpu` env has editable path-dependencies on private sibling repos that a
+# standalone CI runner cannot clone. CI therefore installs with pip directly.
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
@@ -26,10 +30,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pylcm (feature branch — revert to @main once pylcm#348/#350 merge)
+      - name: Install pylcm (pinned to the phase-2 branch until it merges to main)
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@feat/runtime-grid-extra-params"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@refactor/phase-2-api-reorganisation"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest

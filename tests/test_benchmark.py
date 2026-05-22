@@ -29,7 +29,6 @@ def test_benchmark_model_simulates_end_to_end() -> None:
         initial_conditions=initial_conditions,
         period_to_regime_to_V_arr=None,
         log_level="off",
-        check_initial_conditions=False,
     )
 
     df = result.to_dataframe()
@@ -69,11 +68,10 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
         initial_conditions=initial_conditions,
         period_to_regime_to_V_arr=None,
         log_level="off",
-        check_initial_conditions=False,
     )
 
     df = result.to_dataframe(additional_targets=["cash_on_hand", "equivalence_scale"])
-    alive = df.loc[df["regime"] != "dead"].copy()
+    alive = df.loc[df["regime_name"] != "dead"].copy()
     consumption_dollars_floor = float(params["consumption_dollars_floor"])
     floor = consumption_dollars_floor * alive["equivalence_scale"].to_numpy()
     rhs = np.maximum(alive["cash_on_hand"].to_numpy(), floor)

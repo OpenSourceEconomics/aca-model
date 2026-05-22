@@ -17,7 +17,7 @@ def test_ssi_eligible_assets_too_high() -> None:
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(5000.0),
         countable_income=jnp.array(1000.0),
-        spousal_income=jnp.array(0),
+        spousal_income=jnp.int32(0),
         gets_medicare=jnp.asarray(True),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
@@ -29,7 +29,7 @@ def test_ssi_eligible_income_too_high() -> None:
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(9000.0),
-        spousal_income=jnp.array(0),
+        spousal_income=jnp.int32(0),
         gets_medicare=jnp.asarray(True),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
@@ -41,7 +41,7 @@ def test_ssi_eligible_no_medicare() -> None:
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
-        spousal_income=jnp.array(0),
+        spousal_income=jnp.int32(0),
         gets_medicare=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
@@ -53,7 +53,7 @@ def test_ssi_eligible_all_pass() -> None:
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
-        spousal_income=jnp.array(0),
+        spousal_income=jnp.int32(0),
         gets_medicare=jnp.asarray(True),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
@@ -64,7 +64,7 @@ def test_ssi_eligible_all_pass() -> None:
 def test_ssi_benefit_eligible() -> None:
     result = health_insurance.ssi_benefit(
         countable_income=jnp.array(3000.0),
-        spousal_income=jnp.array(0),
+        spousal_income=jnp.int32(0),
         is_ssi_eligible=jnp.array(True),
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -74,7 +74,7 @@ def test_ssi_benefit_eligible() -> None:
 def test_ssi_benefit_not_eligible() -> None:
     result = health_insurance.ssi_benefit(
         countable_income=jnp.array(3000.0),
-        spousal_income=jnp.array(0),
+        spousal_income=jnp.int32(0),
         is_ssi_eligible=jnp.array(False),
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -149,8 +149,8 @@ def test_compute_table_uniform_transition(table_inputs: dict) -> None:
 
 _PREMIUM_KWARGS: dict = {
     "age": jnp.int32(60),
-    "good_health": jnp.array(True),
-    "is_married": jnp.array(False),
+    "good_health": jnp.int32(1),
+    "is_married": jnp.int32(0),
     "labor_supply": jnp.array(LaborSupply.h2000),
     "premium_intercept": jnp.asarray(1000.0),
     "premium_age": jnp.asarray(0.0),

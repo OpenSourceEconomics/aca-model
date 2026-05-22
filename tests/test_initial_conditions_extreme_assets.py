@@ -8,8 +8,8 @@ how negative starting assets are. The model's constraints — and pylcm's
 """
 
 import jax.numpy as jnp
+from _lcm.simulation.initial_conditions import validate_initial_conditions
 from lcm import DiscreteGrid
-from lcm.simulation.initial_conditions import validate_initial_conditions
 
 from aca_model.agent.assets_and_income import borrowing_constraint
 from aca_model.agent.preferences import BenchmarkPrefType
@@ -112,17 +112,17 @@ def test_extreme_negative_assets_subject_passes_validation() -> None:
     initial_conditions = {
         **initial_conditions,
         "assets": jnp.asarray([-1_000_000.0]),
-        "regime": jnp.asarray(
+        "regime_id": jnp.asarray(
             [model.regime_names_to_ids["retiree_nomc_inelig_canwork"]],
             dtype=jnp.int32,
         ),
     }
 
-    internal_params = model._process_params(params)  # noqa: SLF001
+    flat_params = model._process_params(params)  # noqa: SLF001
     validate_initial_conditions(
         initial_conditions=initial_conditions,
-        internal_regimes=model.internal_regimes,
+        regimes=model._regimes,  # noqa: SLF001
         regime_names_to_ids=model.regime_names_to_ids,
-        internal_params=internal_params,
+        flat_params=flat_params,
         ages=model.ages,
     )

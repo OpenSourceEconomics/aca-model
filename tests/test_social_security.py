@@ -350,7 +350,7 @@ def test_benefit_inelig_pre65_disabled_below_sga() -> None:
     )
     result = social_security.benefit_inelig_pre65(
         ssdi_pia=ssdi_val,
-        health=jnp.array(0),  # disabled
+        health=jnp.int32(0),  # disabled
         labor_income=jnp.array(0.0),
         ssdi_substantial_gainful_activity=SSDI_SGA,
     )
@@ -368,7 +368,7 @@ def test_benefit_inelig_pre65_disabled_above_sga() -> None:
     )
     result = social_security.benefit_inelig_pre65(
         ssdi_pia=ssdi_val,
-        health=jnp.array(0),  # disabled
+        health=jnp.int32(0),  # disabled
         labor_income=jnp.array(20000.0),
         ssdi_substantial_gainful_activity=SSDI_SGA,
     )
@@ -379,7 +379,7 @@ def test_benefit_inelig_pre65_not_disabled() -> None:
     """Non-disabled agent: benefit = 0."""
     result = social_security.benefit_inelig_pre65(
         ssdi_pia=jnp.array(1000.0),
-        health=jnp.array(2),  # good health
+        health=jnp.int32(2),  # good health
         labor_income=jnp.array(0.0),
         ssdi_substantial_gainful_activity=SSDI_SGA,
     )

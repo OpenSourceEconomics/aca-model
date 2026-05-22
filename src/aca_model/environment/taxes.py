@@ -8,7 +8,7 @@ instead of the original Numba for-loops.
 
 import jax.numpy as jnp
 from lcm.params import MappingLeaf
-from lcm.typing import DiscreteState, FloatND
+from lcm.typing import DiscreteState, FloatND, IntND
 
 
 def gross_income(
@@ -136,7 +136,7 @@ def marginal_rate(
     return sched["marginal_rates"][spousal_income, bracket_id]
 
 
-def _find_bracket(income: FloatND, upper_bounds: FloatND) -> FloatND:
+def _find_bracket(income: FloatND, upper_bounds: FloatND) -> IntND:
     """Find the tax bracket index for a given income level."""
     return jnp.searchsorted(upper_bounds, income, side="right")
 
