@@ -203,16 +203,6 @@ class Grids:
 _AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
 
 
-MAX_CONSUMPTION_DOLLARS: float = 300_000.0
-"""Upper bound of the runtime consumption_dollars grid in $/year.
-
-Lives here next to the other grid bounds (assets `stop=500_000.0`,
-AIME `stop=8_000.0`).
-
-TODO: route through `fixed_params` once pylcm#348 lands (so the bound
-can vary across optimizer iterations without re-importing this module).
-"""
-
 # AR(1) persistence of the Rouwenhorst shocks. Calibrated once; not
 # routed through fixed_params because they shape the grid topology
 # rather than feed any DAG function. The Rouwenhorst innovation std is
@@ -275,6 +265,7 @@ def build_grids(
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         consumption_dollars=IrregSpacedGrid(
             n_points=grid_config.n_consumption_dollars_gridpoints,
+            extra_param_names=("max_consumption_dollars",),
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
