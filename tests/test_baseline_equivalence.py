@@ -75,9 +75,9 @@ def test_aca_cash_on_hand_matches_baseline_when_neutral() -> None:
 def test_baseline_primary_oop_no_cost_sharing_scale() -> None:
     """Baseline primary_oop applies raw deductible/coinsurance/oop_max."""
     costs = jnp.array(5000.0)
-    deductible = 500.0
-    coinsurance = 0.2
-    oop_max_val = 3000.0
+    deductible = jnp.asarray(500.0)
+    coinsurance = jnp.asarray(0.2)
+    oop_max_val = jnp.asarray(3000.0)
     result = health_insurance.primary_oop(
         total_health_costs=costs,
         buy_private=jnp.array(BuyPrivate.yes),
@@ -97,9 +97,9 @@ def test_baseline_primary_oop_no_cost_sharing_scale() -> None:
 def test_aca_primary_oop_scaled_reduces_costs() -> None:
     """ACA primary_oop with scale < 1.0 reduces OOP costs."""
     costs = jnp.array(5000.0)
-    deductible = 500.0
-    coinsurance = 0.2
-    oop_max_val = 3000.0
+    deductible = jnp.asarray(500.0)
+    coinsurance = jnp.asarray(0.2)
+    oop_max_val = jnp.asarray(3000.0)
     oop_full = aca_hi.primary_oop(
         total_health_costs=costs,
         cost_sharing_scale=jnp.array(1.0),

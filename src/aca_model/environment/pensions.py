@@ -4,7 +4,7 @@ Ported from struct-ret/src/model/baseline/soc_sec_pensions_taxes.py.
 """
 
 import jax.numpy as jnp
-from lcm.typing import ContinuousState, FloatND, IntND, Period
+from lcm.typing import ContinuousState, FloatND, IntND, Period, ScalarFloat
 
 
 def benefit(
@@ -131,7 +131,7 @@ def wealth_next_before_adjustment(
     pension_wealth: FloatND,
     pension_benefit: FloatND,
     pension_accrual: FloatND,
-    rate_of_return: float,
+    rate_of_return: ScalarFloat,
     unconditional_survival_prob: FloatND,
     period: Period,
 ) -> FloatND:

@@ -9,12 +9,13 @@ from lcm.typing import (
     ContinuousAction,
     ContinuousState,
     FloatND,
+    ScalarFloat,
 )
 
 
 def capital_income(
     assets: ContinuousState,
-    rate_of_return: float,
+    rate_of_return: ScalarFloat,
 ) -> FloatND:
     """Compute capital income from assets."""
     return assets * rate_of_return
@@ -36,7 +37,7 @@ def cash_on_hand(
 
 
 def consumption_dollars_floor(
-    consumption_equiv_floor: float,
+    consumption_equiv_floor: ScalarFloat,
     equivalence_scale: FloatND,
 ) -> FloatND:
     """Per-household $-floor on consumption."""

@@ -141,7 +141,7 @@ def test_pension_wealth_next_accrual_only() -> None:
     lli = math.log(10000)
     prob = math.exp(0.1) / (1 + math.exp(0.1))
     accrual = lli * 0.5 * prob * 10000
-    r = 0.03
+    r = jnp.asarray(0.03)
     result = pensions.wealth_next_before_adjustment(
         pension_wealth=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
@@ -157,7 +157,7 @@ def test_pension_wealth_next_with_benefit() -> None:
     lli = math.log(10000)
     prob = math.exp(0.1) / (1 + math.exp(0.1))
     accrual = lli * 0.5 * prob * 10000
-    r = 0.03
+    r = jnp.asarray(0.03)
     result = pensions.wealth_next_before_adjustment(
         pension_wealth=jnp.array(3000.0),
         pension_benefit=jnp.array(2000.0),

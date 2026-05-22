@@ -9,15 +9,24 @@ eliminates 7 PIA formula constants from the DAG.
 
 import jax.numpy as jnp
 from lcm import categorical
-from lcm.typing import ContinuousState, DiscreteAction, DiscreteState, FloatND, Period
+from lcm.typing import (
+    Age,
+    ContinuousState,
+    DiscreteAction,
+    DiscreteState,
+    FloatND,
+    Period,
+    ScalarFloat,
+    ScalarInt,
+)
 
 from aca_model.agent.labor_market import LaborSupply
 
 
 @categorical(ordered=False)
 class ClaimedSS:
-    no: int
-    yes: int
+    no: ScalarInt
+    yes: ScalarInt
 
 
 def next_claimed_ss(
@@ -77,17 +86,17 @@ def benefit_forced(
 
 def benefit_choose_post65(
     pia: FloatND,
-    age: int,
+    age: Age,
     period: Period,
     claim_ss: DiscreteAction,
     claimed_ss: DiscreteState,
     labor_supply: DiscreteAction,
     labor_income: FloatND,
     early_ret_adjustment: FloatND,
-    normal_retirement_age: int,
+    normal_retirement_age: ScalarInt,
     earnings_test_threshold: FloatND,
     earnings_test_fraction: FloatND,
-    earnings_test_repealed_age: int,
+    earnings_test_repealed_age: ScalarInt,
 ) -> FloatND:
     """SS benefit for post-65, ss=choose: SS if claiming, 0 otherwise."""
     ss = jnp.maximum(claim_ss, claimed_ss)
@@ -110,7 +119,7 @@ def benefit_choose_post65(
 def benefit_choose_pre65(
     pia: FloatND,
     ssdi_pia: FloatND,
-    age: int,
+    age: Age,
     period: Period,
     claim_ss: DiscreteAction,
     claimed_ss: DiscreteState,
@@ -118,11 +127,11 @@ def benefit_choose_pre65(
     labor_supply: DiscreteAction,
     labor_income: FloatND,
     early_ret_adjustment: FloatND,
-    normal_retirement_age: int,
+    normal_retirement_age: ScalarInt,
     earnings_test_threshold: FloatND,
     earnings_test_fraction: FloatND,
-    earnings_test_repealed_age: int,
-    ssdi_substantial_gainful_activity: float,
+    earnings_test_repealed_age: ScalarInt,
+    ssdi_substantial_gainful_activity: ScalarFloat,
 ) -> FloatND:
     """SS benefit for pre-65, ss=choose: SS if claiming, SSDI if disabled, else 0."""
     ss = jnp.maximum(claim_ss, claimed_ss)
@@ -160,7 +169,7 @@ def benefit_inelig_pre65(
     ssdi_pia: FloatND,
     health: DiscreteState,
     labor_income: FloatND,
-    ssdi_substantial_gainful_activity: float,
+    ssdi_substantial_gainful_activity: ScalarFloat,
 ) -> FloatND:
     """SS benefit for pre-65, ss=inelig: SSDI if disabled, else 0."""
     is_disabled = health == 0
@@ -200,16 +209,16 @@ def benefit_withheld_fraction(
 def _apply_benefit_rules(
     *,
     pia: FloatND,
-    age: int,
+    age: Age,
     period: Period,
     ss: FloatND,
     work: FloatND,
     labor_income: FloatND,
     early_ret_adjustment: FloatND,
-    normal_retirement_age: int,
+    normal_retirement_age: ScalarInt,
     earnings_test_threshold: FloatND,
     earnings_test_fraction: FloatND,
-    earnings_test_repealed_age: int,
+    earnings_test_repealed_age: ScalarInt,
 ) -> FloatND:
     """Apply early retirement adjustment and earnings test to PIA.
 
@@ -246,16 +255,16 @@ def next_aime(
     aime: ContinuousState,
     labor_income: FloatND,
     period: Period,
-    age: int,
+    age: Age,
     benefit_withheld_fraction: FloatND,
     earnings_test_credited_back: FloatND,
-    earnings_test_repealed_age: int,
+    earnings_test_repealed_age: ScalarInt,
     pia_table: FloatND,
     pia_aime_grid: FloatND,
-    aime_accrual_factor: float,
-    aggregate_wage_growth: float,
-    aime_last_age_with_indexing: int,
-    aime_kink_2: float,
+    aime_accrual_factor: ScalarFloat,
+    aggregate_wage_growth: ScalarFloat,
+    aime_last_age_with_indexing: ScalarInt,
+    aime_kink_2: ScalarFloat,
     ratio_lowest_earnings: FloatND,
 ) -> ContinuousState:
     """Compute next period's AIME given labor earnings.
@@ -306,19 +315,19 @@ def next_aime_disabled(
     aime: ContinuousState,
     labor_income: FloatND,
     period: Period,
-    age: int,
+    age: Age,
     health: DiscreteState,
     benefit_withheld_fraction: FloatND,
     earnings_test_credited_back: FloatND,
-    earnings_test_repealed_age: int,
+    earnings_test_repealed_age: ScalarInt,
     pia_table: FloatND,
     pia_aime_grid: FloatND,
-    aime_accrual_factor: float,
-    aggregate_wage_growth: float,
-    aime_last_age_with_indexing: int,
-    aime_kink_2: float,
+    aime_accrual_factor: ScalarFloat,
+    aggregate_wage_growth: ScalarFloat,
+    aime_last_age_with_indexing: ScalarInt,
+    aime_kink_2: ScalarFloat,
     ratio_lowest_earnings: FloatND,
-    medicare_age: int,
+    medicare_age: ScalarInt,
     di_dropout_scale: FloatND,
     di_dropout_next_period_ratio: FloatND,
 ) -> ContinuousState:

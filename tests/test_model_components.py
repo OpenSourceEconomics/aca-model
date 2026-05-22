@@ -7,77 +7,68 @@ from aca_model.environment import social_security
 
 
 def test_equivalence_scale_single() -> None:
-    result = preferences.equivalence_scale(jnp.array(False), 0.7)
+    result = preferences.equivalence_scale(jnp.array(False), jnp.asarray(0.7))
     assert jnp.isclose(result, 1.0)
 
 
 def test_equivalence_scale_married() -> None:
-    result = preferences.equivalence_scale(jnp.array(True), 0.7)
+    result = preferences.equivalence_scale(jnp.array(True), jnp.asarray(0.7))
     assert jnp.isclose(result, 2.0**0.7)
 
 
 def test_leisure_not_working() -> None:
-    result = preferences.leisure(
+    result = preferences.leisure_canwork_retiree_or_nongroup(
         working_hours_value=jnp.array(0.0),
-        age=60,
         good_health=jnp.array(1.0),
         lagged_labor_supply=jnp.array(0),
-        time_endowment=5000.0,
-        leisure_cost_of_bad_health=500.0,
-        fixed_cost_of_work_intercept=100.0,
-        fixed_cost_of_work_age_trend=5,
-        labor_force_reentry_cost=200.0,
-        reference_age=50,
+        time_endowment=jnp.asarray(5000.0),
+        leisure_cost_of_bad_health=jnp.asarray(500.0),
+        fixed_cost_of_work=jnp.asarray(150.0),
+        labor_force_reentry_cost=jnp.asarray(200.0),
     )
     assert jnp.isclose(result, 5000.0)
 
 
 def test_leisure_working_good_health() -> None:
-    result = preferences.leisure(
+    result = preferences.leisure_canwork_retiree_or_nongroup(
         working_hours_value=jnp.array(2000.0),
-        age=60,
         good_health=jnp.array(1.0),
         lagged_labor_supply=jnp.array(1),
-        time_endowment=5000.0,
-        leisure_cost_of_bad_health=500.0,
-        fixed_cost_of_work_intercept=100.0,
-        fixed_cost_of_work_age_trend=5,
-        labor_force_reentry_cost=200.0,
-        reference_age=50,
+        time_endowment=jnp.asarray(5000.0),
+        leisure_cost_of_bad_health=jnp.asarray(500.0),
+        fixed_cost_of_work=jnp.asarray(150.0),
+        labor_force_reentry_cost=jnp.asarray(200.0),
     )
-    # 5000 - 0 (good health) - (2000 + 100 + 5*(60-50) + 0 (lagged=1))
-    expected = 5000.0 - 2000.0 - 100.0 - 50.0
+    # 5000 - 0 (good health) - (2000 + 150 + 0 (lagged=1))
+    expected = 5000.0 - 2000.0 - 150.0
     assert jnp.isclose(result, expected)
 
 
 def test_leisure_reentry_cost() -> None:
-    result = preferences.leisure(
+    result = preferences.leisure_canwork_retiree_or_nongroup(
         working_hours_value=jnp.array(2000.0),
-        age=60,
         good_health=jnp.array(1.0),
         lagged_labor_supply=jnp.array(0),
-        time_endowment=5000.0,
-        leisure_cost_of_bad_health=500.0,
-        fixed_cost_of_work_intercept=100.0,
-        fixed_cost_of_work_age_trend=5,
-        labor_force_reentry_cost=200.0,
-        reference_age=50,
+        time_endowment=jnp.asarray(5000.0),
+        leisure_cost_of_bad_health=jnp.asarray(500.0),
+        fixed_cost_of_work=jnp.asarray(150.0),
+        labor_force_reentry_cost=jnp.asarray(200.0),
     )
-    expected = 5000.0 - 2000.0 - 100.0 - 50.0 - 200.0
+    expected = 5000.0 - 2000.0 - 150.0 - 200.0
     assert jnp.isclose(result, expected)
 
 
 def test_leisure_bad_health() -> None:
-    result = preferences.leisure_retired(
+    result = preferences.leisure_forcedout(
         good_health=jnp.array(0.0),
-        time_endowment=5000.0,
-        leisure_cost_of_bad_health=500.0,
+        time_endowment=jnp.asarray(5000.0),
+        leisure_cost_of_bad_health=jnp.asarray(500.0),
     )
     assert jnp.isclose(result, 4500.0)
 
 
 def test_utility_positive_leisure() -> None:
-    result = preferences.u_can_work(
+    result = preferences.u_alive(
         consumption_equiv=jnp.array(10000.0),
         leisure=jnp.array(3000.0),
         consumption_weight=jnp.array(0.4),
@@ -88,7 +79,7 @@ def test_utility_positive_leisure() -> None:
 
 
 def test_utility_log_case() -> None:
-    result = preferences.u_can_work(
+    result = preferences.u_alive(
         consumption_equiv=jnp.array(10000.0),
         leisure=jnp.array(3000.0),
         consumption_weight=jnp.array(0.4),
@@ -103,8 +94,8 @@ def test_utility_log_case() -> None:
 def test_bequest_positive_assets() -> None:
     result = preferences.bequest(
         assets=jnp.array(100000.0),
-        bequest_shifter=5000.0,
-        scaled_bequest_weight=0.5,
+        bequest_shifter=jnp.asarray(5000.0),
+        scaled_bequest_weight=jnp.asarray(0.5),
         consumption_weight=jnp.array(0.4),
         coefficient_rra=jnp.array(2.0),
         utility_scale_factor=jnp.array(1.0),
@@ -115,8 +106,8 @@ def test_bequest_positive_assets() -> None:
 def test_bequest_zero_assets() -> None:
     result = preferences.bequest(
         assets=jnp.array(0.0),
-        bequest_shifter=5000.0,
-        scaled_bequest_weight=0.5,
+        bequest_shifter=jnp.asarray(5000.0),
+        scaled_bequest_weight=jnp.asarray(0.5),
         consumption_weight=jnp.array(0.4),
         coefficient_rra=jnp.array(2.0),
         utility_scale_factor=jnp.array(1.0),
@@ -164,13 +155,13 @@ def test_next_aime_accrual() -> None:
         age=jnp.int32(55),
         benefit_withheld_fraction=jnp.array(0.0),
         earnings_test_credited_back=jnp.zeros(100),
-        earnings_test_repealed_age=70,
+        earnings_test_repealed_age=jnp.int32(70),
         pia_table=jnp.array([0.0, 711.9, 2115.1, 3015.1]),
         pia_aime_grid=jnp.array([0.0, 791.0, 4768.0, 8000.0]),
-        aime_accrual_factor=1 / 35,
-        aggregate_wage_growth=0.02,
-        aime_last_age_with_indexing=60,
-        aime_kink_2=8000.0,
+        aime_accrual_factor=jnp.asarray(1 / 35),
+        aggregate_wage_growth=jnp.asarray(0.02),
+        aime_last_age_with_indexing=jnp.int32(60),
+        aime_kink_2=jnp.asarray(8000.0),
         ratio_lowest_earnings=ratio,
     )
     assert result > 1000.0

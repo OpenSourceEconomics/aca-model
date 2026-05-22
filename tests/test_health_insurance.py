@@ -18,7 +18,7 @@ def test_ssi_eligible_assets_too_high() -> None:
         assets=jnp.array(5000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.array(0),
-        gets_medicare=True,
+        gets_medicare=jnp.asarray(True),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -30,7 +30,7 @@ def test_ssi_eligible_income_too_high() -> None:
         assets=jnp.array(1000.0),
         countable_income=jnp.array(9000.0),
         spousal_income=jnp.array(0),
-        gets_medicare=True,
+        gets_medicare=jnp.asarray(True),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -42,7 +42,7 @@ def test_ssi_eligible_no_medicare() -> None:
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.array(0),
-        gets_medicare=False,
+        gets_medicare=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -54,7 +54,7 @@ def test_ssi_eligible_all_pass() -> None:
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.array(0),
-        gets_medicare=True,
+        gets_medicare=jnp.asarray(True),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -148,20 +148,20 @@ def test_compute_table_uniform_transition(table_inputs: dict) -> None:
 
 
 _PREMIUM_KWARGS: dict = {
-    "age": 60,
+    "age": jnp.int32(60),
     "good_health": jnp.array(True),
     "is_married": jnp.array(False),
     "labor_supply": jnp.array(LaborSupply.h2000),
-    "premium_intercept": 1000.0,
-    "premium_age": 0,
-    "premium_age_sq": 0.0,
-    "premium_age_cub": 0.0,
-    "premium_predicted_hcc": 0.0,
-    "premium_good_health": 0.0,
-    "premium_married": 0.0,
-    "premium_works": 0.0,
-    "premium_married_works": 0.0,
-    "premium_minimum": 500.0,
+    "premium_intercept": jnp.asarray(1000.0),
+    "premium_age": jnp.asarray(0.0),
+    "premium_age_sq": jnp.asarray(0.0),
+    "premium_age_cub": jnp.asarray(0.0),
+    "premium_predicted_hcc": jnp.asarray(0.0),
+    "premium_good_health": jnp.asarray(0.0),
+    "premium_married": jnp.asarray(0.0),
+    "premium_works": jnp.asarray(0.0),
+    "premium_married_works": jnp.asarray(0.0),
+    "premium_minimum": jnp.asarray(500.0),
     "predicted_hcc_insurer": jnp.array(0.0),
 }
 
@@ -187,9 +187,9 @@ def test_primary_oop_insured_applies_deductible_coinsurance() -> None:
     result = health_insurance.primary_oop(
         total_health_costs=jnp.array(10000.0),
         buy_private=jnp.array(BuyPrivate.yes),
-        deductible=500.0,
-        coinsurance_rate=0.2,
-        oop_max=5000.0,
+        deductible=jnp.asarray(500.0),
+        coinsurance_rate=jnp.asarray(0.2),
+        oop_max=jnp.asarray(5000.0),
     )
     expected = 500.0 + (10000.0 - 500.0) * 0.2  # 2400
     assert jnp.isclose(result, expected, atol=ATOL)
@@ -200,8 +200,8 @@ def test_primary_oop_uninsured_equals_total_costs() -> None:
     result = health_insurance.primary_oop(
         total_health_costs=total,
         buy_private=jnp.array(BuyPrivate.no),
-        deductible=500.0,
-        coinsurance_rate=0.2,
-        oop_max=5000.0,
+        deductible=jnp.asarray(500.0),
+        coinsurance_rate=jnp.asarray(0.2),
+        oop_max=jnp.asarray(5000.0),
     )
     assert jnp.isclose(result, total)
