@@ -6,12 +6,15 @@ Ported from struct-ret/src/model/preferences_utility.py and auxiliaries.py.
 import jax.numpy as jnp
 from lcm import categorical
 from lcm.typing import (
+    Age,
     BoolND,
     ContinuousAction,
     ContinuousState,
     DiscreteState,
     FloatND,
     IntND,
+    ScalarFloat,
+    ScalarInt,
 )
 
 from aca_model.agent.labor_market import LaggedLaborSupply
@@ -21,9 +24,9 @@ from aca_model.agent.labor_market import LaggedLaborSupply
 class PrefType:
     """Unobserved preference type for heterogeneity in estimation."""
 
-    type_0: int
-    type_1: int
-    type_2: int
+    type_0: ScalarInt
+    type_1: ScalarInt
+    type_2: ScalarInt
 
 
 @categorical(ordered=False)
@@ -37,8 +40,8 @@ class BenchmarkPrefType:
     measured.
     """
 
-    type_0: int
-    type_1: int
+    type_0: ScalarInt
+    type_1: ScalarInt
 
 
 def positive_leisure(leisure: FloatND) -> BoolND:
@@ -46,7 +49,7 @@ def positive_leisure(leisure: FloatND) -> BoolND:
     return leisure > 0
 
 
-def equivalence_scale(is_married: IntND, exponent: float) -> FloatND:
+def equivalence_scale(is_married: IntND, exponent: ScalarFloat) -> FloatND:
     """Return the equivalence scale for household size adjustment.
 
     Single (is_married=False) → 1.0, married (is_married=True) → 2^exponent.
@@ -54,100 +57,131 @@ def equivalence_scale(is_married: IntND, exponent: float) -> FloatND:
     return jnp.where(is_married, 2.0**exponent, 1.0)
 
 
-def leisure(
-    working_hours_value: FloatND,
-    age: int,
-    good_health: IntND,
-    lagged_labor_supply: DiscreteState,
-    time_endowment: float,
-    leisure_cost_of_bad_health: float,
-    fixed_cost_of_work_intercept: float,
-    fixed_cost_of_work_age_trend: float,
-    labor_force_reentry_cost: float,
-    reference_age: int,
-) -> FloatND:
-    """Compute leisure given hours worked and state variables.
-
-    Fixed cost of work is age-dependent: intercept + trend * (age - reference_age).
-    Reentry cost applies when returning to work after not working last period.
-    Working status is derived from working_hours_value > 0.
-    """
-    is_working = working_hours_value > 0.0
-    health_loss = jnp.where(good_health, 0.0, leisure_cost_of_bad_health)
-
-    fixed_cost = fixed_cost_of_work_intercept + fixed_cost_of_work_age_trend * (
+def fixed_cost_of_work(
+    age: Age,
+    fixed_cost_of_work_intercept: ScalarFloat,
+    fixed_cost_of_work_age_trend: ScalarFloat,
+    reference_age: ScalarInt,
+) -> ScalarFloat:
+    """Age-dependent fixed cost of working (intercept + trend slope on age)."""
+    return fixed_cost_of_work_intercept + fixed_cost_of_work_age_trend * (
         age - reference_age
     )
+
+
+def leisure_canwork_retiree_or_nongroup(
+    working_hours_value: FloatND,
+    good_health: IntND,
+    lagged_labor_supply: DiscreteState,
+    time_endowment: ScalarFloat,
+    leisure_cost_of_bad_health: ScalarFloat,
+    fixed_cost_of_work: ScalarFloat,
+    labor_force_reentry_cost: ScalarFloat,
+) -> FloatND:
+    """Compute leisure for canwork retiree / nongroup regimes.
+
+    Reentry cost applies when returning to work after not working last period.
+    """
+    health_loss = jnp.where(good_health, 0.0, leisure_cost_of_bad_health)
     reentry_cost = jnp.where(
         lagged_labor_supply == LaggedLaborSupply.did_not_work,
         labor_force_reentry_cost,
         0.0,
     )
     work_loss = jnp.where(
-        is_working, working_hours_value + fixed_cost + reentry_cost, 0.0
+        working_hours_value > 0.0,
+        working_hours_value + fixed_cost_of_work + reentry_cost,
+        0.0,
     )
 
     return time_endowment - health_loss - work_loss
 
 
-def leisure_tied(
+def leisure_canwork_tied(
     working_hours_value: FloatND,
-    age: int,
     good_health: IntND,
-    time_endowment: float,
-    leisure_cost_of_bad_health: float,
-    fixed_cost_of_work_intercept: float,
-    fixed_cost_of_work_age_trend: float,
-    reference_age: int,
+    time_endowment: ScalarFloat,
+    leisure_cost_of_bad_health: ScalarFloat,
+    fixed_cost_of_work: ScalarFloat,
 ) -> FloatND:
-    """Compute leisure for tied regimes (no reentry cost, no lagged_labor_supply)."""
+    """Compute leisure for canwork tied regimes.
+
+    No need to consider reentry costs.
+    """
     health_loss = jnp.where(good_health, 0.0, leisure_cost_of_bad_health)
-    fixed_cost = fixed_cost_of_work_intercept + fixed_cost_of_work_age_trend * (
-        age - reference_age
-    )
     work_loss = jnp.where(
-        working_hours_value > 0.0, working_hours_value + fixed_cost, 0.0
+        working_hours_value > 0.0, working_hours_value + fixed_cost_of_work, 0.0
     )
     return time_endowment - health_loss - work_loss
 
 
-def leisure_retired(
+def leisure_forcedout(
     good_health: IntND,
-    time_endowment: float,
-    leisure_cost_of_bad_health: float,
+    time_endowment: ScalarFloat,
+    leisure_cost_of_bad_health: ScalarFloat,
 ) -> FloatND:
-    """Compute leisure for retired agents (no work)."""
+    """Compute leisure for forcedout regimes (no work)."""
     health_loss = jnp.where(good_health, 0.0, leisure_cost_of_bad_health)
     return time_endowment - health_loss
 
 
-def utility(
-    consumption: ContinuousAction,
+def consumption_equiv(
+    consumption_dollars: ContinuousAction,
+    equivalence_scale: FloatND,
+) -> FloatND:
+    """Utility-equivalized consumption."""
+    return consumption_dollars / equivalence_scale
+
+
+def u_alive(
+    consumption_equiv: FloatND,
     leisure: FloatND,
-    pref_type: DiscreteState,
     consumption_weight: FloatND,
     coefficient_rra: FloatND,
-    equivalence_scale: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
-    """Within-period utility: CES aggregator over consumption and leisure.
+    """Within-period utility for every non-dead regime: CES over consumption and leisure.
 
-    u = utility_scale_factor * ((c/eq_scale)^α * l^(1-α))^(1-γ) / (1-γ)
-    with log case for γ=1. `consumption_weight`, `coefficient_rra`, and
-    `utility_scale_factor` are indexed by `pref_type`.
+    `leisure` is a DAG input — supplied per-regime by `leisure_canwork_retiree_or_nongroup`,
+    `leisure_canwork_tied`, or `leisure_forcedout`.
     """
-    alpha = consumption_weight[pref_type]
-    gamma = coefficient_rra[pref_type]
-    equiv_cons = consumption / equivalence_scale
-    composite = equiv_cons**alpha * leisure ** (1.0 - alpha)
-
-    one_minus_gamma = jnp.where(jnp.isclose(gamma, 1.0), 1.0, 1.0 - gamma)
-    u = jnp.where(
-        jnp.isclose(gamma, 1.0),
-        jnp.log(composite),
-        composite**one_minus_gamma / one_minus_gamma,
+    composite = consumption_equiv**consumption_weight * leisure ** (
+        1.0 - consumption_weight
     )
-    return u * utility_scale_factor[pref_type]
+
+    one_minus_rra = jnp.where(
+        jnp.isclose(coefficient_rra, 1.0), 1.0, 1.0 - coefficient_rra
+    )
+    u = jnp.where(
+        jnp.isclose(coefficient_rra, 1.0),
+        jnp.log(composite),
+        composite**one_minus_rra / one_minus_rra,
+    )
+    return u * utility_scale_factor
+
+
+def consumption_weight(
+    consumption_weights: FloatND,
+    pref_type: DiscreteState,
+) -> FloatND:
+    """Per-type consumption weight indexed by preference type.
+
+    Wired as a DAG function so pylcm broadcasts the scalar to every cell;
+    mirrors `discount_factor`.
+    """
+    return consumption_weights[pref_type]
+
+
+def coefficient_rra(
+    coefficients_rra: FloatND,
+    pref_type: DiscreteState,
+) -> FloatND:
+    """Per-type CRRA coefficient indexed by preference type.
+
+    Wired as a DAG function so pylcm broadcasts the scalar to every cell;
+    mirrors `discount_factor`.
+    """
+    return coefficients_rra[pref_type]
 
 
 def discount_factor(
@@ -164,49 +198,36 @@ def discount_factor(
 
 
 def utility_scale_factor(
-    average_consumption: float,
+    average_consumption_equiv: ScalarFloat,
     consumption_weight: FloatND,
     coefficient_rra: FloatND,
-    time_endowment: float,
-    fixed_cost_of_work_intercept: float,
-    fixed_cost_of_work_age_trend: float,
-    scale_reference_hours: float,
-    reference_age: int,
-    scale_reference_age: int,
+    time_endowment: ScalarFloat,
+    fixed_cost_of_work_intercept: ScalarFloat,
+    reference_hours: ScalarFloat,
 ) -> FloatND:
-    """Compute scale factor so utility is approximately 1 at typical values.
-
-    Uses leisure at `scale_reference_age` when working `scale_reference_hours`
-    (after fixed costs) and average consumption. Returns one scale per
-    preference type, indexed by pref_type.
-    """
-    age_offset = scale_reference_age - reference_age
-    average_leisure = (
-        time_endowment
-        - scale_reference_hours
-        - (fixed_cost_of_work_intercept + fixed_cost_of_work_age_trend * age_offset)
-    )
-    u_cons = average_consumption**consumption_weight
+    """Compute the scale factor so utility is approximately 1 at typical values."""
+    average_leisure = time_endowment - reference_hours - fixed_cost_of_work_intercept
+    u_cons = average_consumption_equiv**consumption_weight
     u_leisure = average_leisure ** (1.0 - consumption_weight)
 
-    one_minus_gamma = jnp.where(
+    one_minus_rra = jnp.where(
         jnp.isclose(coefficient_rra, 1.0), 1.0, 1.0 - coefficient_rra
     )
     raw = jnp.where(
         jnp.isclose(coefficient_rra, 1.0),
         jnp.log(u_cons * u_leisure),
-        (u_cons * u_leisure) ** one_minus_gamma / one_minus_gamma,
+        (u_cons * u_leisure) ** one_minus_rra / one_minus_rra,
     )
     return jnp.abs(1.0 / raw)
 
 
 def scaled_bequest_weight(
-    bequest_weight: float,
-    consumption_weight: float,
-    coefficient_rra: float,
-    time_endowment: float,
-    time_discount_factor: float,
-    rate_of_return: float,
+    bequest_weight: ScalarFloat,
+    consumption_weight: ScalarFloat,
+    coefficient_rra: ScalarFloat,
+    time_endowment: ScalarFloat,
+    time_discount_factor: ScalarFloat,
+    rate_of_return: ScalarFloat,
 ) -> FloatND:
     """Transform raw bequest weight into the form used in the bequest function.
 
@@ -227,27 +248,26 @@ def scaled_bequest_weight(
 
 def bequest(
     assets: ContinuousState,
-    pref_type: DiscreteState,
-    bequest_shifter: float,
-    scaled_bequest_weight: float,
+    bequest_shifter: ScalarFloat,
+    scaled_bequest_weight: ScalarFloat,
     consumption_weight: FloatND,
     coefficient_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
     """Bequest function for terminal/dead states.
 
-    bequest = scale * bwt * (max(0,a) + shifter)^(α*(1-γ)) / (1-γ)
-    `consumption_weight`, `coefficient_rra`, and `utility_scale_factor`
-    are indexed by `pref_type`.
+    bequest = scale * bwt *
+        (max(0,a) + shifter)^(consumption_weight*(1 - coefficient_rra))
+        / (1 - coefficient_rra)
     """
-    alpha = consumption_weight[pref_type]
-    gamma = coefficient_rra[pref_type]
     assets_shifted = jnp.maximum(0.0, assets) + bequest_shifter
 
-    one_minus_gamma = jnp.where(jnp.isclose(gamma, 1.0), 1.0, 1.0 - gamma)
-    val = jnp.where(
-        jnp.isclose(gamma, 1.0),
-        jnp.log(assets_shifted),
-        assets_shifted ** (one_minus_gamma * alpha) / one_minus_gamma,
+    one_minus_rra = jnp.where(
+        jnp.isclose(coefficient_rra, 1.0), 1.0, 1.0 - coefficient_rra
     )
-    return val * scaled_bequest_weight * utility_scale_factor[pref_type]
+    val = jnp.where(
+        jnp.isclose(coefficient_rra, 1.0),
+        jnp.log(assets_shifted),
+        assets_shifted ** (one_minus_rra * consumption_weight) / one_minus_rra,
+    )
+    return val * scaled_bequest_weight * utility_scale_factor

@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 from lcm import MarkovTransition, Regime
-from lcm.typing import BoolND, DiscreteAction, FloatND, Period
+from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
 
 from aca_model.agent import assets_and_income, preferences
 from aca_model.agent.labor_market import LaborSupply
@@ -17,6 +17,7 @@ from aca_model.baseline import health_insurance
 from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
     Grids,
+    RegimeSpec,
     build_actions,
     build_common_functions,
     build_regime_probs,
@@ -26,7 +27,6 @@ from aca_model.baseline.regimes._common import (
     make_targets,
     select_ss_benefit,
     select_target_for_age,
-    select_utility,
 )
 from aca_model.environment import pensions
 
@@ -43,7 +43,7 @@ def _make_transition_canwork(
     """
 
     def transition(
-        age: int,
+        age: Age,
         period: Period,
         labor_supply: DiscreteAction,
         is_medicaid_eligible: BoolND,
@@ -65,11 +65,10 @@ def _make_transition_canwork(
     return transition
 
 
-def _build_functions(spec: dict[str, str]) -> dict:
+def _build_functions(spec: RegimeSpec) -> dict:
     """Build functions dict for a tied regime."""
     functions = build_common_functions(spec)
 
-    functions["utility"] = select_utility(spec)
     functions["ss_benefit"] = select_ss_benefit(spec)
 
     # his and gets_medicare are fixed params (constants per regime),
@@ -82,6 +81,10 @@ def _build_functions(spec: dict[str, str]) -> dict:
         functions["pension_accrual"] = pensions.accrual
         functions["pension_wealth_next_before_adjustment"] = (
             pensions.wealth_next_before_adjustment
+        )
+        functions["target_his"] = health_insurance.target_his
+        functions["imputed_pension_wealth_next_period"] = (
+            pensions.imputed_pension_wealth_next_period
         )
         functions["pension_assets_adjustment"] = pensions.assets_adjustment
         functions["total_to_pia"] = pensions.total_to_pia

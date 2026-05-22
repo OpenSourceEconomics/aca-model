@@ -6,28 +6,28 @@ Health (2-state: bad/good) is used in post-65 regimes (mc=oamc).
 
 import jax.numpy as jnp
 from lcm import categorical
-from lcm.typing import DiscreteState, FloatND, IntND, Period
+from lcm.typing import DiscreteState, FloatND, IntND, Period, ScalarInt
 
 
 @categorical(ordered=True)
 class HealthWithDisability:
-    disabled: int
-    bad: int
-    good: int
+    disabled: ScalarInt
+    bad: ScalarInt
+    good: ScalarInt
 
 
 @categorical(ordered=True)
 class Health:
-    bad: int
-    good: int
+    bad: ScalarInt
+    good: ScalarInt
 
 
 @categorical(ordered=True)
 class GoodHealth:
     """Derived categorical for good_health DAG output (0=no, 1=yes)."""
 
-    no: int
-    yes: int
+    no: ScalarInt
+    yes: ScalarInt
 
 
 def is_good_health_3(health: DiscreteState) -> IntND:

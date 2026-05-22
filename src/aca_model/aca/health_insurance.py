@@ -10,7 +10,14 @@ from enum import Enum, auto
 
 import jax.numpy as jnp
 from lcm.params import MappingLeaf
-from lcm.typing import BoolND, ContinuousState, DiscreteAction, DiscreteState, FloatND
+from lcm.typing import (
+    BoolND,
+    ContinuousState,
+    DiscreteAction,
+    DiscreteState,
+    FloatND,
+    ScalarFloat,
+)
 
 from aca_model.baseline.health_insurance import BuyPrivate, oop_costs
 
@@ -136,9 +143,9 @@ def primary_oop(
     total_health_costs: FloatND,
     cost_sharing_scale: FloatND,
     buy_private: DiscreteAction,
-    deductible: float,
-    coinsurance_rate: float,
-    oop_max: float,
+    deductible: ScalarFloat,
+    coinsurance_rate: ScalarFloat,
+    oop_max: ScalarFloat,
 ) -> FloatND:
     """Compute primary OOP costs with ACA cost-sharing reductions.
 

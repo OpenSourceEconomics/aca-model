@@ -3,17 +3,38 @@
 from collections.abc import Mapping
 
 import pytest
+from helpers.model import make_aca_model, make_baseline_model
+from lcm import DiscreteGrid
 
 from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
-from aca_model.aca.model import create_model as create_aca_model
-from aca_model.aca.regimes import build_all_regimes as build_aca_regimes
-from aca_model.baseline.model import create_model
+from aca_model.aca.regimes import build_all_regimes as _build_aca_regimes
+from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.regimes import REGIME_SPECS, RegimeId
 from aca_model.baseline.regimes import build_regime as _build_regime
 from aca_model.baseline.regimes._common import build_grids
+from aca_model.benchmark import get_benchmark_params
+from aca_model.config import BENCHMARK_GRID_CONFIG
 
-_GRIDS = build_grids()
+_FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
+
+
+def build_aca_regimes(policy: PolicyVariant) -> dict:
+    return _build_aca_regimes(
+        policy=policy,
+        grid_config=BENCHMARK_GRID_CONFIG,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
+
+
+_GRIDS = build_grids(
+    grid_config=BENCHMARK_GRID_CONFIG,
+    fixed_params=_FIXED_PARAMS,
+    wage_params=_WAGE_PARAMS,
+    pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+)
 
 
 def build_regime(name: str):
@@ -21,24 +42,24 @@ def build_regime(name: str):
 
 
 def test_model_creates_successfully() -> None:
-    model = create_model()
+    model = make_baseline_model(n_subjects=1)
     assert len(model.regimes) == 19
     assert model.n_periods == 45
 
 
 def test_model_age_range() -> None:
-    model = create_model()
+    model = make_baseline_model(n_subjects=1)
     assert model.ages.values[0] == 51.0
     assert model.ages.values[-1] == 95.0
 
 
 def test_dead_regime_is_terminal() -> None:
-    model = create_model()
+    model = make_baseline_model(n_subjects=1)
     assert model.regimes["dead"].terminal
 
 
 def test_non_terminal_regimes_not_terminal() -> None:
-    model = create_model()
+    model = make_baseline_model(n_subjects=1)
     for name in REGIME_SPECS:
         assert not model.regimes[name].terminal
 
@@ -55,7 +76,7 @@ def test_forcedout_regimes_no_labor_supply(name: str) -> None:
     regime = build_regime(name)
     assert "labor_supply" not in regime.actions
     assert "log_ft_wage_res" not in regime.states
-    assert "consumption" in regime.actions
+    assert "consumption_dollars" in regime.actions
 
 
 @pytest.mark.parametrize(
@@ -128,7 +149,7 @@ def test_pre65_regimes_use_health_with_disability() -> None:
         if spec["mc"] in ("nomc", "dimc"):
             regime = build_regime(name)
             grid = regime.states["health"]
-            assert len(grid.categories) == 3, f"{name} should use HealthWithDisability"  # ty: ignore[unresolved-attribute]
+            assert len(grid.categories) == 3, f"{name} should use HealthWithDisability"
 
 
 def test_post65_regimes_use_health() -> None:
@@ -136,7 +157,7 @@ def test_post65_regimes_use_health() -> None:
         if spec["mc"] == "oamc":
             regime = build_regime(name)
             grid = regime.states["health"]
-            assert len(grid.categories) == 2, f"{name} should use Health"  # ty: ignore[unresolved-attribute]
+            assert len(grid.categories) == 2, f"{name} should use Health"
 
 
 def test_all_regimes_have_aime() -> None:
@@ -170,7 +191,7 @@ def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
 
 
 def test_aca_model_creates_successfully() -> None:
-    model = create_aca_model()
+    model = make_aca_model(n_subjects=1, policy=PolicyVariant.ACA)
     assert len(model.regimes) == 19
     assert model.n_periods == 45
 
@@ -211,7 +232,7 @@ def test_aca_other_regimes_have_no_aca_policy_keys() -> None:
 @pytest.mark.parametrize("policy", list(PolicyVariant))
 def test_all_policy_variants_create(policy: PolicyVariant) -> None:
     """All policy variants create valid models."""
-    model = create_aca_model(policy=policy)
+    model = make_aca_model(n_subjects=1, policy=policy)
     assert len(model.regimes) == 19
 
 
@@ -251,5 +272,5 @@ def test_aca_only_medicaid_expansion() -> None:
 
 def test_baseline_model_creates() -> None:
     """Baseline model creates successfully without PolicyVariant."""
-    model = create_model()
+    model = make_baseline_model(n_subjects=1)
     assert len(model.regimes) == 19

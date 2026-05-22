@@ -6,7 +6,8 @@ build_common_functions. No policy logic, no HIS-specific conditionals.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Literal, TypedDict
 
 import jax.numpy as jnp
 import lcm.shocks.ar1
@@ -22,50 +23,57 @@ from lcm import (
 )
 from lcm.grids.continuous import ContinuousGrid
 from lcm.grids.piecewise import Piece, PiecewiseLinSpacedGrid
-from lcm.typing import BoolND, FloatND
+from lcm.typing import BoolND, FloatND, RegimeName, ScalarInt, UserParams
 
 from aca_model.agent import (
     assets_and_income,
     health,
     labor_market,
     preferences,
-    utility,
 )
 from aca_model.agent.health import Health, HealthWithDisability
 from aca_model.agent.labor_market import LaborSupply, LaggedLaborSupply, SpousalIncome
-from aca_model.agent.preferences import PrefType
 from aca_model.baseline import health_insurance
-from aca_model.baseline.health_insurance import BuyPrivate
-from aca_model.config import GRID_CONFIG, MODEL_CONFIG, GridConfig
+from aca_model.baseline.health_insurance import BuyPrivate, HealthInsuranceState
+from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment import social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
 
 @categorical(ordered=False)
 class RegimeId:
-    retiree_nomc_inelig_canwork: int
-    tied_nomc_inelig_canwork: int
-    nongroup_nomc_inelig_canwork: int
-    retiree_dimc_inelig_canwork: int
-    nongroup_dimc_inelig_canwork: int
-    retiree_nomc_choose_canwork: int
-    tied_nomc_choose_canwork: int
-    nongroup_nomc_choose_canwork: int
-    retiree_dimc_choose_canwork: int
-    nongroup_dimc_choose_canwork: int
-    retiree_oamc_choose_canwork: int
-    tied_oamc_choose_canwork: int
-    nongroup_oamc_choose_canwork: int
-    retiree_oamc_forced_canwork: int
-    tied_oamc_forced_canwork: int
-    nongroup_oamc_forced_canwork: int
-    retiree_oamc_forced_forcedout: int
-    nongroup_oamc_forced_forcedout: int
-    dead: int
+    retiree_nomc_inelig_canwork: ScalarInt
+    tied_nomc_inelig_canwork: ScalarInt
+    nongroup_nomc_inelig_canwork: ScalarInt
+    retiree_dimc_inelig_canwork: ScalarInt
+    nongroup_dimc_inelig_canwork: ScalarInt
+    retiree_nomc_choose_canwork: ScalarInt
+    tied_nomc_choose_canwork: ScalarInt
+    nongroup_nomc_choose_canwork: ScalarInt
+    retiree_dimc_choose_canwork: ScalarInt
+    nongroup_dimc_choose_canwork: ScalarInt
+    retiree_oamc_choose_canwork: ScalarInt
+    tied_oamc_choose_canwork: ScalarInt
+    nongroup_oamc_choose_canwork: ScalarInt
+    retiree_oamc_forced_canwork: ScalarInt
+    tied_oamc_forced_canwork: ScalarInt
+    nongroup_oamc_forced_canwork: ScalarInt
+    retiree_oamc_forced_forcedout: ScalarInt
+    nongroup_oamc_forced_forcedout: ScalarInt
+    dead: ScalarInt
+
+
+class RegimeSpec(TypedDict):
+    """Structural decomposition of a regime: (HIS, Medicare, SS, work) axes."""
+
+    his: Literal["retiree", "tied", "nongroup"]
+    mc: Literal["nomc", "dimc", "oamc"]
+    ss: Literal["inelig", "choose", "forced"]
+    canwork: Literal["canwork", "forcedout"]
 
 
 # {his}_{mc}_{ss}_{canwork}
-REGIME_SPECS: dict[str, dict[str, str]] = {
+REGIME_SPECS: dict[str, RegimeSpec] = {
     "retiree_nomc_inelig_canwork": {
         "his": "retiree",
         "mc": "nomc",
@@ -183,7 +191,7 @@ config = MODEL_CONFIG
 class Grids:
     assets: LinSpacedGrid
     aime: ContinuousGrid
-    consumption: ContinuousGrid
+    consumption_dollars: ContinuousGrid
     wage_res: Any
     hcc_persistent: Any
     hcc_transitory: Any
@@ -194,42 +202,34 @@ class Grids:
 # bend points (0 → kink_0 → kink_1 → kink_2). Total = 32.
 _AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
 
-# Consumption grid: log-spaced from the lower bound of the
-# `consumption_floor` parameter (BOUNDS in task_estimate_parameters)
-# up to a high value that brackets the unconstrained optimum for the
-# richest agents in the state space. Mirrors the struct-ret design
-# (concentrate gridpoints where CRRA curvature is highest).
-_CONSUMPTION_GRID_START: float = 100.0
-_CONSUMPTION_GRID_STOP: float = 300_000.0
+
+# AR(1) persistence of the Rouwenhorst shocks. Calibrated once; not
+# routed through fixed_params because they shape the grid topology
+# rather than feed any DAG function. The Rouwenhorst innovation std is
+# `sqrt(1 - rho**2)` so the grid carries unit unconditional variance.
+_HCC_RHO = 0.925
+_WAGE_RHO = 0.977
 
 
 def build_grids(
-    grid_config: GridConfig = GRID_CONFIG,
     *,
-    fixed_params: Mapping[str, Any] | None = None,
-    wage_params: Mapping[str, Any] | None = None,
-    pref_type_grid: DiscreteGrid | None = None,
+    grid_config: GridConfig,
+    fixed_params: UserParams,
+    wage_params: Mapping[str, Any],
+    pref_type_grid: DiscreteGrid,
 ) -> Grids:
     """Build continuous-state/action grids from a `GridConfig`.
 
-    When `fixed_params` carries `pia_aime_grid`, the AIME grid becomes
-    a `PiecewiseLinSpacedGrid` breakpointed at the PIA bends (total 32
-    points). When `wage_params` provides `log_ft_wage_mean` and friends
-    (as produced by `aca_data.task_wages`), the assets grid's lower
-    bound is set to `-max_annual_labor_income` so that the worst shock
-    lands on a gridpoint inside the support. Without `fixed_params` /
-    `wage_params` (bare model for tests / compile-only paths), both
-    grids fall back to their historical static shapes.
+    The AIME grid is `PiecewiseLinSpacedGrid` breakpointed at the PIA
+    bends from `fixed_params["pia_aime_grid"]` (total 32 points). The
+    assets grid's lower bound is `-max_annual_labor_income` computed
+    from `wage_params` (`log_ft_wage_mean`, `log_ft_wage_std`,
+    `adj_wage_hours_*`).
 
     `wage_params` is passed separately rather than via `fixed_params`
     because `log_ft_wage_mean` is a per-iteration param at estimation
     time (reconstructed from `wage_bias_coeffs_*`), not a fixed one;
     the grid floor must still be known at build time.
-
-    `pref_type_grid` lets callers (e.g. the benchmark) substitute a
-    compact or partition-lifted `DiscreteGrid(...)` for the production
-    `DiscreteGrid(PrefType)`. When `None`, defaults to the production
-    3-type grid with the default `DispatchStrategy.FUSED_VMAP`.
     """
     # Unit-variance standardised shocks: the total_costs / wage
     # formulas rescale these by fixed_params-level std parameters
@@ -237,20 +237,13 @@ def build_grids(
     # grid to have unconditional variance 1, the Rouwenhorst innovation
     # std must be √(1 − ρ²). Passing the σ_y itself (≈0.577 for hcc,
     # 0.5627 for wage) would mis-scale the grid.
-    _WAGE_RHO = 0.977
     wage_res = lcm.shocks.ar1.Rouwenhorst(
         n_points=grid_config.n_wage_res_gridpoints,
         rho=_WAGE_RHO,
         sigma=(1.0 - _WAGE_RHO**2) ** 0.5,
         mu=0.0,
     )
-    _HCC_RHO = 0.925
-    hcc_persistent = lcm.shocks.ar1.Rouwenhorst(
-        n_points=grid_config.n_hcc_persistent_gridpoints,
-        rho=_HCC_RHO,
-        sigma=(1.0 - _HCC_RHO**2) ** 0.5,
-        mu=0.0,
-    )
+    hcc_persistent = get_hcc_persistent_shock(grid_config=grid_config)
     hcc_transitory = lcm.shocks.iid.Normal(
         n_points=grid_config.n_hcc_transitory_gridpoints,
         gauss_hermite=True,
@@ -258,11 +251,9 @@ def build_grids(
         sigma=1.0,
     )
 
-    assets_start = 0.0
-    if wage_params is not None and _has_required_wage_keys(wage_params=wage_params):
-        assets_start = -_compute_max_annual_labor_income(
-            wage_params=wage_params, wage_res_grid=wage_res
-        )
+    assets_start = -_compute_max_annual_labor_income(
+        wage_params=wage_params, wage_res_grid=wage_res
+    )
 
     return Grids(
         assets=LinSpacedGrid(
@@ -272,56 +263,56 @@ def build_grids(
             batch_size=grid_config.n_assets_batch_size,
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
-        consumption=IrregSpacedGrid(
-            points=tuple(
-                float(c)
-                for c in np.geomspace(
-                    _CONSUMPTION_GRID_START,
-                    _CONSUMPTION_GRID_STOP,
-                    num=grid_config.n_consumption_gridpoints,
-                )
-            ),
+        consumption_dollars=IrregSpacedGrid(
+            n_points=grid_config.n_consumption_dollars_gridpoints,
+            extra_param_names=("max_consumption_dollars",),
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
         hcc_transitory=hcc_transitory,
-        pref_type=pref_type_grid or DiscreteGrid(PrefType),
+        pref_type=pref_type_grid,
     )
 
 
+def get_hcc_persistent_shock(*, grid_config: GridConfig) -> lcm.shocks.ar1.Rouwenhorst:
+    """Return the persistent-HCC AR(1) shock grid for a given `grid_config`.
+
+    Exposed so callers that need the shock's gridpoints / transition
+    probs (e.g. `assemble_fixed_params`, the HCC insurer predictor)
+    can derive them from `grid_config` alone without instantiating a
+    full `Model`.
+    """
+    return lcm.shocks.ar1.Rouwenhorst(
+        n_points=grid_config.n_hcc_persistent_gridpoints,
+        rho=_HCC_RHO,
+        sigma=(1.0 - _HCC_RHO**2) ** 0.5,
+        mu=0.0,
+    )
+
+
+def get_hcc_persistent_grid_points(*, grid_config: GridConfig) -> FloatND:
+    """Materialise the persistent-HCC shock gridpoints for `grid_config`."""
+    return get_hcc_persistent_shock(grid_config=grid_config).to_jax()
+
+
 def _build_aime_grid(
-    *, grid_config: GridConfig, fixed_params: Mapping[str, Any] | None
+    *, grid_config: GridConfig, fixed_params: UserParams
 ) -> ContinuousGrid:
     """Return the AIME grid.
 
-    With `pia_aime_grid` available, the grid is piecewise-linspaced with
-    breakpoints at the PIA bends and `_AIME_PIECE_N_POINTS` in each
-    segment. `n_aime_gridpoints` from `grid_config` is ignored on this
-    path; the total is fixed by the PIA structure (32 points). Without
-    the fixed params, falls back to the historical `LinSpacedGrid`.
+    The grid is piecewise-linspaced with breakpoints at the PIA bends
+    in `fixed_params["pia_aime_grid"]` and `_AIME_PIECE_N_POINTS` in
+    each segment. `n_aime_gridpoints` from `grid_config` is ignored on
+    this path; the total is fixed by the PIA structure (32 points).
     """
-    if fixed_params is None or "pia_aime_grid" not in fixed_params:
-        return LinSpacedGrid(
-            start=0.0, stop=8_000.0, n_points=grid_config.n_aime_gridpoints
-        )
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
     pieces = (
         Piece(interval=f"[{kinks[0]}, {kinks[1]})", n_points=_AIME_PIECE_N_POINTS[0]),
         Piece(interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]),
         Piece(interval=f"[{kinks[2]}, {kinks[3]}]", n_points=_AIME_PIECE_N_POINTS[2]),
     )
-    return PiecewiseLinSpacedGrid(pieces=pieces)
-
-
-def _has_required_wage_keys(*, wage_params: Mapping[str, Any]) -> bool:
-    return all(
-        key in wage_params
-        for key in (
-            "log_ft_wage_mean",
-            "log_ft_wage_std",
-            "adj_wage_hours_exp",
-            "adj_wage_hours_int",
-        )
+    return PiecewiseLinSpacedGrid(
+        pieces=pieces, batch_size=grid_config.n_aime_batch_size
     )
 
 
@@ -381,7 +372,7 @@ _ACTIVE_PREDICATES: dict[tuple[str, str, str], Callable[..., Any]] = {
 }
 
 
-def make_active_func(spec: dict[str, str]) -> Callable[..., Any]:
+def make_active_func(spec: RegimeSpec) -> Callable[..., Any]:
     """Return the age predicate for a regime spec."""
     key = (spec["mc"], spec["ss"], spec["canwork"])
     predicate = _ACTIVE_PREDICATES.get(key)
@@ -391,7 +382,7 @@ def make_active_func(spec: dict[str, str]) -> Callable[..., Any]:
     return predicate
 
 
-def build_states(spec: dict[str, str], grids: Grids) -> dict:
+def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     """Build the state dict for a non-dead regime."""
     can_work = spec["canwork"] == "canwork"
 
@@ -414,7 +405,7 @@ def build_states(spec: dict[str, str], grids: Grids) -> dict:
     return states
 
 
-def build_actions(spec: dict[str, str], grids: Grids) -> dict:
+def build_actions(spec: RegimeSpec, grids: Grids) -> dict:
     """Build the action dict for a non-dead regime."""
     actions: dict = {}
     if spec["ss"] == "choose":
@@ -423,7 +414,7 @@ def build_actions(spec: dict[str, str], grids: Grids) -> dict:
         actions["labor_supply"] = DiscreteGrid(LaborSupply)
     if spec["his"] == "nongroup" and spec["mc"] == "nomc":
         actions["buy_private"] = DiscreteGrid(BuyPrivate)
-    actions["consumption"] = grids.consumption
+    actions["consumption_dollars"] = grids.consumption_dollars
     return actions
 
 
@@ -437,14 +428,17 @@ def build_regime_probs(target: FloatND, survival: FloatND) -> FloatND:
 def build_dead_regime(grids: Grids) -> Regime:
     """Build the terminal dead regime.
 
-    `pref_type` is retained as a state so type-indexed preference params
-    (`consumption_weight`, `coefficient_rra`, `utility_scale_factor`) can
-    be indexed by it in the bequest utility.
+    `pref_type` is retained as a state so the pref-type-indexed DAG
+    functions (`consumption_weight`, `coefficient_rra`,
+    `utility_scale_factor`) can resolve their per-cell scalar in the
+    bequest utility.
     """
     return Regime(
         transition=None,
         functions={
-            "utility": utility.dead,
+            "utility": preferences.bequest,
+            "consumption_weight": preferences.consumption_weight,
+            "coefficient_rra": preferences.coefficient_rra,
             "utility_scale_factor": preferences.utility_scale_factor,
         },
         states={
@@ -455,7 +449,7 @@ def build_dead_regime(grids: Grids) -> Regime:
     )
 
 
-def select_ss_benefit(spec: dict[str, str]) -> Callable[..., Any]:
+def select_ss_benefit(spec: RegimeSpec) -> Callable[..., Any]:
     """Select the appropriate SS benefit function for a regime."""
     ss = spec["ss"]
 
@@ -468,21 +462,16 @@ def select_ss_benefit(spec: dict[str, str]) -> Callable[..., Any]:
     return social_security.benefit_inelig_pre65
 
 
-def select_utility(spec: dict[str, str]) -> Callable[..., Any]:
-    """Select the utility function for a regime."""
-    if spec["canwork"] != "canwork":
-        return utility.retired
-    return preferences.utility
-
-
-def _select_leisure(spec: dict[str, str]) -> Callable[..., Any]:
-    """Select the leisure function for a canwork regime."""
+def _select_leisure(spec: RegimeSpec) -> Callable[..., Any]:
+    """Select the leisure function for a non-dead regime."""
+    if spec["canwork"] == "forcedout":
+        return preferences.leisure_forcedout
     if spec["his"] == "tied":
-        return preferences.leisure_tied
-    return preferences.leisure
+        return preferences.leisure_canwork_tied
+    return preferences.leisure_canwork_retiree_or_nongroup
 
 
-def build_common_functions(spec: dict[str, str]) -> dict:
+def build_common_functions(spec: RegimeSpec) -> dict:
     """Build the shared functions dict for a non-dead regime.
 
     Contains all functions common to every HIS type. Per-HIS modules add
@@ -503,17 +492,18 @@ def build_common_functions(spec: dict[str, str]) -> dict:
 
     if can_work:
         functions["working_hours_value"] = labor_market.working_hours_value
-        functions["leisure"] = _select_leisure(spec)
         functions["labor_income"] = labor_market.income
+        functions["fixed_cost_of_work"] = preferences.fixed_cost_of_work
 
+    functions["leisure"] = _select_leisure(spec)
+    functions["utility"] = preferences.u_alive
     functions["capital_income"] = assets_and_income.capital_income
     # spousal_income_amounts is a lookup table param, not a DAG function
     functions["is_married"] = labor_market.is_married
     functions["equivalence_scale"] = preferences.equivalence_scale
     functions["utility_scale_factor"] = preferences.utility_scale_factor
-    # `discount_factor` is a DAG function that indexes the per-type
-    # Series by the pref_type state and returns a scalar. pylcm's
-    # default H picks the scalar up as a DAG-output H input.
+    functions["consumption_weight"] = preferences.consumption_weight
+    functions["coefficient_rra"] = preferences.coefficient_rra
     functions["discount_factor"] = preferences.discount_factor
 
     # PIA from pre-computed lookup table
@@ -545,13 +535,20 @@ def build_common_functions(spec: dict[str, str]) -> dict:
 
     # Cash on hand and transfers
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
+    functions["consumption_dollars_floor"] = assets_and_income.consumption_dollars_floor
     functions["transfers"] = assets_and_income.transfers
+    functions["consumption_equiv"] = preferences.consumption_equiv
 
     return functions
 
 
-def precompute_targets(spec: dict[str, str]) -> dict[str, int]:
-    """Pre-compute target regime IDs for each next-age bracket."""
+def precompute_target_regimes(spec: RegimeSpec) -> MappingProxyType[str, int]:
+    """Pre-compute target regime IDs for each next-age bracket.
+
+    Coerces each `RegimeId.<name>` (`ScalarInt`, post-pylcm#349) to a
+    Python `int` so the returned mapping's values can serve as dict
+    keys and `in`-set members downstream.
+    """
 
     def _resolve(his_val: str, mc_val: str, ss_val: str, canwork_val: str) -> int:
         for name, s in REGIME_SPECS.items():
@@ -561,27 +558,29 @@ def precompute_targets(spec: dict[str, str]) -> dict[str, int]:
                 and s["ss"] == ss_val
                 and s["canwork"] == canwork_val
             ):
-                return getattr(RegimeId, name)
-        return RegimeId.dead
+                return int(getattr(RegimeId, name))
+        return int(RegimeId.dead)
 
     ng_his = "nongroup" if spec["his"] == "tied" else spec["his"]
 
-    return {
-        "forcedout": _resolve(ng_his, "oamc", "forced", "forcedout"),
-        "forcedout_ng": _resolve("nongroup", "oamc", "forced", "forcedout"),
-        "forced_forced": _resolve(spec["his"], "oamc", "forced", "canwork"),
-        "forced_forced_ng": _resolve("nongroup", "oamc", "forced", "canwork"),
-        "forced_choose": _resolve(spec["his"], "oamc", "choose", "canwork"),
-        "forced_choose_ng": _resolve("nongroup", "oamc", "choose", "canwork"),
-        "dimc_choose": _resolve(spec["his"], "dimc", "choose", "canwork"),
-        "dimc_choose_ng": _resolve("nongroup", "dimc", "choose", "canwork"),
-        "nomc_choose": _resolve(spec["his"], "nomc", "choose", "canwork"),
-        "nomc_choose_ng": _resolve("nongroup", "nomc", "choose", "canwork"),
-        "dimc_inelig": _resolve(spec["his"], "dimc", "inelig", "canwork"),
-        "dimc_inelig_ng": _resolve("nongroup", "dimc", "inelig", "canwork"),
-        "nomc_inelig": _resolve(spec["his"], "nomc", "inelig", "canwork"),
-        "nomc_inelig_ng": _resolve("nongroup", "nomc", "inelig", "canwork"),
-    }
+    return MappingProxyType(
+        {
+            "forcedout": _resolve(ng_his, "oamc", "forced", "forcedout"),
+            "forcedout_ng": _resolve("nongroup", "oamc", "forced", "forcedout"),
+            "forced_forced": _resolve(spec["his"], "oamc", "forced", "canwork"),
+            "forced_forced_ng": _resolve("nongroup", "oamc", "forced", "canwork"),
+            "forced_choose": _resolve(spec["his"], "oamc", "choose", "canwork"),
+            "forced_choose_ng": _resolve("nongroup", "oamc", "choose", "canwork"),
+            "dimc_choose": _resolve(spec["his"], "dimc", "choose", "canwork"),
+            "dimc_choose_ng": _resolve("nongroup", "dimc", "choose", "canwork"),
+            "nomc_choose": _resolve(spec["his"], "nomc", "choose", "canwork"),
+            "nomc_choose_ng": _resolve("nongroup", "nomc", "choose", "canwork"),
+            "dimc_inelig": _resolve(spec["his"], "dimc", "inelig", "canwork"),
+            "dimc_inelig_ng": _resolve("nongroup", "dimc", "inelig", "canwork"),
+            "nomc_inelig": _resolve(spec["his"], "nomc", "inelig", "canwork"),
+            "nomc_inelig_ng": _resolve("nongroup", "nomc", "inelig", "canwork"),
+        }
+    )
 
 
 _TARGET_KEYS = (
@@ -597,9 +596,9 @@ _TARGET_KEYS = (
 
 def make_targets(name: str) -> tuple[dict[str, int], dict[str, int]]:
     """Build own and nongroup target subsets for a regime name."""
-    tgts = precompute_targets(REGIME_SPECS[name])
-    own = {k: tgts[k] for k in _TARGET_KEYS}
-    ng = {k: tgts[k + "_ng"] for k in _TARGET_KEYS}
+    target_regimes = precompute_target_regimes(REGIME_SPECS[name])
+    own = {k: target_regimes[k] for k in _TARGET_KEYS}
+    ng = {k: target_regimes[k + "_ng"] for k in _TARGET_KEYS}
     return own, ng
 
 
@@ -638,11 +637,17 @@ def select_target_for_age(
     )
 
 
-def build_state_transitions(spec: dict[str, str]) -> dict:
+def build_state_transitions(spec: RegimeSpec) -> dict:
     """Build the state transitions dict for a non-dead regime."""
     transitions: dict = {}
-    transitions["health"] = _build_per_target_health(spec)
-    transitions["assets"] = assets_and_income.next_assets
+    transitions["assets"] = _build_per_target_regime_assets(spec)
+    transitions["health"] = _build_per_target_regime_health(spec)
+    claimed_ss_transition = _build_per_target_regime_claimed_ss(spec)
+    if claimed_ss_transition:
+        transitions["claimed_ss"] = claimed_ss_transition
+    lagged_labor_supply_transition = _build_per_target_regime_lagged_labor_supply(spec)
+    if lagged_labor_supply_transition:
+        transitions["lagged_labor_supply"] = lagged_labor_supply_transition
     transitions["pref_type"] = None
     transitions["aime"] = (
         social_security.next_aime
@@ -650,28 +655,54 @@ def build_state_transitions(spec: dict[str, str]) -> dict:
         else social_security.next_aime_disabled
     )
     transitions["spousal_income"] = MarkovTransition(labor_market.next_spousal_income)
-    lagged_supply_transition = _build_per_target_lagged_labor_supply(spec)
-    if lagged_supply_transition:
-        transitions["lagged_labor_supply"] = lagged_supply_transition
-    claimed_ss_transition = _build_per_target_claimed_ss(spec)
-    if claimed_ss_transition:
-        transitions["claimed_ss"] = claimed_ss_transition
     return transitions
 
 
-def _build_per_target_health(spec: dict[str, str]) -> dict:
+def _build_per_target_regime_assets(
+    spec: RegimeSpec,
+) -> dict[RegimeName, Callable[..., FloatND]]:
+    """Build per-target assets transitions.
+
+    The `dead` target uses `next_assets_when_dead` (no
+    `pension_assets_adjustment`), so the dead per-target DAG does not
+    pull in the `next_aime`-dependent imputation chain — `dead` has no
+    `aime` state and pylcm cannot resolve `next_aime` there. Non-dead
+    targets use the full `next_assets` with the pension correction.
+    """
+    target_regimes = precompute_target_regimes(spec)
+    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
+
+    result: dict[RegimeName, Callable[..., FloatND]] = {}
+    seen_ids: set[int] = set()
+
+    for target_id in target_regimes.values():
+        if target_id in seen_ids:
+            continue
+        seen_ids.add(target_id)
+        target_name = id_to_name.get(target_id)
+        if target_name is None:
+            continue
+        result[target_name] = assets_and_income.next_assets
+
+    result["dead"] = assets_and_income.next_assets_when_dead
+    return result
+
+
+def _build_per_target_regime_health(
+    spec: RegimeSpec,
+) -> dict[RegimeName, MarkovTransition]:
     """Build per-target health transitions.
 
     Pre-65 regimes use HealthWithDisability (3-state), post-65 use Health (2-state).
     Cross-grid transitions (3->2) happen at the age-65 boundary.
     """
-    targets = precompute_targets(spec)
-    id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
+    target_regimes = precompute_target_regimes(spec)
+    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
-    result: dict[str, MarkovTransition] = {}
+    result: dict[RegimeName, MarkovTransition] = {}
     seen_ids: set[int] = set()
 
-    for target_id in targets.values():
+    for target_id in target_regimes.values():
         if target_id == RegimeId.dead or target_id in seen_ids:
             continue
         seen_ids.add(target_id)
@@ -689,7 +720,9 @@ def _build_per_target_health(spec: dict[str, str]) -> dict:
     return result
 
 
-def _build_per_target_claimed_ss(spec: dict[str, str]) -> dict:
+def _build_per_target_regime_claimed_ss(
+    spec: RegimeSpec,
+) -> dict[RegimeName, Callable[..., BoolND]]:
     """Build per-target claimed_ss transitions.
 
     - `choose` regimes (source has `claimed_ss`): absorbing transition.
@@ -699,13 +732,13 @@ def _build_per_target_claimed_ss(spec: dict[str, str]) -> dict:
     if spec["ss"] in ("forced", "forcedout"):
         return {}
 
-    targets = precompute_targets(spec)
-    id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
+    target_regimes = precompute_target_regimes(spec)
+    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
-    result: dict = {}
+    result: dict[RegimeName, Callable[..., BoolND]] = {}
     seen_ids: set[int] = set()
 
-    for target_id in targets.values():
+    for target_id in target_regimes.values():
         if target_id == RegimeId.dead or target_id in seen_ids:
             continue
         seen_ids.add(target_id)
@@ -724,7 +757,9 @@ def _build_per_target_claimed_ss(spec: dict[str, str]) -> dict:
     return result
 
 
-def _build_per_target_lagged_labor_supply(spec: dict[str, str]) -> dict:
+def _build_per_target_regime_lagged_labor_supply(
+    spec: RegimeSpec,
+) -> dict[RegimeName, Callable[..., BoolND]]:
     """Build per-target lagged_labor_supply transitions.
 
     `lagged_labor_supply` exists in canwork non-tied regimes. Tied regimes
@@ -738,13 +773,13 @@ def _build_per_target_lagged_labor_supply(spec: dict[str, str]) -> dict:
     if spec["canwork"] != "canwork":
         return {}
 
-    targets = precompute_targets(spec)
-    id_to_name = {getattr(RegimeId, name): name for name in REGIME_SPECS}
+    target_regimes = precompute_target_regimes(spec)
+    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
-    result: dict = {}
+    result: dict[RegimeName, Callable[..., BoolND]] = {}
     seen_ids: set[int] = set()
 
-    for target_id in targets.values():
+    for target_id in target_regimes.values():
         if target_id == RegimeId.dead or target_id in seen_ids:
             continue
         seen_ids.add(target_id)

@@ -15,6 +15,7 @@ What remains:
 import jax.numpy as jnp
 from lcm import categorical
 from lcm.typing import (
+    Age,
     BoolND,
     ContinuousState,
     DiscreteAction,
@@ -22,6 +23,9 @@ from lcm.typing import (
     FloatND,
     IntND,
     Period,
+    ScalarBool,
+    ScalarFloat,
+    ScalarInt,
 )
 
 from aca_model.agent.labor_market import LaborSupply
@@ -29,15 +33,15 @@ from aca_model.agent.labor_market import LaborSupply
 
 @categorical(ordered=False)
 class BuyPrivate:
-    no: int
-    yes: int
+    no: ScalarInt
+    yes: ScalarInt
 
 
 @categorical(ordered=False)
 class HealthInsuranceState:
-    retiree: int
-    tied: int
-    nongroup: int
+    retiree: ScalarInt
+    tied: ScalarInt
+    nongroup: ScalarInt
 
 
 def countable_income(
@@ -47,8 +51,8 @@ def countable_income(
     spousal_income_amounts: FloatND,
     ss_benefit: FloatND,
     pension_benefit: FloatND,
-    ssi_ignored_overall: float,
-    ssi_ignored_earned: float,
+    ssi_ignored_overall: ScalarFloat,
+    ssi_ignored_earned: ScalarFloat,
 ) -> FloatND:
     """Compute countable income for SSI eligibility test.
 
@@ -69,7 +73,7 @@ def is_ssi_eligible(
     assets: ContinuousState,
     countable_income: FloatND,
     spousal_income: DiscreteState,
-    gets_medicare: bool,
+    gets_medicare: ScalarBool,
     ssi_assets_test: FloatND,
     ssi_maximum_benefit: FloatND,
 ) -> BoolND:
@@ -99,21 +103,21 @@ def ssi_benefit(
 
 
 def premium(
-    age: int,
+    age: Age,
     good_health: IntND,
     is_married: IntND,
     labor_supply: DiscreteAction,
     buy_private: DiscreteAction,
-    premium_intercept: float,
-    premium_age: int,
-    premium_age_sq: float,
-    premium_age_cub: float,
-    premium_predicted_hcc: float,
-    premium_good_health: float,
-    premium_married: float,
-    premium_works: float,
-    premium_married_works: float,
-    premium_minimum: float,
+    premium_intercept: ScalarFloat,
+    premium_age: ScalarFloat,
+    premium_age_sq: ScalarFloat,
+    premium_age_cub: ScalarFloat,
+    premium_predicted_hcc: ScalarFloat,
+    premium_good_health: ScalarFloat,
+    premium_married: ScalarFloat,
+    premium_works: ScalarFloat,
+    premium_married_works: ScalarFloat,
+    premium_minimum: ScalarFloat,
     predicted_hcc_insurer: FloatND,
 ) -> FloatND:
     """Compute health insurance premium for canwork regimes.
@@ -141,20 +145,20 @@ def premium(
 
 
 def premium_insured(
-    age: int,
+    age: Age,
     good_health: IntND,
     is_married: IntND,
     labor_supply: DiscreteAction,
-    premium_intercept: float,
-    premium_age: int,
-    premium_age_sq: float,
-    premium_age_cub: float,
-    premium_predicted_hcc: float,
-    premium_good_health: float,
-    premium_married: float,
-    premium_works: float,
-    premium_married_works: float,
-    premium_minimum: float,
+    premium_intercept: ScalarFloat,
+    premium_age: ScalarFloat,
+    premium_age_sq: ScalarFloat,
+    premium_age_cub: ScalarFloat,
+    premium_predicted_hcc: ScalarFloat,
+    premium_good_health: ScalarFloat,
+    premium_married: ScalarFloat,
+    premium_works: ScalarFloat,
+    premium_married_works: ScalarFloat,
+    premium_minimum: ScalarFloat,
     predicted_hcc_insurer: FloatND,
 ) -> FloatND:
     """Compute health insurance premium for canwork regimes without `buy_private`.
@@ -178,17 +182,17 @@ def premium_insured(
 
 
 def premium_retired(
-    age: int,
+    age: Age,
     good_health: IntND,
     is_married: IntND,
-    premium_intercept: float,
-    premium_age: int,
-    premium_age_sq: float,
-    premium_age_cub: float,
-    premium_predicted_hcc: float,
-    premium_good_health: float,
-    premium_married: float,
-    premium_minimum: float,
+    premium_intercept: ScalarFloat,
+    premium_age: ScalarFloat,
+    premium_age_sq: ScalarFloat,
+    premium_age_cub: ScalarFloat,
+    premium_predicted_hcc: ScalarFloat,
+    premium_good_health: ScalarFloat,
+    premium_married: ScalarFloat,
+    premium_minimum: ScalarFloat,
     predicted_hcc_insurer: FloatND,
 ) -> FloatND:
     """Compute health insurance premium for forcedout regimes.
@@ -209,9 +213,9 @@ def premium_retired(
 
 def oop_costs(
     total_health_costs: FloatND,
-    deductible: float | FloatND,
-    coinsurance_rate: float | FloatND,
-    oop_max: float | FloatND,
+    deductible: ScalarFloat | FloatND,
+    coinsurance_rate: ScalarFloat | FloatND,
+    oop_max: ScalarFloat | FloatND,
 ) -> FloatND:
     """Compute out-of-pocket health care costs.
 
@@ -228,9 +232,9 @@ def oop_costs(
 def primary_oop(
     total_health_costs: FloatND,
     buy_private: DiscreteAction,
-    deductible: float,
-    coinsurance_rate: float,
-    oop_max: float,
+    deductible: ScalarFloat,
+    coinsurance_rate: ScalarFloat,
+    oop_max: ScalarFloat,
 ) -> FloatND:
     """Compute primary OOP costs.
 
@@ -246,12 +250,35 @@ def is_medicaid_eligible(is_ssi_eligible: BoolND) -> BoolND:
     return is_ssi_eligible
 
 
+def target_his(
+    his: IntND,
+    labor_supply: DiscreteAction,
+    is_medicaid_eligible: BoolND,
+) -> IntND:
+    """Return the HIS class of the surviving target regime.
+
+    Mirrors the cross-HIS branches inside `_make_transition_canwork` (retiree,
+    tied, nongroup): tied agents who stop working become nongroup, and
+    Medicaid-eligible agents are overridden to nongroup. Used by
+    `imputed_pension_wealth_next_period` to look up next-period imputation
+    coefficients at the target's HIS.
+    """
+    tied_to_ng = (his == HealthInsuranceState.tied) & (
+        labor_supply == LaborSupply.do_not_work
+    )
+    return jnp.where(
+        tied_to_ng | is_medicaid_eligible,
+        HealthInsuranceState.nongroup,
+        his,
+    ).astype(jnp.int32)
+
+
 def oop_with_medicaid(
     primary_oop: FloatND,
     is_medicaid_eligible: BoolND,
-    deductible_medicaid: float,
-    coinsurance_rate_medicaid: float,
-    oop_max_medicaid: float,
+    deductible_medicaid: ScalarFloat,
+    coinsurance_rate_medicaid: ScalarFloat,
+    oop_max_medicaid: ScalarFloat,
 ) -> FloatND:
     """Apply Medicaid cost-sharing on top of primary insurance OOP costs.
 
@@ -329,7 +356,7 @@ def total_costs(
     log_std: FloatND,
     hcc_persistent: ContinuousState,
     hcc_transitory: ContinuousState,
-    std_xsect_persistent: float,
+    std_xsect_persistent: ScalarFloat,
 ) -> FloatND:
     """Compute total health care costs from log-normal model.
 

@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import DiscreteGrid, Regime
+from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import _nongroup as nongroup
 from aca_model.baseline.regimes import _retiree as retiree
@@ -25,7 +26,7 @@ from aca_model.baseline.regimes._common import (
     build_dead_regime,
     build_grids,
 )
-from aca_model.config import GRID_CONFIG, GridConfig
+from aca_model.config import GridConfig
 
 __all__ = [
     "REGIME_SPECS",
@@ -58,23 +59,21 @@ def build_regime(name: str, grids: Grids) -> Regime:
 
 
 def build_all_regimes(
-    grid_config: GridConfig = GRID_CONFIG,
     *,
-    fixed_params: Mapping[str, Any] | None = None,
-    wage_params: Mapping[str, Any] | None = None,
-    pref_type_grid: DiscreteGrid | None = None,
+    grid_config: GridConfig,
+    fixed_params: UserParams,
+    wage_params: Mapping[str, Any],
+    pref_type_grid: DiscreteGrid,
 ) -> dict[str, Regime]:
     """Build all 19 baseline regimes (18 non-terminal + dead).
 
-    `fixed_params` is forwarded to `build_grids` for data-driven AIME
-    breakpoints; `wage_params` for the data-driven assets floor;
-    either being `None` keeps the corresponding static fallback.
-    `pref_type_grid` lets callers inject a compact or partition-lifted
-    `DiscreteGrid(...)` (e.g. the benchmark uses a 2-type
-    `BenchmarkPrefType` with `DispatchStrategy.PARTITION_SCAN`).
+    `fixed_params` carries the PIA bends for the AIME piecewise grid;
+    `wage_params` sizes the assets-floor to `-max_annual_labor_income`;
+    `pref_type_grid` selects the pref-type cardinality (production
+    `DiscreteGrid(PrefType)` or the benchmark's 2-type variant).
     """
     grids = build_grids(
-        grid_config,
+        grid_config=grid_config,
         fixed_params=fixed_params,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,

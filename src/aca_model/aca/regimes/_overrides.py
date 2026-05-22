@@ -8,11 +8,12 @@ consuming functions that need them.
 
 from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
+from aca_model.baseline.regimes._common import RegimeSpec
 
 
 def apply_aca_overrides(
     functions: dict,
-    spec: dict[str, str],
+    spec: RegimeSpec,
     policy: PolicyVariant,
 ) -> None:
     """Override baseline functions with ACA versions in-place.

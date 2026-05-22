@@ -12,13 +12,13 @@ from aca_model.agent import assets_and_income
 from aca_model.environment import pensions
 
 ATOL = 0.01
-RATE_OF_RETURN = 0.03
+RATE_OF_RETURN = jnp.asarray(0.03)
 
 # Pension imputation coefficients — two HIS types with different intercepts.
 # HIS 0 (retiree): intercept = -50, HIS 1 (nongroup): intercept = -80.
 N_PERIODS = 30
 N_HIS = 2
-PERIOD = 20
+PERIOD = jnp.int32(20)
 
 _intercept = jnp.zeros((N_PERIODS, N_HIS))
 _intercept = _intercept.at[PERIOD, 0].set(-50.0)
@@ -62,7 +62,7 @@ def test_benefit_wealth_dag() -> None:
     result = combined(
         pia=jnp.array(500.0),
         period=PERIOD,
-        his=0,
+        his=jnp.int32(0),
         epdv_constant_pension=EPDV,
         **IMP_KWARGS,
     )
@@ -80,7 +80,7 @@ def test_total_to_pia_inverts_benefit_via_dag() -> None:
     recovered = combined(
         pia=jnp.array(8000.0),
         period=PERIOD,
-        his=0,
+        his=jnp.int32(0),
         marginal_tax_rate=jnp.array(0.2),
         **IMP_KWARGS,
     )
@@ -95,7 +95,7 @@ def test_next_assets_includes_pension_adjustment() -> None:
         cash_on_hand=jnp.array(100_000.0),
         transfers=jnp.array(0.0),
         pension_assets_adjustment=jnp.array(5_000.0),
-        consumption=jnp.array(80_000.0),
+        consumption_dollars=jnp.array(80_000.0),
         oop_costs=jnp.array(0.0),
     )
     assert jnp.isclose(result, 25_000.0, atol=ATOL)
@@ -103,7 +103,7 @@ def test_next_assets_includes_pension_adjustment() -> None:
 
 def test_zero_adjustment_when_his_unchanged() -> None:
     """Pension adjustment is zero when HIS doesn't change."""
-    his = 0
+    his = jnp.int32(0)
     pia = jnp.array(8000.0)
     labor_income = jnp.array(30_000.0)
     mtr = jnp.array(0.2)
@@ -149,8 +149,8 @@ def test_rebalancing_preserves_total_wealth_across_his_change() -> None:
     from HIS 0 (retiree) to HIS 1 (nongroup), the pension imputation changes.
     The assets_adjustment compensates so total wealth is preserved.
     """
-    old_his = 0
-    new_his = 1
+    old_his = jnp.int32(0)
+    new_his = jnp.int32(1)
     pia = jnp.array(8000.0)
     labor_income = jnp.array(30_000.0)
     mtr = jnp.array(0.0)
