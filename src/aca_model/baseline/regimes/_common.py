@@ -449,7 +449,7 @@ def build_dead_regime(grids: Grids) -> Regime:
             "utility_scale_factor": preferences.utility_scale_factor,
         },
         states={
-            "assets": grids.assets,
+            "assets": grids.assets.replace(distributed=False),
             "pref_type": grids.pref_type,
         },
         active=lambda _age: True,
