@@ -28,7 +28,6 @@ dependencies = [
   "beartype",
   "cloudpickle",
   "dags",
-  "estimagic",
   "jax>=0.9",
   "jaxtyping",
   "numpy>=2.2",
