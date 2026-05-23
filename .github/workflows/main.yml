@@ -30,10 +30,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pylcm (pinned to the phase-2 branch until it merges to main)
+      - name: Install pylcm (pinned to feat/distributed-V-arrays / PR #364 until it merges to main)
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@refactor/phase-2-api-reorganisation"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@feat/distributed-V-arrays"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest
