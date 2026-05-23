@@ -40,6 +40,13 @@ class GridConfig:
     # BENCHMARK_GRID_CONFIG to skip the Python-loop overhead.
     n_assets_batch_size: int = 1
     n_aime_batch_size: int = 1
+    # `batch_size` on the `pref_type` discrete grid: chunked vmap stride
+    # for the pref-type axis during solve. `1` (one pref-type per Python
+    # dispatch) shrinks the per-period Q intermediate by `n_pref_types`
+    # at the cost of an outer Python loop; `0` lets a single kernel span
+    # all pref-types. Defaults to `0` — the production overrides set it
+    # to `1` on hardware where the unsplayed kernel doesn't fit.
+    n_pref_type_batch_size: int = 0
     # Per-device chunk size for the simulate-side per-subject dispatch,
     # keyed by `log_level`. Empty → 0 (no chunking) for every level.
     # `log_level="off"` skips `validate_V` and its forced host-sync, which
