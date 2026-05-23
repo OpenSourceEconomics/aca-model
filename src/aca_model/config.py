@@ -1,7 +1,8 @@
 """Configuration for the aca_model package."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 
 import plotly.io as pio
 from pytask import DataCatalog
@@ -39,6 +40,22 @@ class GridConfig:
     # BENCHMARK_GRID_CONFIG to skip the Python-loop overhead.
     n_assets_batch_size: int = 1
     n_aime_batch_size: int = 1
+    # Per-device chunk size for the simulate-side per-subject dispatch,
+    # keyed by `log_level`. Empty → 0 (no chunking) for every level.
+    # `log_level="off"` skips `validate_V` and its forced host-sync, which
+    # lets XLA pipeline across periods and reuse scratch — affordable
+    # chunk size grows. Use `get_subjects_batch_size(log_level)`.
+    subjects_batch_size_by_log_level: MappingProxyType[str, int] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+
+    def get_subjects_batch_size(self, log_level: str) -> int:
+        """Return the per-device simulate chunk size for `log_level`.
+
+        Returns 0 (no chunking) when this `GridConfig` defines no entry for
+        the given log level.
+        """
+        return self.subjects_batch_size_by_log_level.get(log_level, 0)
 
 
 MODEL_CONFIG = ModelConfig()
