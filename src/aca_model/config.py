@@ -35,10 +35,12 @@ class GridConfig:
     n_hcc_persistent_gridpoints: int = 3
     n_hcc_transitory_gridpoints: int = 5
     # `batch_size` on the assets / AIME grids: chunked vmap stride for the
-    # outer state loop. Both partition the per-period Q intermediate so it
-    # fits in V100 16 GB once we splay across `pref_type`. Set to 0 in
-    # BENCHMARK_GRID_CONFIG to skip the Python-loop overhead.
-    n_assets_batch_size: int = 1
+    # outer state loop. The assets axis is hardcoded `distributed=True`
+    # in regimes, so `n_assets_batch_size` must stay `0` — `>0 + distributed`
+    # is rejected by pylcm's grid-init guard. `n_aime_batch_size` is free
+    # to splay; `1` shrinks the per-period Q intermediate by 12x on hosts
+    # where the unsplayed kernel doesn't fit.
+    n_assets_batch_size: int = 0
     n_aime_batch_size: int = 1
     # `batch_size` on the `pref_type` discrete grid: chunked vmap stride
     # for the pref-type axis during solve. `1` (one pref-type per Python
