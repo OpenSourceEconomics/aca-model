@@ -58,18 +58,6 @@ def test_dead_regime_is_terminal() -> None:
     assert model.user_regimes["dead"].terminal
 
 
-def test_dead_regime_assets_grid_not_distributed() -> None:
-    """The terminal `dead` regime declares its `assets` grid non-distributed.
-
-    `dead` carries only a tiny `[pref_type, assets]` value function;
-    sharding its assets axis across devices buys nothing and makes its
-    V-array sharding disagree with what the multi-GPU solve produces for
-    the regimes that transition into it.
-    """
-    dead = build_regime("dead")
-    assert dead.states["assets"].distributed is False
-
-
 def test_non_terminal_regimes_not_terminal() -> None:
     model = make_baseline_model(n_subjects=1)
     for name in REGIME_SPECS:
