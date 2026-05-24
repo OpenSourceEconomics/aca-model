@@ -72,8 +72,8 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
 
     df = result.to_dataframe(additional_targets=["cash_on_hand", "equivalence_scale"])
     alive = df.loc[df["regime_name"] != "dead"].copy()
-    consumption_dollars_floor = float(params["consumption_dollars_floor"])
-    floor = consumption_dollars_floor * alive["equivalence_scale"].to_numpy()
+    consumption_equiv_floor = float(params["consumption_equiv_floor"])
+    floor = consumption_equiv_floor * alive["equivalence_scale"].to_numpy()
     rhs = np.maximum(alive["cash_on_hand"].to_numpy(), floor)
     slack = rhs - alive["consumption_dollars"].to_numpy()
     assert (slack >= 0).all(), (
