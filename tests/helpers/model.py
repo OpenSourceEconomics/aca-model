@@ -2,7 +2,7 @@
 
 Used by tests that need a structurally faithful model without spelling
 out fixed_params, wage_params, and a pref-type grid at every call site.
-Production callers (aca-estimation, scripts) assemble these explicitly.
+Production callers (aca-slurm, scripts) assemble these explicitly.
 """
 
 from lcm import DiscreteGrid, Model
