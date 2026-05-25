@@ -242,6 +242,7 @@ def build_grids(
         rho=_WAGE_RHO,
         sigma=(1.0 - _WAGE_RHO**2) ** 0.5,
         mu=0.0,
+        batch_size=grid_config.n_wage_res_batch_size,
     )
     hcc_persistent = get_hcc_persistent_shock(grid_config=grid_config)
     hcc_transitory = NormalIIDProcess(

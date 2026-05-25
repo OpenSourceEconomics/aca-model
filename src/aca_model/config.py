@@ -42,6 +42,14 @@ class GridConfig:
     # all pref-types. Defaults to `0` — the production overrides set it
     # to `1` on hardware where the unsplayed kernel doesn't fit.
     n_pref_type_batch_size: int = 0
+    # `batch_size` on the `wage_res` stochastic shock process: chunked
+    # productmap stride along the wage-residual stoch axis inside Q_and_F.
+    # `1` shrinks the per-target Q intermediate by `n_wage_res_gridpoints`
+    # at the cost of an inner Python loop; `0` lets the productmap span
+    # the full axis. Defaults to `0` — production overrides set it to `1`
+    # on hardware where the ACA-overlay per-cell DAG blows the kernel's
+    # compile-time working set past device HBM.
+    n_wage_res_batch_size: int = 0
     # Per-device chunk size for the simulate-side per-subject dispatch,
     # keyed by `log_level`. Empty → 0 (no chunking) for every level.
     # `log_level="off"` skips `validate_V` and its forced host-sync, which
