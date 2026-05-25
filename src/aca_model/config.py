@@ -28,13 +28,21 @@ class GridConfig:
     n_hcc_persistent_gridpoints: int = 3
     n_hcc_transitory_gridpoints: int = 5
     # `batch_size` on the assets / AIME grids: chunked vmap stride for the
-    # outer state loop. The assets axis is hardcoded `distributed=True`
-    # in regimes, so `n_assets_batch_size` must stay `0` — `>0 + distributed`
-    # is rejected by pylcm's grid-init guard. `n_aime_batch_size` is free
-    # to splay; `1` shrinks the per-period Q intermediate by 12x on hosts
-    # where the unsplayed kernel doesn't fit.
+    # outer state loop. `n_assets_batch_size > 0` is rejected by pylcm's
+    # grid-init guard when `assets_distributed=True` (pylcm forbids
+    # batching a distributed axis); set both consistently. `n_aime_batch_size`
+    # is independent; `1` shrinks the per-period Q intermediate by 12x on
+    # hosts where the unsplayed kernel doesn't fit.
     n_assets_batch_size: int = 0
     n_aime_batch_size: int = 1
+    # Sharding flags for the assets and pref_type grids: pylcm distributes
+    # the grid across devices when `distributed=True`. Only one strategy
+    # can be active per run (pylcm's multi-grid sharding requires
+    # `prod(grid_sizes) == n_devices`, so combining is infeasible at the
+    # production state-grid sizes). The default keeps the legacy assets-
+    # sharded layout; the production override flips to pref_type-sharded.
+    assets_distributed: bool = True
+    pref_type_distributed: bool = False
     # `batch_size` on the `pref_type` discrete grid: chunked vmap stride
     # for the pref-type axis during solve. `1` (one pref-type per Python
     # dispatch) shrinks the per-period Q intermediate by `n_pref_types`
