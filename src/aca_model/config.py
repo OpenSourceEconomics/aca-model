@@ -43,6 +43,19 @@ class GridConfig:
     # sharded layout; the production override flips to pref_type-sharded.
     assets_distributed: bool = True
     pref_type_distributed: bool = False
+    # `batch_size` on the inline-constructed discrete state grids
+    # (health, spousal_income, lagged_labor_supply, claimed_ss). These
+    # are read in `build_states` via `grids.grid_config`. `1` puts each
+    # axis in a Python-level outer loop within the discrete-states block
+    # of the productmap (`_ordered_state_action_names`), shrinking the
+    # per-call Q intermediate by that axis's cardinality at the cost of
+    # one extra lax.scan layer. Defaults to `0`; production overrides
+    # set to `1` to compound the splay across all discretes outside
+    # the sharded one.
+    n_health_batch_size: int = 0
+    n_spousal_income_batch_size: int = 0
+    n_lagged_labor_supply_batch_size: int = 0
+    n_claimed_ss_batch_size: int = 0
     # `batch_size` on the `pref_type` discrete grid: chunked vmap stride
     # for the pref-type axis during solve. `1` (one pref-type per Python
     # dispatch) shrinks the per-period Q intermediate by `n_pref_types`

@@ -196,6 +196,11 @@ class Grids:
     hcc_persistent: Any
     hcc_transitory: Any
     pref_type: DiscreteGrid
+    grid_config: GridConfig
+    """The originating `GridConfig`. Exposed on `Grids` so `build_states`
+    can read per-axis `batch_size` settings for the discrete states it
+    constructs inline (health, spousal_income, lagged_labor_supply,
+    claimed_ss) without changing the `build_states`/`build_regime` API."""
 
 
 # AIME piecewise grid: number of points per segment between the PIA
@@ -272,6 +277,7 @@ def build_grids(
         hcc_persistent=hcc_persistent,
         hcc_transitory=hcc_transitory,
         pref_type=pref_type_grid,
+        grid_config=grid_config,
     )
 
 
@@ -392,23 +398,31 @@ def make_active_func(spec: RegimeSpec) -> Callable[..., Any]:
 def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     """Build the state dict for a non-dead regime."""
     can_work = spec["canwork"] == "canwork"
+    gc = grids.grid_config
 
     states: dict = {}
     states["assets"] = grids.assets
     states["aime"] = grids.aime
     states["health"] = DiscreteGrid(
-        Health if spec["mc"] == "oamc" else HealthWithDisability
+        Health if spec["mc"] == "oamc" else HealthWithDisability,
+        batch_size=gc.n_health_batch_size,
     )
     states["hcc_persistent"] = grids.hcc_persistent
     states["hcc_transitory"] = grids.hcc_transitory
-    states["spousal_income"] = DiscreteGrid(SpousalIncome)
+    states["spousal_income"] = DiscreteGrid(
+        SpousalIncome, batch_size=gc.n_spousal_income_batch_size
+    )
     states["pref_type"] = grids.pref_type
     if can_work:
         states["log_ft_wage_res"] = grids.wage_res
     if can_work and spec["his"] != "tied":
-        states["lagged_labor_supply"] = DiscreteGrid(LaggedLaborSupply)
+        states["lagged_labor_supply"] = DiscreteGrid(
+            LaggedLaborSupply, batch_size=gc.n_lagged_labor_supply_batch_size
+        )
     if spec["ss"] == "choose":
-        states["claimed_ss"] = DiscreteGrid(ClaimedSS)
+        states["claimed_ss"] = DiscreteGrid(
+            ClaimedSS, batch_size=gc.n_claimed_ss_batch_size
+        )
     return states
 
 
