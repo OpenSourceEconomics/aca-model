@@ -4,16 +4,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-import plotly.io as pio
-from pytask import DataCatalog
-
 SRC = Path(__file__).parent.resolve()
 ROOT = SRC.parents[1]
 BLD = ROOT / "bld"
-
-data_catalog = DataCatalog()
-
-pio.templates.default = "plotly_dark+presentation"
 
 
 @dataclass(frozen=True)
