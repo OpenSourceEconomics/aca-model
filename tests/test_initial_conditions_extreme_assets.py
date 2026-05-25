@@ -8,7 +8,7 @@ how negative starting assets are. The model's constraints — and pylcm's
 """
 
 import jax.numpy as jnp
-from _lcm.simulation.initial_conditions import validate_initial_conditions
+from lcm.model import validate_initial_conditions
 from lcm import DiscreteGrid
 
 from aca_model.agent.assets_and_income import borrowing_constraint

@@ -11,7 +11,6 @@ from typing import Any, Literal, TypedDict
 
 import jax.numpy as jnp
 import numpy as np
-from _lcm.grids.continuous import ContinuousGrid
 from lcm import (
     DiscreteGrid,
     IrregSpacedGrid,
@@ -191,8 +190,8 @@ config = MODEL_CONFIG
 @dataclass(frozen=True)
 class Grids:
     assets: LinSpacedGrid
-    aime: ContinuousGrid
-    consumption_dollars: ContinuousGrid
+    aime: PiecewiseLinSpacedGrid
+    consumption_dollars: IrregSpacedGrid
     wage_res: Any
     hcc_persistent: Any
     hcc_transitory: Any
@@ -298,7 +297,7 @@ def get_hcc_persistent_grid_points(*, grid_config: GridConfig) -> FloatND:
 
 def _build_aime_grid(
     *, grid_config: GridConfig, fixed_params: UserParams
-) -> ContinuousGrid:
+) -> PiecewiseLinSpacedGrid:
     """Return the AIME grid.
 
     The grid is piecewise-linspaced with breakpoints at the PIA bends
