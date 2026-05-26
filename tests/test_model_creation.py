@@ -1,6 +1,7 @@
 """Tests for baseline model creation and regime structure."""
 
 from collections.abc import Mapping
+from dataclasses import replace
 
 import pytest
 from helpers.model import make_aca_model, make_baseline_model
@@ -274,3 +275,38 @@ def test_baseline_model_creates() -> None:
     """Baseline model creates successfully without PolicyVariant."""
     model = make_baseline_model(n_subjects=1)
     assert len(model.user_regimes) == 19
+
+
+@pytest.mark.parametrize(
+    ("config_field", "state_name"),
+    [
+        ("lagged_labor_supply_distributed", "lagged_labor_supply"),
+        ("claimed_ss_distributed", "claimed_ss"),
+        ("spousal_income_distributed", "spousal_income"),
+    ],
+)
+def test_discrete_state_distributed_flag_propagates_to_regime(
+    config_field: str, state_name: str
+) -> None:
+    """`GridConfig.<axis>_distributed=True` sets `distributed=True` on the
+    `DiscreteGrid` for that axis in every regime that carries it."""
+    gc = replace(BENCHMARK_GRID_CONFIG, **{config_field: True})
+    grids = build_grids(
+        grid_config=gc,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
+    regime = _build_regime("retiree_dimc_choose_canwork", grids)
+    assert regime.states[state_name].distributed is True
+
+
+@pytest.mark.parametrize(
+    "state_name",
+    ["lagged_labor_supply", "claimed_ss", "spousal_income"],
+)
+def test_discrete_state_distributed_flag_defaults_to_false(state_name: str) -> None:
+    """`distributed` on inline-built discrete states defaults to `False` so
+    configurations that do not opt in see no behaviour change."""
+    regime = build_regime("retiree_dimc_choose_canwork")
+    assert regime.states[state_name].distributed is False

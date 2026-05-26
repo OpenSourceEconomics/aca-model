@@ -31,12 +31,19 @@ class GridConfig:
     # intermediate by 12x on hosts where the unsplayed kernel doesn't fit.
     n_assets_batch_size: int = 0
     n_aime_batch_size: int = 1
-    # Sharding flag for the `pref_type` discrete grid: pylcm distributes
-    # the grid across devices when `distributed=True`. Sharding is only
-    # supported on discrete state grids; continuous axes (`assets`,
-    # `aime`, `wage_res`, `hcc_*`) compile to an all-gather of the full
-    # V-array per device and are rejected at grid construction.
+    # Sharding flags for discrete state grids. pylcm distributes the
+    # grid across available devices when the flag is `True`. Sharding
+    # is only supported on discrete state grids; continuous axes
+    # (`assets`, `aime`, `wage_res`, `hcc_*`) compile to an all-gather
+    # of the full V-array per device and are rejected at grid
+    # construction. Mutually exclusive with `batch_size>0` on the same
+    # axis (pylcm rejects the combination). The non-`pref_type` flags
+    # route through `baseline/regimes/_common.py:build_states` to the
+    # inline-built `DiscreteGrid(...)` calls.
     pref_type_distributed: bool = False
+    lagged_labor_supply_distributed: bool = False
+    claimed_ss_distributed: bool = False
+    spousal_income_distributed: bool = False
     # `batch_size` on the inline-constructed discrete state grids —
     # health, spousal_income, lagged_labor_supply, claimed_ss. These
     # are read in `build_states` via `grids.grid_config`. Setting any

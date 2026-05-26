@@ -409,18 +409,24 @@ def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     states["hcc_persistent"] = grids.hcc_persistent
     states["hcc_transitory"] = grids.hcc_transitory
     states["spousal_income"] = DiscreteGrid(
-        SpousalIncome, batch_size=gc.n_spousal_income_batch_size
+        SpousalIncome,
+        batch_size=gc.n_spousal_income_batch_size,
+        distributed=gc.spousal_income_distributed,
     )
     states["pref_type"] = grids.pref_type
     if can_work:
         states["log_ft_wage_res"] = grids.wage_res
     if can_work and spec["his"] != "tied":
         states["lagged_labor_supply"] = DiscreteGrid(
-            LaggedLaborSupply, batch_size=gc.n_lagged_labor_supply_batch_size
+            LaggedLaborSupply,
+            batch_size=gc.n_lagged_labor_supply_batch_size,
+            distributed=gc.lagged_labor_supply_distributed,
         )
     if spec["ss"] == "choose":
         states["claimed_ss"] = DiscreteGrid(
-            ClaimedSS, batch_size=gc.n_claimed_ss_batch_size
+            ClaimedSS,
+            batch_size=gc.n_claimed_ss_batch_size,
+            distributed=gc.claimed_ss_distributed,
         )
     return states
 
