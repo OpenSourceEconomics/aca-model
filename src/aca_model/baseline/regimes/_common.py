@@ -267,7 +267,6 @@ def build_grids(
             stop=500_000.0,
             n_points=grid_config.n_assets_gridpoints,
             batch_size=grid_config.n_assets_batch_size,
-            distributed=grid_config.assets_distributed,
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         consumption_dollars=IrregSpacedGrid(

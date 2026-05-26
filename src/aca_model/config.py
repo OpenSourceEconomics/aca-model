@@ -28,30 +28,25 @@ class GridConfig:
     n_hcc_persistent_gridpoints: int = 3
     n_hcc_transitory_gridpoints: int = 5
     # `batch_size` on the assets / AIME grids: chunked vmap stride for the
-    # outer state loop. `n_assets_batch_size > 0` is rejected by pylcm's
-    # grid-init guard when `assets_distributed=True` (pylcm forbids
-    # batching a distributed axis); set both consistently. `n_aime_batch_size`
-    # is independent; `1` shrinks the per-period Q intermediate by 12x on
-    # hosts where the unsplayed kernel doesn't fit.
+    # outer state loop. `n_aime_batch_size=1` shrinks the per-period Q
+    # intermediate by 12x on hosts where the unsplayed kernel doesn't fit.
     n_assets_batch_size: int = 0
     n_aime_batch_size: int = 1
-    # Sharding flags for the assets and pref_type grids: pylcm distributes
-    # the grid across devices when `distributed=True`. Only one strategy
-    # can be active per run (pylcm's multi-grid sharding requires
-    # `prod(grid_sizes) == n_devices`, so combining is infeasible at the
-    # production state-grid sizes). The default keeps the legacy assets-
-    # sharded layout; the production override flips to pref_type-sharded.
-    assets_distributed: bool = True
+    # Sharding flag for the `pref_type` discrete grid: pylcm distributes
+    # the grid across devices when `distributed=True`. Sharding is only
+    # supported on discrete state grids; continuous axes (`assets`,
+    # `aime`, `wage_res`, `hcc_*`) compile to an all-gather of the full
+    # V-array per device and are rejected at grid construction.
     pref_type_distributed: bool = False
-    # `batch_size` on the inline-constructed discrete state grids
-    # (health, spousal_income, lagged_labor_supply, claimed_ss). These
-    # are read in `build_states` via `grids.grid_config`. `1` puts each
-    # axis in a Python-level outer loop within the discrete-states block
-    # of the productmap (`_ordered_state_action_names`), shrinking the
-    # per-call Q intermediate by that axis's cardinality at the cost of
-    # one extra lax.scan layer. Defaults to `0`; production overrides
-    # set to `1` to compound the splay across all discretes outside
-    # the sharded one.
+    # `batch_size` on the inline-constructed discrete state grids —
+    # health, spousal_income, lagged_labor_supply, claimed_ss. These
+    # are read in `build_states` via `grids.grid_config`. Setting any
+    # of them to `1` puts that axis in a Python-level outer loop within
+    # the discrete-states block of the productmap
+    # (`_ordered_state_action_names`), shrinking the per-call Q
+    # intermediate by that axis's cardinality at the cost of one extra
+    # lax.scan layer. Defaults to `0`; production overrides set to `1`
+    # to compound the splay across the unsharded discretes.
     n_health_batch_size: int = 0
     n_spousal_income_batch_size: int = 0
     n_lagged_labor_supply_batch_size: int = 0
