@@ -25,7 +25,6 @@ def create_model(
     derived_categoricals: Mapping[str, DiscreteGrid],
     grid_config: GridConfig,
     pref_type_grid: DiscreteGrid,
-    subjects_batch_size: int = 0,
 ) -> Model:
     """Create an ACA policy variant model.
 
@@ -46,10 +45,6 @@ def create_model(
             `pref_type`.
         grid_config: Continuous-grid point counts.
         pref_type_grid: Pref-type `DiscreteGrid`.
-        subjects_batch_size: Per-device chunk size for the simulate-side
-            per-subject dispatch. `0` (default) keeps a single vmap over
-            all subjects; `>0` chunks each device's local shard via
-            `jax.lax.map`. Tune via `grid_config.get_subjects_batch_size(log_level)`.
 
     Returns:
         pylcm Model.
@@ -76,5 +71,4 @@ def create_model(
         fixed_params=fixed_params,
         derived_categoricals=derived_categoricals,
         n_subjects=n_subjects,
-        subjects_batch_size=subjects_batch_size,
     )
