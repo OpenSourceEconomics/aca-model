@@ -7,20 +7,20 @@ from aca_model.environment import social_security
 
 
 def test_equivalence_scale_single() -> None:
-    result = preferences.equivalence_scale(jnp.array(False), jnp.asarray(0.7))
+    result = preferences.equivalence_scale(jnp.int32(0), jnp.asarray(0.7))
     assert jnp.isclose(result, 1.0)
 
 
 def test_equivalence_scale_married() -> None:
-    result = preferences.equivalence_scale(jnp.array(True), jnp.asarray(0.7))
+    result = preferences.equivalence_scale(jnp.int32(1), jnp.asarray(0.7))
     assert jnp.isclose(result, 2.0**0.7)
 
 
 def test_leisure_not_working() -> None:
     result = preferences.leisure_canwork_retiree_or_nongroup(
         working_hours_value=jnp.array(0.0),
-        good_health=jnp.array(1.0),
-        lagged_labor_supply=jnp.array(0),
+        good_health=jnp.int32(1),
+        lagged_labor_supply=jnp.int32(0),
         time_endowment=jnp.asarray(5000.0),
         leisure_cost_of_bad_health=jnp.asarray(500.0),
         fixed_cost_of_work=jnp.asarray(150.0),
@@ -32,8 +32,8 @@ def test_leisure_not_working() -> None:
 def test_leisure_working_good_health() -> None:
     result = preferences.leisure_canwork_retiree_or_nongroup(
         working_hours_value=jnp.array(2000.0),
-        good_health=jnp.array(1.0),
-        lagged_labor_supply=jnp.array(1),
+        good_health=jnp.int32(1),
+        lagged_labor_supply=jnp.int32(1),
         time_endowment=jnp.asarray(5000.0),
         leisure_cost_of_bad_health=jnp.asarray(500.0),
         fixed_cost_of_work=jnp.asarray(150.0),
@@ -47,8 +47,8 @@ def test_leisure_working_good_health() -> None:
 def test_leisure_reentry_cost() -> None:
     result = preferences.leisure_canwork_retiree_or_nongroup(
         working_hours_value=jnp.array(2000.0),
-        good_health=jnp.array(1.0),
-        lagged_labor_supply=jnp.array(0),
+        good_health=jnp.int32(1),
+        lagged_labor_supply=jnp.int32(0),
         time_endowment=jnp.asarray(5000.0),
         leisure_cost_of_bad_health=jnp.asarray(500.0),
         fixed_cost_of_work=jnp.asarray(150.0),
@@ -60,7 +60,7 @@ def test_leisure_reentry_cost() -> None:
 
 def test_leisure_bad_health() -> None:
     result = preferences.leisure_forcedout(
-        good_health=jnp.array(0.0),
+        good_health=jnp.int32(0),
         time_endowment=jnp.asarray(5000.0),
         leisure_cost_of_bad_health=jnp.asarray(500.0),
     )

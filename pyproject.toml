@@ -1,10 +1,9 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = [ "hatchling" ]
+requires = [ "hatch-vcs", "hatchling" ]
 
 [project]
 name = "aca-model"
-version = "0.0.0"
 description = "Core lifecycle model for the ACA structural retirement project."
 readme = { file = "README.md", content-type = "text/markdown" }
 keywords = [
@@ -23,11 +22,12 @@ classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.14",
 ]
+dynamic = [ "version" ]
 dependencies = [
   "attrs",
+  "beartype",
   "cloudpickle",
   "dags",
-  "estimagic",
   "jax>=0.9",
   "jaxtyping",
   "numpy>=2.2",
@@ -43,13 +43,19 @@ email = "hmgaudecker@uni-bonn.de"
 [[project.maintainers]]
 name = "Hans-Martin von Gaudecker"
 email = "hmgaudecker@uni-bonn.de"
+[project.urls]
+Github = "https://github.com/OpenSourceEconomics/aca-model"
+Repository = "https://github.com/OpenSourceEconomics/aca-model"
+Tracker = "https://github.com/OpenSourceEconomics/aca-model/issues"
 
 [tool.hatch]
+version.source = "vcs"
+metadata.allow-direct-references = true
+build.hooks.vcs.version-file = "src/aca_model/_version.py"
 build.targets.sdist.exclude = [ "tests" ]
 build.targets.sdist.only-packages = true
 build.targets.wheel.only-include = [ "src" ]
 build.targets.wheel.sources = [ "src" ]
-metadata.allow-direct-references = true
 
 [tool.ruff]
 fix = true
@@ -84,9 +90,21 @@ extend-ignore = [
   "RUF002",  # Ambiguous Unicode in docstrings (Greek letters in math)
   "RUF003",  # Ambiguous Unicode in comments (Greek letters in math)
 ]
-per-file-ignores."src/aca_model/models/*" = [ "E501" ]
-per-file-ignores."task_*.py" = [ "ANN", "ARG001" ]
-per-file-ignores."tests/*" = [ "D", "E501", "INP001", "PD011", "PLR2004", "S101" ]
+per-file-ignores."src/aca_model/models/*" = [
+  "E501", # Line too long (generated model files)
+]
+per-file-ignores."task_*.py" = [
+  "ANN",    # Type annotations (use ty instead)
+  "ARG001", # Unused function argument (pytask signatures)
+]
+per-file-ignores."tests/*" = [
+  "D",       # Docstrings
+  "E501",    # Line too long
+  "INP001",  # Implicit namespace package
+  "PD011",   # Use of .values (false positives on non-pandas objects)
+  "PLR2004", # Magic value used in comparison
+  "S101",    # Use of assert
+]
 pydocstyle.convention = "google"
 
 [tool.pyproject-fmt]
@@ -111,13 +129,13 @@ rules.unused-ignore-comment = "error"
 
 [tool.pytest]
 ini_options.addopts = '--pdbcls=pdbp:Pdb --ignore-glob=*skip_* -m "not long_running"'
-ini_options.filterwarnings = []
 ini_options.markers = [
   """\
   long_running: Tests that take a lot of time to run (run them via pytest -m \
   long_running).\
   """,
 ]
+ini_options.filterwarnings = []
 
 [tool.yamlfix]
 line_length = 88

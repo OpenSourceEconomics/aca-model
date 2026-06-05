@@ -6,9 +6,12 @@ These functions use vectorized bracket lookups via jnp.searchsorted
 instead of the original Numba for-loops.
 """
 
+from collections.abc import Mapping
+from typing import Any, cast
+
 import jax.numpy as jnp
 from lcm.params import MappingLeaf
-from lcm.typing import DiscreteState, FloatND
+from lcm.typing import DiscreteState, FloatND, IntND
 
 
 def gross_income(
@@ -43,7 +46,7 @@ def taxable_ss_benefit(
     Two-tier system: fraction of benefits subject to income tax depends
     on provisional income relative to bracket thresholds.
     """
-    sched = ss_tax_schedule.data
+    sched = cast("Mapping[str, Any]", ss_tax_schedule.data)
     prov_income = (
         capital_income
         + labor_income
@@ -96,7 +99,7 @@ def after_tax_income(
     Applies federal income tax brackets, then adds back non-taxable SS portion,
     then subtracts payroll tax on labor income.
     """
-    sched = income_tax_schedule.data
+    sched = cast("Mapping[str, Any]", income_tax_schedule.data)
 
     # Find income tax bracket
     bracket_id = _find_bracket(gross_income, sched["brackets_upper"][spousal_income])
@@ -114,7 +117,7 @@ def after_tax_income(
     ati = ati + ss_benefit - taxable_ss_benefit
 
     # Subtract payroll tax
-    psched = payroll_tax_schedule.data
+    psched = cast("Mapping[str, Any]", payroll_tax_schedule.data)
     payroll = _payroll_tax(
         labor_income,
         psched["brackets_lower"],
@@ -131,12 +134,12 @@ def marginal_rate(
     income_tax_schedule: MappingLeaf,
 ) -> FloatND:
     """Compute the marginal income tax rate for pension adjustments."""
-    sched = income_tax_schedule.data
+    sched = cast("Mapping[str, Any]", income_tax_schedule.data)
     bracket_id = _find_bracket(gross_income, sched["brackets_upper"][spousal_income])
     return sched["marginal_rates"][spousal_income, bracket_id]
 
 
-def _find_bracket(income: FloatND, upper_bounds: FloatND) -> FloatND:
+def _find_bracket(income: FloatND, upper_bounds: FloatND) -> IntND:
     """Find the tax bracket index for a given income level."""
     return jnp.searchsorted(upper_bounds, income, side="right")
 

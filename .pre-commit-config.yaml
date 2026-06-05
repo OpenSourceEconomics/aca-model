@@ -2,10 +2,12 @@
 repos:
   - repo: meta
     hooks:
-      - id: check-hooks-apply
+      # check-hooks-apply is omitted: aca-model ships no notebooks yet, so the
+      # boilerplate nbstripout hook matches nothing and that meta check would
+      # fail. Re-add it once the repo gains a notebook.
       - id: check-useless-excludes
   - repo: https://github.com/tox-dev/pyproject-fmt
-    rev: v2.21.1
+    rev: v2.23.0
     hooks:
       - id: pyproject-fmt
   - repo: https://github.com/lyz-code/yamlfix
@@ -37,6 +39,7 @@ repos:
       - id: name-tests-test
         args:
           - --pytest-test-first
+        exclude: ^tests/helpers/
       - id: no-commit-to-branch
         args:
           - --branch
@@ -46,8 +49,12 @@ repos:
     rev: v1.38.0
     hooks:
       - id: yamllint
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.2
+    hooks:
+      - id: check-github-workflows
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: v0.15.16
     hooks:
       - id: ruff-check
         args:
@@ -61,6 +68,13 @@ repos:
           - jupyter
           - pyi
           - python
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.9.1
+    hooks:
+      - id: nbstripout
+        args:
+          - --extra-keys
+          - metadata.kernelspec metadata.language_info.version metadata.vscode
   - repo: https://github.com/executablebooks/mdformat
     rev: 1.0.0
     hooks:

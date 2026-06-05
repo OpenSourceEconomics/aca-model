@@ -45,8 +45,8 @@ def test_tied_stop_working_becomes_nongroup() -> None:
     transition = tied_canwork(gets_medicare=False, own=own, ng=ng)
 
     probs = transition(
-        age=55,
-        period=4,
+        age=jnp.int32(55),
+        period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.do_not_work),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
@@ -62,8 +62,8 @@ def test_tied_keeps_working_stays_tied() -> None:
     transition = tied_canwork(gets_medicare=False, own=own, ng=ng)
 
     probs = transition(
-        age=55,
-        period=4,
+        age=jnp.int32(55),
+        period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
@@ -81,8 +81,8 @@ def test_retiree_medicaid_override_to_nongroup() -> None:
     transition = retiree_canwork(gets_medicare=False, own=own, ng=ng)
 
     probs = transition(
-        age=55,
-        period=4,
+        age=jnp.int32(55),
+        period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
@@ -97,8 +97,8 @@ def test_retiree_not_medicaid_stays_retiree() -> None:
     transition = retiree_canwork(gets_medicare=False, own=own, ng=ng)
 
     probs = transition(
-        age=55,
-        period=4,
+        age=jnp.int32(55),
+        period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
@@ -113,8 +113,8 @@ def test_retiree_forcedout_medicaid_override() -> None:
     transition = retiree_forcedout(gets_medicare=True, own=own, ng=ng)
 
     probs = transition(
-        age=80,
-        period=29,
+        age=jnp.int32(80),
+        period=jnp.int32(29),
         is_medicaid_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
     )
@@ -150,9 +150,9 @@ def test_retiree_age_bracket_transitions(
     own, ng = make_targets("retiree_nomc_inelig_canwork")
     transition = retiree_canwork(gets_medicare=False, own=own, ng=ng)
 
-    period = int(age - MODEL_CONFIG.start_age)
+    period = jnp.int32(age - MODEL_CONFIG.start_age)
     probs = transition(
-        age=age,
+        age=jnp.asarray(age),
         period=period,
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(False),
@@ -171,8 +171,8 @@ def test_nongroup_canwork_valid_probs() -> None:
     transition = nongroup_canwork(gets_medicare=False, own=own)
 
     probs = transition(
-        age=55,
-        period=4,
+        age=jnp.int32(55),
+        period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
         survival_probs=SURVIVAL,
     )
@@ -186,8 +186,8 @@ def test_nongroup_forcedout_valid_probs() -> None:
     transition = nongroup_forcedout(gets_medicare=True, own=own)
 
     probs = transition(
-        age=80,
-        period=29,
+        age=jnp.int32(80),
+        period=jnp.int32(29),
         survival_probs=SURVIVAL,
     )
     assert jnp.isclose(jnp.sum(probs), 1.0, atol=1e-6)
@@ -203,8 +203,8 @@ def test_tied_medicaid_override_to_nongroup() -> None:
     transition = tied_canwork(gets_medicare=False, own=own, ng=ng)
 
     probs = transition(
-        age=55,
-        period=4,
+        age=jnp.int32(55),
+        period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
@@ -218,9 +218,9 @@ def test_tied_at_medicare_age_with_medicaid() -> None:
     own, ng = make_targets("tied_nomc_choose_canwork")
     transition = tied_canwork(gets_medicare=False, own=own, ng=ng)
 
-    period = int(64 - MODEL_CONFIG.start_age)
+    period = jnp.int32(64 - MODEL_CONFIG.start_age)
     probs = transition(
-        age=64,
+        age=jnp.int32(64),
         period=period,
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(True),
@@ -238,8 +238,8 @@ def test_survival_prob_determines_death_weight() -> None:
 
     survival = jnp.ones(N_PERIODS) * 0.85
     probs = transition(
-        age=55,
-        period=4,
+        age=jnp.int32(55),
+        period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=survival,

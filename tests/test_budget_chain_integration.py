@@ -53,12 +53,12 @@ def test_working_agent_cash_on_hand() -> None:
 
     result = combined(
         assets=jnp.array(50000.0),
-        rate_of_return=0.03,
+        rate_of_return=jnp.asarray(0.03),
         labor_income=jnp.array(40000.0),
         spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
         ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
-        spousal_income=jnp.array(0),
+        spousal_income=jnp.int32(0),
         income_tax_schedule=INCOME_TAX_SCHEDULE,
         payroll_tax_schedule=PAYROLL_TAX_SCHEDULE,
         ss_tax_schedule=SS_TAX_SCHEDULE,
@@ -87,12 +87,12 @@ def test_retired_agent_with_pension() -> None:
 
     result = combined(
         assets=jnp.array(200000.0),
-        rate_of_return=0.03,
+        rate_of_return=jnp.asarray(0.03),
         labor_income=jnp.array(0.0),
         spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
         ss_benefit=jnp.array(15000.0),
         pension_benefit=jnp.array(10000.0),
-        spousal_income=jnp.array(0),
+        spousal_income=jnp.int32(0),
         income_tax_schedule=INCOME_TAX_SCHEDULE,
         payroll_tax_schedule=PAYROLL_TAX_SCHEDULE,
         ss_tax_schedule=SS_TAX_SCHEDULE,

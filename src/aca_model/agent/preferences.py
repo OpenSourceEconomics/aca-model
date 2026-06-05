@@ -140,9 +140,10 @@ def u_alive(
     coefficient_rra: FloatND,
     utility_scale_factor: FloatND,
 ) -> FloatND:
-    """Within-period utility for every non-dead regime: CES over consumption and leisure.
+    """Within-period utility for every non-dead regime.
 
-    `leisure` is a DAG input — supplied per-regime by `leisure_canwork_retiree_or_nongroup`,
+    CES over consumption and leisure. `leisure` is a DAG input — supplied
+    per-regime by `leisure_canwork_retiree_or_nongroup`,
     `leisure_canwork_tied`, or `leisure_forcedout`.
     """
     composite = consumption_equiv**consumption_weight * leisure ** (

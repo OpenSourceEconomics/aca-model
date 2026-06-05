@@ -6,7 +6,9 @@ scale factor). These replace the simpler baseline versions via function
 swapping in the regime DAG.
 """
 
+from collections.abc import Mapping
 from enum import Enum, auto
+from typing import Any, cast
 
 import jax.numpy as jnp
 from lcm.params import MappingLeaf
@@ -43,7 +45,7 @@ def mandate_penalty(
     Penalty = clip(income * income_fraction, min, max) if uninsured and
     income above exemption threshold; 0 otherwise.
     """
-    sched = mandate_schedule.data
+    sched = cast("Mapping[str, Any]", mandate_schedule.data)
     is_uninsured = buy_private == BuyPrivate.no
     exempt = gross_income < sched["exempt_income"][spousal_income]
     raw = jnp.clip(
@@ -67,7 +69,7 @@ def premium_subsidy(
     FPL kink points, subsidy = max(0, premium - income * applicable_rate).
     Return 0 when buy_private==no or income outside 100-400% FPL range.
     """
-    sched = premium_credit_schedule.data
+    sched = cast("Mapping[str, Any]", premium_credit_schedule.data)
     kinks = sched["kinks"]  # [n_kinks, 3]
     frac_income = sched["frac_income"]  # [n_kinks]
 
@@ -92,7 +94,7 @@ def cost_sharing(
     Applied to deductible, coinsurance, and OOP max.
     Return 1.0 when buy_private==no (no reduction for uninsured).
     """
-    sched = cost_sharing_schedule.data
+    sched = cast("Mapping[str, Any]", cost_sharing_schedule.data)
     kinks = sched["kinks"]  # [n_kinks, 3]
     factors = sched["factors"]  # [n_kinks + 1]
     bracket = jnp.searchsorted(kinks[:, spousal_income], gross_income, side="right")
@@ -111,7 +113,8 @@ def is_medicaid_eligible(
     Unlike baseline SSI-based Medicaid, ACA expansion uses only income
     (no assets test, no Medicare requirement).
     """
-    threshold = medicaid_schedule.data["income_threshold"]
+    sched = cast("Mapping[str, Any]", medicaid_schedule.data)
+    threshold = sched["income_threshold"]
     return countable_income < threshold[spousal_income]
 
 

@@ -1,9 +1,13 @@
 """Tests for baseline model creation and regime structure."""
 
 from collections.abc import Mapping
+from dataclasses import replace
 
 import pytest
-from helpers.model import make_aca_model, make_baseline_model
+from helpers.model import (  # ty: ignore[unresolved-import]
+    make_aca_model,
+    make_baseline_model,
+)
 from lcm import DiscreteGrid
 
 from aca_model.aca import health_insurance as aca_hi
@@ -43,7 +47,7 @@ def build_regime(name: str):
 
 def test_model_creates_successfully() -> None:
     model = make_baseline_model(n_subjects=1)
-    assert len(model.regimes) == 19
+    assert len(model.user_regimes) == 19
     assert model.n_periods == 45
 
 
@@ -55,13 +59,13 @@ def test_model_age_range() -> None:
 
 def test_dead_regime_is_terminal() -> None:
     model = make_baseline_model(n_subjects=1)
-    assert model.regimes["dead"].terminal
+    assert model.user_regimes["dead"].terminal
 
 
 def test_non_terminal_regimes_not_terminal() -> None:
     model = make_baseline_model(n_subjects=1)
     for name in REGIME_SPECS:
-        assert not model.regimes[name].terminal
+        assert not model.user_regimes[name].terminal
 
 
 def test_regime_id_dead_is_last() -> None:
@@ -192,7 +196,7 @@ def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
 
 def test_aca_model_creates_successfully() -> None:
     model = make_aca_model(n_subjects=1, policy=PolicyVariant.ACA)
-    assert len(model.regimes) == 19
+    assert len(model.user_regimes) == 19
     assert model.n_periods == 45
 
 
@@ -233,7 +237,7 @@ def test_aca_other_regimes_have_no_aca_policy_keys() -> None:
 def test_all_policy_variants_create(policy: PolicyVariant) -> None:
     """All policy variants create valid models."""
     model = make_aca_model(n_subjects=1, policy=policy)
-    assert len(model.regimes) == 19
+    assert len(model.user_regimes) == 19
 
 
 def test_aca_no_medicaid_expansion_keeps_baseline_medicaid() -> None:
@@ -273,4 +277,37 @@ def test_aca_only_medicaid_expansion() -> None:
 def test_baseline_model_creates() -> None:
     """Baseline model creates successfully without PolicyVariant."""
     model = make_baseline_model(n_subjects=1)
-    assert len(model.regimes) == 19
+    assert len(model.user_regimes) == 19
+
+
+@pytest.mark.parametrize(
+    ("config_field", "state_name"),
+    [
+        ("spousal_income_distributed", "spousal_income"),
+    ],
+)
+def test_discrete_state_distributed_flag_propagates_to_regime(
+    config_field: str, state_name: str
+) -> None:
+    """`GridConfig.<axis>_distributed=True` sets `distributed=True` on the
+    `DiscreteGrid` for that axis in every regime that carries it."""
+    gc = replace(BENCHMARK_GRID_CONFIG, **{config_field: True})
+    grids = build_grids(
+        grid_config=gc,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
+    regime = _build_regime("retiree_dimc_choose_canwork", grids)
+    assert regime.states[state_name].distributed is True
+
+
+@pytest.mark.parametrize(
+    "state_name",
+    ["lagged_labor_supply", "claimed_ss", "spousal_income"],
+)
+def test_discrete_state_distributed_flag_defaults_to_false(state_name: str) -> None:
+    """`distributed` on inline-built discrete states defaults to `False` so
+    configurations that do not opt in see no behaviour change."""
+    regime = build_regime("retiree_dimc_choose_canwork")
+    assert regime.states[state_name].distributed is False

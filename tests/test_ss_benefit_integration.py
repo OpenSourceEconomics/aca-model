@@ -5,7 +5,7 @@ full retirement age, and unreduced after.
 """
 
 import jax.numpy as jnp
-from helpers.social_security import compute_pia_table
+from helpers.social_security import compute_pia_table  # ty: ignore[unresolved-import]
 
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.environment import social_security
@@ -56,7 +56,7 @@ def test_earnings_test_reduces_benefit_before_fra() -> None:
         period=jnp.int32(0),
         claim_ss=jnp.array(ClaimedSS.yes),
         claimed_ss=jnp.array(ClaimedSS.no),
-        health=jnp.array(2),
+        health=jnp.int32(2),
         labor_supply=jnp.array(LaborSupply.h2000),
         labor_income=jnp.array(30000.0),
         early_ret_adjustment=jnp.array([0.75]),
@@ -74,7 +74,7 @@ def test_earnings_test_reduces_benefit_before_fra() -> None:
         period=jnp.int32(0),
         claim_ss=jnp.array(ClaimedSS.yes),
         claimed_ss=jnp.array(ClaimedSS.no),
-        health=jnp.array(2),
+        health=jnp.int32(2),
         labor_supply=jnp.array(LaborSupply.do_not_work),
         labor_income=jnp.array(0.0),
         early_ret_adjustment=jnp.array([0.75]),

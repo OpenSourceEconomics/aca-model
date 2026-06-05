@@ -11,10 +11,12 @@ import jax.numpy as jnp
 from lcm import categorical
 from lcm.typing import (
     Age,
+    BoolND,
     ContinuousState,
     DiscreteAction,
     DiscreteState,
     FloatND,
+    IntND,
     Period,
     ScalarFloat,
     ScalarInt,
@@ -211,8 +213,8 @@ def _apply_benefit_rules(
     pia: FloatND,
     age: Age,
     period: Period,
-    ss: FloatND,
-    work: FloatND,
+    ss: IntND,
+    work: BoolND,
     labor_income: FloatND,
     early_ret_adjustment: FloatND,
     normal_retirement_age: ScalarInt,
