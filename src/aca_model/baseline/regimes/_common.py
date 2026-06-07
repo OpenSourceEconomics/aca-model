@@ -21,6 +21,8 @@ from lcm import (
     PiecewiseLinSpacedGrid,
     Regime,
     RouwenhorstAR1Process,
+    SolveSimulateFunctionPair,
+    SolveSimulateStatePair,
     categorical,
 )
 from lcm.typing import BoolND, FloatND, IntND, RegimeName, ScalarInt, UserParams
@@ -36,7 +38,7 @@ from aca_model.agent.labor_market import LaborSupply, LaggedLaborSupply, Spousal
 from aca_model.baseline import health_insurance
 from aca_model.baseline.health_insurance import BuyPrivate
 from aca_model.config import MODEL_CONFIG, GridConfig
-from aca_model.environment import social_security, taxes
+from aca_model.environment import pensions, social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
 
@@ -191,6 +193,7 @@ config = MODEL_CONFIG
 class Grids:
     assets: LinSpacedGrid
     aime: PiecewiseLinSpacedGrid
+    pension_wealth: LinSpacedGrid
     consumption_dollars: IrregSpacedGrid
     wage_res: Any
     hcc_persistent: Any
@@ -206,6 +209,16 @@ class Grids:
 # AIME piecewise grid: number of points per segment between the PIA
 # bend points (0 → kink_0 → kink_1 → kink_2). Total = 32.
 _AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
+
+
+# `pension_wealth` is a `SolveSimulateStatePair`: imputed via a derived
+# function in solve (never a solve grid axis) and carried per subject in
+# simulate. The grid is simulate-side metadata only — it fixes the state's
+# continuous kind and float dtype. Seeds are taken verbatim from the initial
+# conditions without bound-clamping, and the state is never an interpolation
+# axis, so neither the bounds nor the point count affect solve cost or the
+# simulated values.
+_PENSION_WEALTH_GRID = LinSpacedGrid(start=0.0, stop=2_000_000.0, n_points=2)
 
 
 # AR(1) persistence of the Rouwenhorst shocks. Calibrated once; not
@@ -269,6 +282,7 @@ def build_grids(
             batch_size=grid_config.n_assets_batch_size,
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
+        pension_wealth=_PENSION_WEALTH_GRID,
         consumption_dollars=IrregSpacedGrid(
             n_points=grid_config.n_consumption_dollars_gridpoints,
         ),
@@ -402,6 +416,11 @@ def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     states: dict = {}
     states["assets"] = grids.assets
     states["aime"] = grids.aime
+    states["pension_wealth"] = SolveSimulateStatePair(
+        solve=pensions.wealth,
+        grid=grids.pension_wealth,
+        transition=pensions.wealth_next_before_adjustment,
+    )
     states["health"] = DiscreteGrid(
         Health if spec["mc"] == "oamc" else HealthWithDisability,
         batch_size=gc.n_health_batch_size,
@@ -545,8 +564,9 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     functions["taxable_ss_benefit"] = taxes.taxable_ss_benefit
     functions["gross_income"] = taxes.gross_income
     functions["after_tax_income"] = taxes.after_tax_income
-    if spec["ss"] != "forced" and can_work:
-        functions["marginal_tax_rate"] = taxes.marginal_rate
+    # Every living regime carries pension wealth and the solve-phase pension
+    # assets adjustment, both of which scale by the marginal income tax rate.
+    functions["marginal_tax_rate"] = taxes.marginal_rate
 
     # HIC premium
     functions["predicted_hcc_insurer"] = health_insurance.hcc_insurer_predicted
@@ -563,6 +583,72 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     functions["transfers"] = assets_and_income.transfers
     functions["consumption_equiv"] = preferences.consumption_equiv
 
+    return functions
+
+
+def _zero_pension_accrual() -> FloatND:
+    """Pension accrual for regimes without labor earnings (French & Jones 2011).
+
+    Forced-out regimes have no labor supply, so no earnings accrue to pension
+    wealth; only the annuity decumulation in
+    `pensions.wealth_next_before_adjustment` moves it.
+    """
+    return jnp.asarray(0.0)
+
+
+def _zero_pension_assets_adjustment() -> FloatND:
+    """Pension assets adjustment during simulate: identically zero.
+
+    Solve corrects next-period assets for the gap between the AIME-imputed
+    pension wealth and its accrual-evolved value. Simulate carries the true
+    pension wealth as a state, so there is no imputation gap to reconcile.
+    """
+    return jnp.asarray(0.0)
+
+
+def build_pension_functions(spec: RegimeSpec) -> dict:
+    """Build the pension DAG functions shared by every living regime.
+
+    `pension_wealth` itself is a `SolveSimulateStatePair` declared in
+    `build_states`: imputed from AIME in solve, carried as the agent's true
+    wealth in simulate. These functions complete the French & Jones (2011)
+    pension block around it:
+
+    - `full_benefit` (eq. D.2) and the pair's solve variant `pensions.wealth`
+      (eq. D.3) impute pension wealth from PIA.
+    - `pension_benefit` (eq. D.4) draws the received benefit from whichever
+      pension wealth the phase supplies — imputed in solve, true in simulate.
+    - `pension_accrual` is the labour-earnings accrual where the agent can
+      work and zero otherwise.
+    - `pension_wealth_next_before_adjustment`, `target_his`, and
+      `imputed_pension_wealth_next_period` feed the solve-phase
+      `pension_assets_adjustment`, which reconciles the accrual-evolved
+      pension with next period's AIME imputation; in simulate the adjustment
+      is zero because the true wealth is carried directly.
+    """
+    can_work = spec["canwork"] == "canwork"
+
+    functions: dict = {}
+    functions["full_benefit"] = pensions.full_benefit
+    functions["pension_benefit"] = pensions.benefit
+    functions["pension_accrual"] = (
+        pensions.accrual if can_work else _zero_pension_accrual
+    )
+    functions["pension_wealth_next_before_adjustment"] = (
+        pensions.wealth_next_before_adjustment
+    )
+    functions["target_his"] = (
+        health_insurance.target_his
+        if can_work
+        else health_insurance.target_his_forcedout
+    )
+    functions["imputed_pension_wealth_next_period"] = (
+        pensions.imputed_pension_wealth_next_period
+    )
+    functions["pension_assets_adjustment"] = SolveSimulateFunctionPair(
+        solve=pensions.assets_adjustment,
+        simulate=_zero_pension_assets_adjustment,
+    )
     return functions
 
 

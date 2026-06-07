@@ -8,7 +8,7 @@ from helpers.model import (  # ty: ignore[unresolved-import]
     make_aca_model,
     make_baseline_model,
 )
-from lcm import DiscreteGrid
+from lcm import DiscreteGrid, SolveSimulateFunctionPair, SolveSimulateStatePair
 
 from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
@@ -19,6 +19,7 @@ from aca_model.baseline.regimes import build_regime as _build_regime
 from aca_model.baseline.regimes._common import build_grids
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
+from aca_model.environment import pensions
 
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
@@ -176,6 +177,44 @@ def test_regime_specs_keys_match_regime_id() -> None:
         assert hasattr(RegimeId, name), f"RegimeId missing field for {name}"
 
 
+def test_all_non_terminal_regimes_carry_pension_wealth_as_state_pair() -> None:
+    """`pension_wealth` is a solve/simulate state pair in every living regime.
+
+    Imputed from AIME during solve (never a solve grid axis) yet seeded and
+    evolved as the agent's actual pension wealth during simulate, so the true
+    value survives every regime transition rather than being reset to the
+    AIME imputation on entering retirement / forced-out regimes.
+    """
+    for name in REGIME_SPECS:
+        regime = build_regime(name)
+        pair = regime.states["pension_wealth"]
+        assert isinstance(pair, SolveSimulateStatePair), name
+        assert pair.solve is pensions.wealth
+        assert pair.transition is pensions.wealth_next_before_adjustment
+
+
+def test_pension_wealth_is_not_a_solve_function() -> None:
+    """The pension-wealth pair lives in `states`, not `functions`.
+
+    Its solve variant supplies the imputed value, so a separate
+    `functions["pension_wealth"]` entry would double-define it.
+    """
+    regime = build_regime("retiree_nomc_inelig_canwork")
+    assert "pension_wealth" not in regime.functions
+
+
+def test_pension_assets_adjustment_is_solve_simulate_pair() -> None:
+    """The pension assets adjustment corrects the imputation gap in solve only.
+
+    In simulate the true pension wealth is carried directly, so the adjustment
+    is zero — a `SolveSimulateFunctionPair` with a zero simulate variant.
+    """
+    regime = build_regime("retiree_nomc_inelig_canwork")
+    adjustment = regime.functions["pension_assets_adjustment"]
+    assert isinstance(adjustment, SolveSimulateFunctionPair)
+    assert adjustment.solve is pensions.assets_adjustment
+
+
 def test_per_target_health_transitions() -> None:
     """All regimes use per-target health transition dicts."""
     for name in REGIME_SPECS:
@@ -299,7 +338,7 @@ def test_discrete_state_distributed_flag_propagates_to_regime(
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
     regime = _build_regime("retiree_dimc_choose_canwork", grids)
-    assert regime.states[state_name].distributed is True
+    assert regime.states[state_name].distributed is True  # ty: ignore[unresolved-attribute]
 
 
 @pytest.mark.parametrize(

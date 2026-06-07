@@ -273,6 +273,25 @@ def target_his(
     ).astype(jnp.int32)
 
 
+def target_his_forcedout(
+    his: IntND,
+    is_medicaid_eligible: BoolND,
+) -> IntND:
+    """Return the HIS class of the surviving target regime in forced-out regimes.
+
+    Forced-out regimes have no labor-supply choice, and tied agents have
+    already moved to nongroup before the forced-out age, so the only HIS
+    override is Medicaid eligibility → nongroup. Used by
+    `imputed_pension_wealth_next_period` to look up next-period imputation
+    coefficients at the target's HIS.
+    """
+    return jnp.where(
+        is_medicaid_eligible,
+        HealthInsuranceState.nongroup,
+        his,
+    ).astype(jnp.int32)
+
+
 def oop_with_medicaid(
     primary_oop: FloatND,
     is_medicaid_eligible: BoolND,

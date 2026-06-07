@@ -20,6 +20,7 @@ from aca_model.baseline.regimes._common import (
     RegimeSpec,
     build_actions,
     build_common_functions,
+    build_pension_functions,
     build_regime_probs,
     build_state_transitions,
     build_states,
@@ -28,7 +29,6 @@ from aca_model.baseline.regimes._common import (
     select_ss_benefit,
     select_target_for_age,
 )
-from aca_model.environment import pensions
 
 
 def _make_transition_canwork(
@@ -75,19 +75,7 @@ def _build_functions(spec: RegimeSpec) -> dict:
     # not DAG functions. pylcm resolves them from the params dict.
 
     functions["hic_premium"] = health_insurance.premium_insured
-    functions["pension_benefit"] = pensions.benefit
-    functions["pension_wealth"] = pensions.wealth
-    if spec["canwork"] == "canwork" and spec["ss"] != "forced":
-        functions["pension_accrual"] = pensions.accrual
-        functions["pension_wealth_next_before_adjustment"] = (
-            pensions.wealth_next_before_adjustment
-        )
-        functions["target_his"] = health_insurance.target_his
-        functions["imputed_pension_wealth_next_period"] = (
-            pensions.imputed_pension_wealth_next_period
-        )
-        functions["pension_assets_adjustment"] = pensions.assets_adjustment
-        functions["total_to_pia"] = pensions.total_to_pia
+    functions.update(build_pension_functions(spec))
 
     return functions
 

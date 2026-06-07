@@ -1,4 +1,4 @@
-"""Tests for pension functions, ported from struct-ret."""
+"""Tests for pension functions (French & Jones 2011, Appendix D)."""
 
 import math
 
@@ -26,6 +26,7 @@ PIA_IMP_KINK_0 = 9999.6 + jnp.zeros(30)
 PIA_IMP_KINK_1 = 14359.9 + jnp.zeros(30)
 
 FRACTION_RECEIVING = jnp.ones(30)
+EPDV = jnp.full(30, 10.0)
 
 # Pension accrual coefficients
 ACCRUAL_INTERCEPT = jnp.zeros((30, 1))
@@ -38,72 +39,87 @@ SURVIVAL_PROBS = jnp.ones(30) * 0.99
 SURVIVAL_PROBS = SURVIVAL_PROBS.at[28].set(0.99)
 SURVIVAL_PROBS = SURVIVAL_PROBS.at[29].set(0.98)
 
+_PBMAX_KWARGS = {
+    "imp_intercept": PW_IMP_INTERCEPT,
+    "imp_pia_coeff": PW_IMP_PIA,
+    "imp_pia_kink_0_coeff": PW_IMP_PIA_KINK_0_COEFF,
+    "imp_pia_kink_1_coeff": PW_IMP_PIA_KINK_1_COEFF,
+    "imp_kink_0": PIA_IMP_KINK_0,
+    "imp_kink_1": PIA_IMP_KINK_1,
+}
 
-def test_pension_benefit_zero_pia() -> None:
-    result = pensions.benefit(
-        pia=jnp.array(0.0),
-        period=jnp.int32(29),
-        his=jnp.int32(0),
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
-        imp_fraction_receiving=FRACTION_RECEIVING,
+
+def test_full_benefit_zero_pia() -> None:
+    """`pbmax` floors at zero when the imputed benefit would be negative."""
+    result = pensions.full_benefit(
+        pia=jnp.array(0.0), period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     # intercept=-50, pia_pred=0, kinks=0 → max(0, -50) = 0
     assert jnp.isclose(result, 0.0, atol=ATOL)
 
 
-def test_pension_benefit_below_kink_0() -> None:
-    result = pensions.benefit(
-        pia=jnp.array(500.0),
-        period=jnp.int32(29),
-        his=jnp.int32(0),
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
-        imp_fraction_receiving=FRACTION_RECEIVING,
+def test_full_benefit_below_kink_0() -> None:
+    """`pbmax` is intercept + slope·PIA below the first kink."""
+    result = pensions.full_benefit(
+        pia=jnp.array(500.0), period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     assert jnp.isclose(result, 500 * 0.2 - 50, atol=ATOL)
 
 
-def test_pension_benefit_between_kinks() -> None:
-    result = pensions.benefit(
-        pia=jnp.array(12000.0),
-        period=jnp.int32(29),
-        his=jnp.int32(0),
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
-        imp_fraction_receiving=FRACTION_RECEIVING,
+def test_full_benefit_between_kinks() -> None:
+    """`pbmax` adds the first-kink slope between the two kinks."""
+    result = pensions.full_benefit(
+        pia=jnp.array(12000.0), period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     expected = 12000 * 0.2 + (12000 - 9999.6) * 0.1 - 50
     assert jnp.isclose(result, expected, atol=ATOL)
 
 
-def test_pension_benefit_above_kink_1() -> None:
-    result = pensions.benefit(
-        pia=jnp.array(20000.0),
-        period=jnp.int32(29),
-        his=jnp.int32(0),
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
-        imp_fraction_receiving=FRACTION_RECEIVING,
+def test_full_benefit_above_kink_1() -> None:
+    """`pbmax` adds both kink slopes above the second kink."""
+    result = pensions.full_benefit(
+        pia=jnp.array(20000.0), period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     expected = 20000 * 0.2 + (20000 - 9999.6) * 0.1 + (20000 - 14359.9) * 0.05 - 50
     assert jnp.isclose(result, expected, atol=ATOL)
+
+
+def test_wealth_imputes_full_benefit_times_annuity() -> None:
+    """`pw = Γ · pbmax` (French & Jones 2011, eq. D.3)."""
+    result = pensions.wealth(
+        full_benefit=jnp.array(50.0),
+        epdv_constant_pension=EPDV,
+        period=jnp.int32(29),
+    )
+    assert jnp.isclose(result, 50.0 * 10.0, atol=ATOL)
+
+
+def test_benefit_draws_single_fraction_from_wealth() -> None:
+    """`pb = pf · Γ⁻¹ · pw` (French & Jones 2011, eq. D.4): fraction enters once."""
+    result = pensions.benefit(
+        pension_wealth=jnp.array(500.0),
+        imp_fraction_receiving=FRACTION_RECEIVING,
+        epdv_constant_pension=EPDV,
+        period=jnp.int32(29),
+    )
+    assert jnp.isclose(result, 500.0 * 1.0 / 10.0, atol=ATOL)
+
+
+def test_imputed_benefit_round_trips_through_wealth() -> None:
+    """Imputing `pbmax → pw → pb` recovers `pbmax · pf` (here `pf = 1`)."""
+    pbmax = pensions.full_benefit(
+        pia=jnp.array(500.0), period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
+    )
+    pw = pensions.wealth(
+        full_benefit=pbmax, epdv_constant_pension=EPDV, period=jnp.int32(29)
+    )
+    pb = pensions.benefit(
+        pension_wealth=pw,
+        imp_fraction_receiving=FRACTION_RECEIVING,
+        epdv_constant_pension=EPDV,
+        period=jnp.int32(29),
+    )
+    assert jnp.isclose(pb, 500 * 0.2 - 50, atol=ATOL)
 
 
 def test_pension_accrual_no_income() -> None:
@@ -175,30 +191,16 @@ def test_convert_total_ben_to_pia_below_kink_0() -> None:
     pia_input = jnp.array(500.0)
     mtr = jnp.array(0.2)
 
-    pb = pensions.benefit(
-        pia=pia_input,
-        period=jnp.int32(29),
-        his=jnp.int32(0),
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
-        imp_fraction_receiving=FRACTION_RECEIVING,
+    pbmax = pensions.full_benefit(
+        pia=pia_input, period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     recovered = pensions.total_to_pia(
-        pension_benefit=pb,
+        pension_benefit=pbmax,
         pia=pia_input,
         period=jnp.int32(29),
         his=jnp.int32(0),
         marginal_tax_rate=mtr,
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
+        **_PBMAX_KWARGS,
     )
     assert jnp.isclose(recovered, pia_input, atol=ATOL)
 
@@ -208,30 +210,16 @@ def test_convert_total_ben_to_pia_between_kinks() -> None:
     pia_input = jnp.array(12000.0)
     mtr = jnp.array(0.2)
 
-    pb = pensions.benefit(
-        pia=pia_input,
-        period=jnp.int32(29),
-        his=jnp.int32(0),
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
-        imp_fraction_receiving=FRACTION_RECEIVING,
+    pbmax = pensions.full_benefit(
+        pia=pia_input, period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     recovered = pensions.total_to_pia(
-        pension_benefit=pb,
+        pension_benefit=pbmax,
         pia=pia_input,
         period=jnp.int32(29),
         his=jnp.int32(0),
         marginal_tax_rate=mtr,
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
+        **_PBMAX_KWARGS,
     )
     assert jnp.isclose(recovered, pia_input, atol=ATOL)
 
@@ -241,30 +229,16 @@ def test_convert_total_ben_to_pia_above_kink_1() -> None:
     pia_input = jnp.array(20000.0)
     mtr = jnp.array(0.2)
 
-    pb = pensions.benefit(
-        pia=pia_input,
-        period=jnp.int32(29),
-        his=jnp.int32(0),
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
-        imp_fraction_receiving=FRACTION_RECEIVING,
+    pbmax = pensions.full_benefit(
+        pia=pia_input, period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     recovered = pensions.total_to_pia(
-        pension_benefit=pb,
+        pension_benefit=pbmax,
         pia=pia_input,
         period=jnp.int32(29),
         his=jnp.int32(0),
         marginal_tax_rate=mtr,
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
+        **_PBMAX_KWARGS,
     )
     assert jnp.isclose(recovered, pia_input, atol=ATOL)
 
@@ -274,29 +248,15 @@ def test_convert_total_ben_to_pia_zero_mtr() -> None:
     pia_input = jnp.array(8000.0)
     mtr = jnp.array(0.0)
 
-    pb = pensions.benefit(
-        pia=pia_input,
-        period=jnp.int32(29),
-        his=jnp.int32(0),
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
-        imp_fraction_receiving=FRACTION_RECEIVING,
+    pbmax = pensions.full_benefit(
+        pia=pia_input, period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     recovered = pensions.total_to_pia(
-        pension_benefit=pb,
+        pension_benefit=pbmax,
         pia=pia_input,
         period=jnp.int32(29),
         his=jnp.int32(0),
         marginal_tax_rate=mtr,
-        imp_intercept=PW_IMP_INTERCEPT,
-        imp_pia_coeff=PW_IMP_PIA,
-        imp_pia_kink_0_coeff=PW_IMP_PIA_KINK_0_COEFF,
-        imp_pia_kink_1_coeff=PW_IMP_PIA_KINK_1_COEFF,
-        imp_kink_0=PIA_IMP_KINK_0,
-        imp_kink_1=PIA_IMP_KINK_1,
+        **_PBMAX_KWARGS,
     )
     assert jnp.isclose(recovered, pia_input, atol=ATOL)

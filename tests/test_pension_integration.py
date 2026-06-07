@@ -1,4 +1,4 @@
-"""Integration tests for pension rebalancing mechanism.
+"""Integration tests for the pension rebalancing mechanism.
 
 Compose small subsets of the real DAG functions via dags.concatenate_functions
 and verify combined behavior. The pension adjustment mechanism preserves total
@@ -30,14 +30,14 @@ _pia_coeff = jnp.zeros((N_PERIODS, N_HIS))
 _pia_coeff = _pia_coeff.at[PERIOD, :].set(0.2)
 _pia_coeff = _pia_coeff.at[PERIOD + 1, :].set(0.2)
 
-IMP_KWARGS = {
+# `pbmax` (eq. D.2) coefficients — no fraction-receiving.
+PBMAX_KWARGS = {
     "imp_intercept": _intercept,
     "imp_pia_coeff": _pia_coeff,
     "imp_pia_kink_0_coeff": jnp.zeros((N_PERIODS, N_HIS)),
     "imp_pia_kink_1_coeff": jnp.zeros((N_PERIODS, N_HIS)),
     "imp_kink_0": jnp.full(N_PERIODS, 99999.0),
     "imp_kink_1": jnp.full(N_PERIODS, 99999.0),
-    "imp_fraction_receiving": jnp.ones(N_PERIODS),
 }
 
 ACCRUAL_KWARGS = {
@@ -48,32 +48,40 @@ ACCRUAL_KWARGS = {
     "accrual_prob_log_earnings_sq": jnp.zeros(N_HIS),
 }
 
+FRACTION_RECEIVING = jnp.ones(N_PERIODS)
 EPDV = jnp.full(N_PERIODS, 10.0)
 SURVIVAL = jnp.full(N_PERIODS, 0.99)
 
 
-def test_benefit_wealth_dag() -> None:
-    """Benefit→wealth chain via dags matches manual computation."""
+def _impute_pension_wealth(*, pia: jnp.ndarray, period: jnp.ndarray, his: jnp.ndarray):
+    """Solve-phase pension wealth `pw = Γ · pbmax` for the given PIA and HIS."""
     functions = {
-        "pension_benefit": pensions.benefit,
+        "full_benefit": pensions.full_benefit,
         "pension_wealth": pensions.wealth,
     }
     combined = concatenate_functions(functions, targets="pension_wealth")
-    result = combined(
-        pia=jnp.array(500.0),
-        period=PERIOD,
-        his=jnp.int32(0),
+    return combined(
+        pia=pia,
+        period=period,
+        his=his,
         epdv_constant_pension=EPDV,
-        **IMP_KWARGS,
+        **PBMAX_KWARGS,
     )
-    # benefit = max(0, -50 + 500*0.2) = 50, wealth = 50 * 10 = 500
+
+
+def test_imputation_chain_full_benefit_to_wealth() -> None:
+    """`pbmax → pw` via dags: `pw = Γ · max(0, intercept + slope·PIA)`."""
+    result = _impute_pension_wealth(
+        pia=jnp.array(500.0), period=PERIOD, his=jnp.int32(0)
+    )
+    # pbmax = max(0, -50 + 500*0.2) = 50, pw = 50 * 10 = 500
     assert jnp.isclose(result, 500.0, atol=ATOL)
 
 
-def test_total_to_pia_inverts_benefit_via_dag() -> None:
-    """benefit→total_to_pia round-trip via dags recovers original PIA."""
+def test_total_to_pia_inverts_imputed_benefit_via_dag() -> None:
+    """`pbmax → total_to_pia` round-trip via dags recovers original PIA."""
     functions = {
-        "pension_benefit": pensions.benefit,
+        "pension_benefit": pensions.full_benefit,
         "total_to_pia": pensions.total_to_pia,
     }
     combined = concatenate_functions(functions, targets="total_to_pia")
@@ -82,7 +90,7 @@ def test_total_to_pia_inverts_benefit_via_dag() -> None:
         period=PERIOD,
         his=jnp.int32(0),
         marginal_tax_rate=jnp.array(0.2),
-        **IMP_KWARGS,
+        **PBMAX_KWARGS,
     )
     assert jnp.isclose(recovered, 8000.0, atol=ATOL)
 
@@ -102,15 +110,18 @@ def test_next_assets_includes_pension_adjustment() -> None:
 
 
 def test_zero_adjustment_when_his_unchanged() -> None:
-    """Pension adjustment is zero when HIS doesn't change."""
+    """Pension adjustment is finite when HIS doesn't change."""
     his = jnp.int32(0)
     pia = jnp.array(8000.0)
     labor_income = jnp.array(30_000.0)
     mtr = jnp.array(0.2)
 
-    benefit = pensions.benefit(pia=pia, period=PERIOD, his=his, **IMP_KWARGS)
-    pw = pensions.wealth(
-        pension_benefit=benefit, epdv_constant_pension=EPDV, period=PERIOD
+    pw = _impute_pension_wealth(pia=pia, period=PERIOD, his=his)
+    benefit = pensions.benefit(
+        pension_wealth=pw,
+        imp_fraction_receiving=FRACTION_RECEIVING,
+        epdv_constant_pension=EPDV,
+        period=PERIOD,
     )
     accrual_val = pensions.accrual(
         labor_income=labor_income, period=PERIOD, his=his, **ACCRUAL_KWARGS
@@ -125,10 +136,7 @@ def test_zero_adjustment_when_his_unchanged() -> None:
         period=PERIOD,
     )
 
-    next_benefit = pensions.benefit(pia=pia, period=PERIOD + 1, his=his, **IMP_KWARGS)
-    next_imputed = pensions.wealth(
-        pension_benefit=next_benefit, epdv_constant_pension=EPDV, period=PERIOD + 1
-    )
+    next_imputed = _impute_pension_wealth(pia=pia, period=PERIOD + 1, his=his)
 
     adjustment = pensions.assets_adjustment(
         pension_wealth_next_before_adjustment=next_exact,
@@ -138,7 +146,6 @@ def test_zero_adjustment_when_his_unchanged() -> None:
         period=PERIOD,
     )
 
-    assert not jnp.isnan(adjustment)
     assert jnp.isfinite(adjustment)
 
 
@@ -156,9 +163,12 @@ def test_rebalancing_preserves_total_wealth_across_his_change() -> None:
     mtr = jnp.array(0.0)
     liquid_assets = jnp.array(100_000.0)
 
-    benefit_old = pensions.benefit(pia=pia, period=PERIOD, his=old_his, **IMP_KWARGS)
-    pw_old = pensions.wealth(
-        pension_benefit=benefit_old, epdv_constant_pension=EPDV, period=PERIOD
+    pw_old = _impute_pension_wealth(pia=pia, period=PERIOD, his=old_his)
+    benefit_old = pensions.benefit(
+        pension_wealth=pw_old,
+        imp_fraction_receiving=FRACTION_RECEIVING,
+        epdv_constant_pension=EPDV,
+        period=PERIOD,
     )
     accrual_val = pensions.accrual(
         labor_income=labor_income, period=PERIOD, his=old_his, **ACCRUAL_KWARGS
@@ -173,12 +183,7 @@ def test_rebalancing_preserves_total_wealth_across_his_change() -> None:
         period=PERIOD,
     )
 
-    benefit_new = pensions.benefit(
-        pia=pia, period=PERIOD + 1, his=new_his, **IMP_KWARGS
-    )
-    next_imputed = pensions.wealth(
-        pension_benefit=benefit_new, epdv_constant_pension=EPDV, period=PERIOD + 1
-    )
+    next_imputed = _impute_pension_wealth(pia=pia, period=PERIOD + 1, his=new_his)
 
     adjustment = pensions.assets_adjustment(
         pension_wealth_next_before_adjustment=next_exact,

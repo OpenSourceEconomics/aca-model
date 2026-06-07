@@ -145,13 +145,16 @@ def get_benchmark_initial_conditions(
     # PiecewiseLinSpacedGrid (the latter has no `.start` / `.stop`).
     ref_regime = model.user_regimes[_INITIAL_REGIMES[0]]
     grids = ref_regime.states
-    assets_pts = np.asarray(grids["assets"].to_jax())
-    aime_pts = np.asarray(grids["aime"].to_jax())
+    # Every state read here is a plain `Grid`; `pension_wealth` (a
+    # `SolveSimulateStatePair`) is never indexed, so the union widening
+    # ty sees on `states` does not apply.
+    assets_pts = np.asarray(grids["assets"].to_jax())  # ty: ignore[unresolved-attribute]
+    aime_pts = np.asarray(grids["aime"].to_jax())  # ty: ignore[unresolved-attribute]
     assets_lo, assets_hi = float(assets_pts.min()), float(assets_pts.max())
     aime_lo, aime_hi = float(aime_pts.min()), float(aime_pts.max())
-    hcc_p_pts = np.asarray(grids["hcc_persistent"].to_jax())
-    hcc_t_pts = np.asarray(grids["hcc_transitory"].to_jax())
-    wage_res_pts = np.asarray(grids["log_ft_wage_res"].to_jax())
+    hcc_p_pts = np.asarray(grids["hcc_persistent"].to_jax())  # ty: ignore[unresolved-attribute]
+    hcc_t_pts = np.asarray(grids["hcc_transitory"].to_jax())  # ty: ignore[unresolved-attribute]
+    wage_res_pts = np.asarray(grids["log_ft_wage_res"].to_jax())  # ty: ignore[unresolved-attribute]
 
     # For lagged_labor_supply: 0 for tied rows (regime lacks the state),
     # random 0/1 for the others.
@@ -165,6 +168,9 @@ def get_benchmark_initial_conditions(
         "age": jnp.full(n_subjects, 51.0),
         "assets": jnp.asarray(rng.uniform(assets_lo, assets_hi, n_subjects)),
         "aime": jnp.asarray(rng.uniform(aime_lo, aime_hi, n_subjects)),
+        # pension_wealth is a SolveSimulateStatePair seeded as the agent's true
+        # pension wealth; the synthetic benchmark draws a modest positive stock.
+        "pension_wealth": jnp.asarray(rng.uniform(0.0, 200_000.0, n_subjects)),
         "health": jnp.asarray(rng.integers(0, 3, n_subjects).astype(np.int32)),
         "hcc_persistent": jnp.asarray(rng.choice(hcc_p_pts, n_subjects)),
         "hcc_transitory": jnp.asarray(rng.choice(hcc_t_pts, n_subjects)),

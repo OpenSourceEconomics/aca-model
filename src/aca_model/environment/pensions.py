@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from lcm.typing import ContinuousState, FloatND, IntND, Period, ScalarFloat
 
 
-def benefit(
+def full_benefit(
     pia: FloatND,
     period: Period,
     his: IntND,
@@ -17,12 +17,12 @@ def benefit(
     imp_pia_kink_1_coeff: FloatND,
     imp_kink_0: FloatND,
     imp_kink_1: FloatND,
-    imp_fraction_receiving: FloatND,
 ) -> FloatND:
-    """Impute pension benefits from PIA using piecewise linear model.
+    """Maximum pension benefit `pbmax_t` (French & Jones 2011, eq. D.2).
 
-    The imputation uses age × HIS-specific coefficients with two kink points.
-    Final benefit is scaled by the fraction receiving pension benefits at this age.
+    The PIA-imputed benefit for an individual with full pension access, using
+    age × HIS-specific coefficients with two kink points. This is *before* the
+    fraction-receiving adjustment — `pbmax`, not the received benefit `pb`.
     """
     intercept = imp_intercept[period, his]
     pia_pred = imp_pia_coeff[period, his] * pia
@@ -34,9 +34,28 @@ def benefit(
         0.0, pia - imp_kink_1[period]
     )
 
-    full_benefit = jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
+    return jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
 
-    return full_benefit * imp_fraction_receiving[period]
+
+def benefit(
+    pension_wealth: FloatND,
+    imp_fraction_receiving: FloatND,
+    epdv_constant_pension: FloatND,
+    period: Period,
+) -> FloatND:
+    """Pension benefit received from pension wealth (French & Jones 2011, eq. D.4).
+
+    `pb_t = pf_t · Γ_t⁻¹ · pw_t`, with `pf_t` the fraction receiving and `Γ_t`
+    the annuity factor `epdv_constant_pension`. The fraction enters **once**.
+
+    In solve, `pension_wealth = pbmax · Γ` (the imputation), so this round-trips
+    to `pbmax · pf` — the same benefit as the PIA imputation. In simulate,
+    `pension_wealth` is the carried true value, so the benefit is the agent's
+    actual one.
+    """
+    return (
+        pension_wealth * imp_fraction_receiving[period] / epdv_constant_pension[period]
+    )
 
 
 def total_to_pia(
@@ -119,12 +138,18 @@ def accrual(
 
 
 def wealth(
-    pension_benefit: FloatND,
+    full_benefit: FloatND,
     epdv_constant_pension: FloatND,
     period: Period,
 ) -> FloatND:
-    """Annuitized pension wealth: present value of future pension stream."""
-    return pension_benefit * epdv_constant_pension[period]
+    """Imputed pension wealth (French & Jones 2011, eq. D.3): `pw_t = Γ_t · pbmax_t`.
+
+    The annuity factor `Γ_t` (`epdv_constant_pension`) already carries the
+    fraction-receiving stream over future ages, so the level uses the *full*
+    benefit `pbmax` (no current-period fraction). This is the solve-phase
+    imputation of `pension_wealth`; in simulate the carried true value is used.
+    """
+    return full_benefit * epdv_constant_pension[period]
 
 
 def wealth_next_before_adjustment(
@@ -178,16 +203,17 @@ def imputed_pension_wealth_next_period(
     imp_pia_kink_1_coeff_next_period: FloatND,
     imp_kink_0_next_period: FloatND,
     imp_kink_1_next_period: FloatND,
-    imp_fraction_receiving_next_period: FloatND,
     epdv_constant_pension_next_period: FloatND,
 ) -> FloatND:
     """Imputed pension wealth at next period using the target regime's HIS.
 
-    Mirrors `benefit` and `wealth` but indexes into 1-period-shifted views
-    of the imputation arrays so all subscripts use bare-name parameters
-    (`period`, `target_his`). Inlining is required: pylcm's AST shape
-    inference inspects the registered function's body and does not trace
-    through nested calls into `benefit`.
+    `pw_{t+1} = Γ_{t+1} · pbmax_{t+1}` (French & Jones 2011, eq. D.3): the
+    *full* next-period benefit times the next-period annuity factor, with no
+    current-period fraction (the fraction lives inside `Γ`). Mirrors
+    `full_benefit` and `wealth` but indexes 1-period-shifted views so all
+    subscripts use bare-name parameters (`period`, `target_his`). Inlining is
+    required: pylcm's AST shape inference inspects the registered function's
+    body and does not trace through nested calls.
     """
     next_pia = jnp.interp(next_aime, pia_aime_grid, pia_table)
 
@@ -200,6 +226,5 @@ def imputed_pension_wealth_next_period(
         0.0, next_pia - imp_kink_1_next_period[period]
     )
 
-    full_benefit = jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
-    benefit_next = full_benefit * imp_fraction_receiving_next_period[period]
-    return benefit_next * epdv_constant_pension_next_period[period]
+    pbmax_next = jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
+    return pbmax_next * epdv_constant_pension_next_period[period]
