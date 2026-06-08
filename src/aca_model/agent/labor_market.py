@@ -47,26 +47,33 @@ def working_hours_value(labor_supply: DiscreteAction) -> FloatND:
     return HOURS_VALUES[labor_supply]
 
 
-def income(
+def wage(
     log_ft_wage_res: ContinuousState,
-    labor_supply: DiscreteAction,
     period: Period,
     good_health: IntND,
     log_ft_wage_mean: FloatND,
     log_ft_wage_std: FloatND,
+) -> FloatND:
+    """Full-time-equivalent wage rate from the age/health profile and AR(1) residual.
+
+    ``log_ft_wage_mean`` is a ``pd.Series`` with ``(age, good_health)`` index,
+    resolved by pylcm via ``derived_categoricals``.
+    """
+    return jnp.exp(
+        log_ft_wage_mean[period, good_health] + log_ft_wage_std * log_ft_wage_res
+    )
+
+
+def income(
+    wage: FloatND,
+    labor_supply: DiscreteAction,
     adj_wage_hours_exp: ScalarFloat,
     adj_wage_hours_int: ScalarFloat,
 ) -> FloatND:
     """Labor income with wage-hours interaction (French & Jones 2011).
 
     income = wage * hours^(1 + exp) * int^(-exp)
-
-    ``log_ft_wage_mean`` is a ``pd.Series`` with ``(age, good_health)`` index,
-    resolved by pylcm via ``derived_categoricals``.
     """
-    wage = jnp.exp(
-        log_ft_wage_mean[period, good_health] + log_ft_wage_std * log_ft_wage_res
-    )
     hours = HOURS_VALUES[labor_supply]
     return jnp.where(
         hours > 0.0,

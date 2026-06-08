@@ -39,6 +39,49 @@ def test_benchmark_model_simulates_end_to_end() -> None:
 
 
 @pytest.mark.long_running
+def test_benchmark_panel_exposes_hic_premium_and_wage_targets() -> None:
+    """`hic_premium` and `wage` are computable simulate targets.
+
+    The MSM estimation matches `hic_private_premium_*` and `wage_growth_*`
+    moments, so the simulated panel must carry the premium each agent pays
+    (defined in every living regime) and the wage rate of workers (defined
+    in can-work regimes). Both are DAG functions exposed through
+    `to_dataframe(additional_targets=...)`; dead/forced-out rows that lack a
+    target get NaN, alive/worker rows carry a finite value.
+    """
+    n_subjects = 20
+    model = create_benchmark_model(
+        n_subjects=n_subjects,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
+    _, _, params = get_benchmark_params(model=model)
+    initial_conditions = get_benchmark_initial_conditions(
+        model=model, n_subjects=n_subjects, seed=0
+    )
+
+    result = model.simulate(
+        params=params,
+        initial_conditions=initial_conditions,
+        period_to_regime_to_V_arr=None,
+        log_level="off",
+    )
+
+    df = result.to_dataframe(additional_targets=["hic_premium", "wage"])
+    assert {"hic_premium", "wage"}.issubset(df.columns)
+
+    # Every alive agent pays a finite, non-negative premium.
+    alive = df.loc[df["regime_name"] != "dead"]
+    assert alive["hic_premium"].notna().all()
+    assert (alive["hic_premium"].to_numpy() >= 0).all()
+
+    # The wage rate is exp(...) > 0 wherever it is defined (can-work rows),
+    # and it is defined for at least some of the panel.
+    defined_wage = df.loc[df["wage"].notna(), "wage"].to_numpy()
+    assert len(defined_wage) > 0
+    assert (defined_wage > 0).all()
+
+
+@pytest.mark.long_running
 def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     """`consumption_dollars <= max(cash_on_hand, floor)` holds for every alive row.
 

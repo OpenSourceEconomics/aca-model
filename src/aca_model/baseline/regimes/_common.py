@@ -535,6 +535,7 @@ def build_common_functions(spec: RegimeSpec) -> dict:
 
     if can_work:
         functions["working_hours_value"] = labor_market.working_hours_value
+        functions["wage"] = labor_market.wage
         functions["labor_income"] = labor_market.income
         functions["fixed_cost_of_work"] = preferences.fixed_cost_of_work
 
