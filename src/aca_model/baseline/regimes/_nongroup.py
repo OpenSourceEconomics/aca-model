@@ -9,7 +9,7 @@ from collections.abc import Callable
 from lcm import Regime
 from lcm.typing import Age, DiscreteAction, FloatND, Period
 
-from aca_model.agent import assets_and_income, preferences
+from aca_model.agent import preferences
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
 from aca_model.baseline.regimes._common import (
@@ -109,9 +109,8 @@ def build_regime(name: str, grids: Grids) -> Regime:
         transition_func = _make_transition_forcedout(gets_mc, own)
 
     states = build_states(spec, grids)
-    constraints: dict = {
-        "borrowing_constraint": assets_and_income.borrowing_constraint,
-    }
+    # `borrowing_constraint` is broadcast from the model level.
+    constraints: dict = {}
     if spec["canwork"] == "canwork":
         constraints["positive_leisure"] = preferences.positive_leisure
 

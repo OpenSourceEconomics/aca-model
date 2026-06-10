@@ -11,7 +11,7 @@ import jax.numpy as jnp
 from lcm import Regime
 from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
 
-from aca_model.agent import assets_and_income, preferences
+from aca_model.agent import preferences
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
 from aca_model.baseline.regimes._common import (
@@ -99,8 +99,6 @@ def build_regime(name: str, grids: Grids) -> Regime:
         state_transitions=build_state_transitions(spec),
         actions=build_actions(spec, grids),
         functions=_build_functions(spec),
-        constraints={
-            "borrowing_constraint": assets_and_income.borrowing_constraint,
-            "positive_leisure": preferences.positive_leisure,
-        },
+        # `borrowing_constraint` is broadcast from the model level.
+        constraints={"positive_leisure": preferences.positive_leisure},
     )

@@ -16,7 +16,11 @@ from aca_model.aca.regimes import build_all_regimes as _build_aca_regimes
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.regimes import REGIME_SPECS, RegimeId
 from aca_model.baseline.regimes import build_regime as _build_regime
-from aca_model.baseline.regimes._common import build_grids
+from aca_model.baseline.regimes._common import (
+    build_grids,
+    build_model_state_transitions,
+    build_model_states,
+)
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
 from aca_model.environment import pensions
@@ -140,13 +144,14 @@ def test_nongroup_with_mc_no_buy_private(name: str) -> None:
 
 
 def test_all_non_terminal_regimes_have_core_states() -> None:
+    """`health` varies per regime; the other core states are broadcast from
+    the model level into every regime."""
     for name in REGIME_SPECS:
         regime = build_regime(name)
         assert "health" in regime.states
-        assert "spousal_income" in regime.states
-        assert "assets" in regime.states
-        assert "hcc_persistent" in regime.states
-        assert "hcc_transitory" in regime.states
+    model_states = build_model_states(_GRIDS)
+    for state_name in ("spousal_income", "assets", "hcc_persistent", "hcc_transitory"):
+        assert state_name in model_states
 
 
 def test_pre65_regimes_use_health_with_disability() -> None:
@@ -166,9 +171,12 @@ def test_post65_regimes_use_health() -> None:
 
 
 def test_all_regimes_have_aime() -> None:
+    """`aime` is broadcast from the model level; its spec-dependent law of
+    motion stays regime-level."""
+    assert "aime" in build_model_states(_GRIDS)
     for name in REGIME_SPECS:
         regime = build_regime(name)
-        assert "aime" in regime.states, f"{name} should have aime"
+        assert "aime" in regime.state_transitions, f"{name} should have an aime law"
 
 
 def test_regime_specs_keys_match_regime_id() -> None:
@@ -178,22 +186,25 @@ def test_regime_specs_keys_match_regime_id() -> None:
 
 
 def test_all_non_terminal_regimes_carry_pension_wealth_as_carried_state() -> None:
-    """`pension_wealth` is a carried state in every living regime.
+    """`pension_wealth` is a carried state broadcast into every living regime.
 
     Imputed from AIME during solve (never a solve grid axis) yet seeded and
     evolved as the agent's actual pension wealth during simulate, so the true
     value survives every regime transition rather than being reset to the
     AIME imputation on entering retirement / forced-out regimes.
     """
+    carried = build_model_states(_GRIDS)["pension_wealth"]
+    assert isinstance(carried, Phased)
+    assert carried.solve is pensions.wealth
+    assert (
+        build_model_state_transitions()["pension_wealth"]
+        is pensions.wealth_next_before_adjustment
+    )
+    model = make_baseline_model(n_subjects=1)
     for name in REGIME_SPECS:
-        regime = build_regime(name)
-        carried = regime.states["pension_wealth"]
-        assert isinstance(carried, Phased), name
-        assert carried.solve is pensions.wealth
-        assert (
-            regime.state_transitions["pension_wealth"]
-            is pensions.wealth_next_before_adjustment
-        ), name
+        assert isinstance(model.user_regimes[name].states["pension_wealth"], Phased), (
+            name
+        )
 
 
 def test_pension_wealth_is_not_a_solve_function() -> None:
@@ -328,11 +339,12 @@ def test_baseline_model_creates() -> None:
         ("spousal_income_distributed", "spousal_income"),
     ],
 )
-def test_discrete_state_distributed_flag_propagates_to_regime(
+def test_discrete_state_distributed_flag_propagates_to_model_states(
     config_field: str, state_name: str
 ) -> None:
     """`GridConfig.<axis>_distributed=True` sets `distributed=True` on the
-    `DiscreteGrid` for that axis in every regime that carries it."""
+    model-level `DiscreteGrid` for that axis (sharding is legal only on
+    model-level states)."""
     gc = replace(BENCHMARK_GRID_CONFIG, **{config_field: True})
     grids = build_grids(
         grid_config=gc,
@@ -340,8 +352,8 @@ def test_discrete_state_distributed_flag_propagates_to_regime(
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
-    regime = _build_regime("retiree_dimc_choose_canwork", grids)
-    assert regime.states[state_name].distributed is True  # ty: ignore[unresolved-attribute]
+    model_states = build_model_states(grids)
+    assert model_states[state_name].distributed is True
 
 
 @pytest.mark.parametrize(
@@ -351,5 +363,28 @@ def test_discrete_state_distributed_flag_propagates_to_regime(
 def test_discrete_state_distributed_flag_defaults_to_false(state_name: str) -> None:
     """`distributed` on inline-built discrete states defaults to `False` so
     configurations that do not opt in see no behaviour change."""
-    regime = build_regime("retiree_dimc_choose_canwork")
-    assert regime.states[state_name].distributed is False
+    if state_name == "spousal_income":
+        grid = build_model_states(_GRIDS)[state_name]
+    else:
+        grid = build_regime("retiree_dimc_choose_canwork").states[state_name]
+    assert grid.distributed is False
+
+
+def test_dead_regime_prunes_unused_broadcast_states() -> None:
+    """States every living regime shares are declared once at the model level;
+    `dead` keeps only what the bequest DAG reads (`assets`, `pref_type`).
+    `pension_wealth` is masked (carried states are illegal in terminal
+    regimes); the other unused broadcast states are pruned by reachability."""
+    model = make_baseline_model(n_subjects=1)
+    assert model.pruned_variables["dead"] == frozenset(
+        {"aime", "spousal_income", "hcc_persistent", "hcc_transitory"}
+    )
+    assert set(model.user_regimes["dead"].states) == {"assets", "pref_type"}
+
+
+def test_living_regimes_keep_every_broadcast_state() -> None:
+    """Every model-level state is read by each living regime's DAG, so
+    pruning removes nothing outside `dead`."""
+    model = make_baseline_model(n_subjects=1)
+    for name in REGIME_SPECS:
+        assert model.pruned_variables[name] == frozenset()

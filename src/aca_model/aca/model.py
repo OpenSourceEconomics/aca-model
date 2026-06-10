@@ -12,7 +12,7 @@ from lcm.typing import UserParams
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
-from aca_model.baseline.regimes import RegimeId
+from aca_model.baseline.regimes import RegimeId, build_model_slots
 from aca_model.config import MODEL_CONFIG, GridConfig
 
 
@@ -62,6 +62,14 @@ def create_model(
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
     )
+    # The overlay swaps only regime-level functions; the broadcast slots
+    # are policy-invariant.
+    model_slots = build_model_slots(
+        grid_config=grid_config,
+        fixed_params=fixed_params,
+        wage_params=wage_params,
+        pref_type_grid=pref_type_grid,
+    )
 
     return Model(
         regimes=regimes,
@@ -71,4 +79,5 @@ def create_model(
         fixed_params=fixed_params,
         derived_categoricals=derived_categoricals,
         n_subjects=n_subjects,
+        **model_slots,
     )

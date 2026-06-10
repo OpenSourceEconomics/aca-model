@@ -410,29 +410,19 @@ def make_active_func(spec: RegimeSpec) -> Callable[..., Any]:
 
 
 def build_states(spec: RegimeSpec, grids: Grids) -> dict:
-    """Build the state dict for a non-dead regime."""
+    """Build the regime-level state dict for a non-dead regime.
+
+    Contains only the spec-dependent states; the states shared by every
+    living regime are broadcast from the model level (`build_model_states`).
+    """
     can_work = spec["canwork"] == "canwork"
     gc = grids.grid_config
 
     states: dict = {}
-    states["assets"] = grids.assets
-    states["aime"] = grids.aime
-    states["pension_wealth"] = Phased(
-        solve=pensions.wealth,
-        simulate=grids.pension_wealth,
-    )
     states["health"] = DiscreteGrid(
         Health if spec["mc"] == "oamc" else HealthWithDisability,
         batch_size=gc.n_health_batch_size,
     )
-    states["hcc_persistent"] = grids.hcc_persistent
-    states["hcc_transitory"] = grids.hcc_transitory
-    states["spousal_income"] = DiscreteGrid(
-        SpousalIncome,
-        batch_size=gc.n_spousal_income_batch_size,
-        distributed=gc.spousal_income_distributed,
-    )
-    states["pref_type"] = grids.pref_type
     if can_work:
         states["log_ft_wage_res"] = grids.wage_res
     if can_work and spec["his"] != "tied":
@@ -503,26 +493,37 @@ def _prob_of_target(
     return cell
 
 
-def build_dead_regime(grids: Grids) -> Regime:
+# Broadcast functions the bequest DAG reads: the pref-type-indexed scalars
+# resolve their per-cell value from the broadcast `pref_type` state.
+_DEAD_KEEPS = frozenset(
+    {"consumption_weight", "coefficient_rra", "utility_scale_factor"}
+)
+
+
+def build_dead_regime() -> Regime:
     """Build the terminal dead regime.
 
-    `pref_type` is retained as a state so the pref-type-indexed DAG
-    functions (`consumption_weight`, `coefficient_rra`,
-    `utility_scale_factor`) can resolve their per-cell scalar in the
-    bequest utility.
+    Everything `dead` carries arrives via the model-level broadcast:
+
+    - states: `assets` and `pref_type` survive DAG pruning (the bequest
+      utility reads them); the remaining broadcast states are pruned.
+    - functions: the pref-type-indexed scalars in `_DEAD_KEEPS` stay; every
+      other broadcast function is masked with `None` so its unresolvable
+      inputs (e.g. `pension_benefit`) don't surface as params in the dead
+      template.
+    - constraints: the borrowing constraint is masked — `dead` has no
+      consumption action.
+    - `pension_wealth` is masked explicitly: a carried state is rejected in
+      terminal regimes before pruning could drop it.
     """
+    function_masks = {
+        name: None for name in build_model_functions() if name not in _DEAD_KEEPS
+    }
     return Regime(
         transition=None,
-        functions={
-            "utility": preferences.bequest,
-            "consumption_weight": preferences.consumption_weight,
-            "coefficient_rra": preferences.coefficient_rra,
-            "utility_scale_factor": preferences.utility_scale_factor,
-        },
-        states={
-            "assets": grids.assets,
-            "pref_type": grids.pref_type,
-        },
+        functions={"utility": preferences.bequest, **function_masks},
+        constraints={"borrowing_constraint": None},
+        states={"pension_wealth": None},
         active=lambda _age: True,
     )
 
@@ -549,33 +550,19 @@ def _select_leisure(spec: RegimeSpec) -> Callable[..., Any]:
     return preferences.leisure_canwork_retiree_or_nongroup
 
 
-def build_common_functions(spec: RegimeSpec) -> dict:
-    """Build the shared functions dict for a non-dead regime.
+def build_model_functions() -> dict:
+    """Build the model-level functions broadcast into every regime.
 
-    Contains all functions common to every HIS type. Per-HIS modules add
-    utility, ss_benefit, his, gets_medicare, hic_premium, and pension entries.
+    Contains exactly the functions that are identical across all 18 living
+    regimes AND are never swapped by the ACA policy overlay. Spec-dependent
+    selections (`good_health`, `leisure`, …) and overlay-swapped names
+    (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`) stay regime-level
+    in `build_common_functions`. The `dead` regime masks every entry the
+    bequest DAG does not read (see `build_dead_regime`).
     """
-    can_work = spec["canwork"] == "canwork"
-
     functions: dict = {}
-    functions["good_health"] = (
-        health.is_good_health_2 if spec["mc"] == "oamc" else health.is_good_health_3
-    )
     functions["total_health_costs"] = health_insurance.total_costs
-    has_buy_private = spec["his"] == "nongroup" and spec["mc"] == "nomc"
-    functions["primary_oop"] = (
-        health_insurance.primary_oop if has_buy_private else health_insurance.oop_costs
-    )
     functions["oop_costs"] = health_insurance.oop_with_medicaid
-
-    if can_work:
-        functions["working_hours_value"] = labor_market.working_hours_value
-        functions["wage"] = labor_market.wage
-        functions["labor_income"] = labor_market.income
-        functions["fixed_cost_of_work"] = preferences.fixed_cost_of_work
-
-    functions["leisure"] = _select_leisure(spec)
-    functions["utility"] = preferences.u_alive
     functions["capital_income"] = assets_and_income.capital_income
     # spousal_income_amounts is a lookup table param, not a DAG function
     functions["is_married"] = labor_market.is_married
@@ -587,13 +574,10 @@ def build_common_functions(spec: RegimeSpec) -> dict:
 
     # PIA from pre-computed lookup table
     functions["pia"] = social_security.pia
-    if spec["mc"] != "oamc":  # pre-65: SSDI needs dropout-adjusted PIA
-        functions["ssdi_pia"] = social_security.ssdi_pia
 
-    # SSI/Medicaid
+    # SSI/Medicaid (eligibility itself is overlay-swapped, hence regime-level)
     functions["countable_income"] = health_insurance.countable_income
     functions["is_ssi_eligible"] = health_insurance.is_ssi_eligible
-    functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
     functions["ssi_benefit"] = health_insurance.ssi_benefit
 
     # Taxes
@@ -607,17 +591,106 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     # HIC premium
     functions["predicted_hcc_insurer"] = health_insurance.hcc_insurer_predicted
 
+    # Transfers
+    functions["consumption_dollars_floor"] = assets_and_income.consumption_dollars_floor
+    functions["transfers"] = assets_and_income.transfers
+    functions["consumption_equiv"] = preferences.consumption_equiv
+
+    return functions
+
+
+def build_model_constraints() -> dict:
+    """Build the model-level constraints broadcast into every regime.
+
+    `dead` masks the borrowing constraint — it has no consumption action.
+    """
+    return {"borrowing_constraint": assets_and_income.borrowing_constraint}
+
+
+def build_model_states(grids: Grids) -> dict:
+    """Build the model-level states broadcast into every regime.
+
+    These are the states every living regime carries with an identical grid.
+    pylcm prunes them per regime by DAG reachability, so `dead` keeps only
+    `assets` and `pref_type` (the bequest DAG). `spousal_income` carries the
+    `distributed` flag — sharding is legal only on model-level states.
+    """
+    gc = grids.grid_config
+    return {
+        "assets": grids.assets,
+        "aime": grids.aime,
+        "pension_wealth": Phased(
+            solve=pensions.wealth,
+            simulate=grids.pension_wealth,
+        ),
+        "hcc_persistent": grids.hcc_persistent,
+        "hcc_transitory": grids.hcc_transitory,
+        "spousal_income": DiscreteGrid(
+            SpousalIncome,
+            batch_size=gc.n_spousal_income_batch_size,
+            distributed=gc.spousal_income_distributed,
+        ),
+        "pref_type": grids.pref_type,
+    }
+
+
+def build_model_state_transitions() -> dict:
+    """Build the model-level laws of motion for the broadcast states.
+
+    Only the laws that are identical across all living regimes live here;
+    `assets` and `aime` evolve spec-dependently and keep their laws in
+    `build_state_transitions`. The hcc shocks are stochastic processes with
+    intrinsic transitions.
+    """
+    return {
+        "pref_type": fixed_transition("pref_type"),
+        "spousal_income": MarkovTransition(labor_market.next_spousal_income),
+        # Carried state: evolved only in simulate (in solve, `pension_wealth`
+        # is re-imputed from AIME each period and has no transition).
+        "pension_wealth": pensions.wealth_next_before_adjustment,
+    }
+
+
+def build_common_functions(spec: RegimeSpec) -> dict:
+    """Build the regime-level functions dict for a non-dead regime.
+
+    Contains the spec-dependent selections and the overlay-swapped names;
+    everything identical across living regimes is broadcast from the model
+    level (`build_model_functions`). Per-HIS modules add utility, ss_benefit,
+    his, gets_medicare, hic_premium, and pension entries.
+    """
+    can_work = spec["canwork"] == "canwork"
+
+    functions: dict = {}
+    functions["good_health"] = (
+        health.is_good_health_2 if spec["mc"] == "oamc" else health.is_good_health_3
+    )
+    has_buy_private = spec["his"] == "nongroup" and spec["mc"] == "nomc"
+    functions["primary_oop"] = (
+        health_insurance.primary_oop if has_buy_private else health_insurance.oop_costs
+    )
+
+    if can_work:
+        functions["working_hours_value"] = labor_market.working_hours_value
+        functions["wage"] = labor_market.wage
+        functions["labor_income"] = labor_market.income
+        functions["fixed_cost_of_work"] = preferences.fixed_cost_of_work
+
+    functions["leisure"] = _select_leisure(spec)
+    functions["utility"] = preferences.u_alive
+
+    if spec["mc"] != "oamc":  # pre-65: SSDI needs dropout-adjusted PIA
+        functions["ssdi_pia"] = social_security.ssdi_pia
+
+    # Swapped per policy variant by the ACA overlay, hence regime-level
+    functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
+    functions["cash_on_hand"] = assets_and_income.cash_on_hand
+
     # Earnings test credit-back (only choose+canwork: has claim_ss + claimed_ss)
     if spec["ss"] == "choose" and can_work:
         functions["benefit_withheld_fraction"] = (
             social_security.benefit_withheld_fraction
         )
-
-    # Cash on hand and transfers
-    functions["cash_on_hand"] = assets_and_income.cash_on_hand
-    functions["consumption_dollars_floor"] = assets_and_income.consumption_dollars_floor
-    functions["transfers"] = assets_and_income.transfers
-    functions["consumption_equiv"] = preferences.consumption_equiv
 
     return functions
 
@@ -784,7 +857,13 @@ def select_target_for_age(
 
 
 def build_state_transitions(spec: RegimeSpec) -> dict:
-    """Build the state transitions dict for a non-dead regime."""
+    """Build the regime-level state transitions dict for a non-dead regime.
+
+    Contains only the spec-dependent laws; uniform laws for the broadcast
+    states live at the model level (`build_model_state_transitions`).
+    `assets` and `aime` are broadcast states whose laws differ per spec,
+    so the laws stay here.
+    """
     transitions: dict = {}
     transitions["assets"] = _build_per_target_regime_assets(spec)
     transitions["health"] = _build_per_target_regime_health(spec)
@@ -794,16 +873,11 @@ def build_state_transitions(spec: RegimeSpec) -> dict:
     lagged_labor_supply_transition = _build_per_target_regime_lagged_labor_supply(spec)
     if lagged_labor_supply_transition:
         transitions["lagged_labor_supply"] = lagged_labor_supply_transition
-    transitions["pref_type"] = fixed_transition("pref_type")
     transitions["aime"] = (
         social_security.next_aime
         if spec["mc"] == "oamc"
         else social_security.next_aime_disabled
     )
-    transitions["spousal_income"] = MarkovTransition(labor_market.next_spousal_income)
-    # Carried state: evolved only in simulate (in solve, `pension_wealth` is
-    # re-imputed from AIME each period and has no transition).
-    transitions["pension_wealth"] = pensions.wealth_next_before_adjustment
     return transitions
 
 
