@@ -23,6 +23,7 @@ from lcm import (
     Regime,
     RouwenhorstAR1Process,
     categorical,
+    fixed_transition,
 )
 from lcm.typing import BoolND, FloatND, IntND, RegimeName, ScalarInt, UserParams
 
@@ -757,7 +758,7 @@ def build_state_transitions(spec: RegimeSpec) -> dict:
     lagged_labor_supply_transition = _build_per_target_regime_lagged_labor_supply(spec)
     if lagged_labor_supply_transition:
         transitions["lagged_labor_supply"] = lagged_labor_supply_transition
-    transitions["pref_type"] = None
+    transitions["pref_type"] = fixed_transition("pref_type")
     transitions["aime"] = (
         social_security.next_aime
         if spec["mc"] == "oamc"
