@@ -4,7 +4,8 @@ Contains RegimeId, REGIME_SPECS, grid constants, state/action builders, and
 build_common_functions. No policy logic, no HIS-specific conditionals.
 """
 
-from collections.abc import Callable, Mapping
+import functools
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal, TypedDict
@@ -465,6 +466,41 @@ def build_regime_probs(target: IntND, survival: FloatND) -> FloatND:
     probs = jnp.zeros(19)
     probs = probs.at[RegimeId.dead].set(1.0 - survival)
     return probs.at[target].add(survival)
+
+
+def build_granular_regime_transition(
+    *,
+    transition_func: Callable[..., FloatND],
+    target_ids: Iterable[int],
+) -> dict[RegimeName, MarkovTransition]:
+    """Declare the regime's reachable targets via per-target probability cells.
+
+    Each cell evaluates the regime's probability vector and selects its
+    target's entry — identical arithmetic to the coarse vector form, with the
+    key set making every other regime structurally unreachable.
+    """
+    id_to_name = {
+        int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
+    }
+    declared = sorted({*(int(i) for i in target_ids), int(RegimeId.dead)})
+    return {
+        id_to_name[target_id]: MarkovTransition(
+            _prob_of_target(transition_func=transition_func, target_id=target_id)
+        )
+        for target_id in declared
+    }
+
+
+def _prob_of_target(
+    *, transition_func: Callable[..., FloatND], target_id: int
+) -> Callable[..., FloatND]:
+    """Select one target's probability from the regime's probability vector."""
+
+    @functools.wraps(transition_func)
+    def cell(*args: Any, **kwargs: Any) -> FloatND:
+        return transition_func(*args, **kwargs)[target_id]
+
+    return cell
 
 
 def build_dead_regime(grids: Grids) -> Regime:

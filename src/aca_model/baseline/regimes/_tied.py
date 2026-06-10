@@ -8,7 +8,7 @@ Medicaid-eligible agents are also overridden to nongroup.
 from collections.abc import Callable
 
 import jax.numpy as jnp
-from lcm import MarkovTransition, Regime
+from lcm import Regime
 from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
 
 from aca_model.agent import assets_and_income, preferences
@@ -20,6 +20,7 @@ from aca_model.baseline.regimes._common import (
     RegimeSpec,
     build_actions,
     build_common_functions,
+    build_granular_regime_transition,
     build_pension_functions,
     build_regime_probs,
     build_state_transitions,
@@ -90,7 +91,9 @@ def build_regime(name: str, grids: Grids) -> Regime:
 
     states = build_states(spec, grids)
     return Regime(
-        transition=MarkovTransition(transition_func),
+        transition=build_granular_regime_transition(
+            transition_func=transition_func, target_ids=(*own.values(), *ng.values())
+        ),
         active=make_active_func(spec),
         states=states,
         state_transitions=build_state_transitions(spec),
