@@ -17,12 +17,11 @@ from lcm import (
     LinSpacedGrid,
     MarkovTransition,
     NormalIIDProcess,
+    Phased,
     PiecewiseGridSegment,
     PiecewiseLinSpacedGrid,
     Regime,
     RouwenhorstAR1Process,
-    SolveSimulateFunctionPair,
-    SolveSimulateStatePair,
     categorical,
 )
 from lcm.typing import BoolND, FloatND, IntND, RegimeName, ScalarInt, UserParams
@@ -211,13 +210,13 @@ class Grids:
 _AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
 
 
-# `pension_wealth` is a `SolveSimulateStatePair`: imputed via a derived
-# function in solve (never a solve grid axis) and carried per subject in
-# simulate. The grid is simulate-side metadata only — it fixes the state's
-# continuous kind and float dtype. Seeds are taken verbatim from the initial
-# conditions without bound-clamping, and the state is never an interpolation
-# axis, so neither the bounds nor the point count affect solve cost or the
-# simulated values.
+# `pension_wealth` is a carried state (`Phased(solve=..., simulate=Grid)`):
+# imputed via a derived function in solve (never a solve grid axis) and
+# carried per subject in simulate. The grid is simulate-side metadata only —
+# it fixes the state's continuous kind and float dtype. Seeds are taken
+# verbatim from the initial conditions without bound-clamping, and the state
+# is never an interpolation axis, so neither the bounds nor the point count
+# affect solve cost or the simulated values.
 _PENSION_WEALTH_GRID = LinSpacedGrid(start=0.0, stop=2_000_000.0, n_points=2)
 
 
@@ -416,10 +415,9 @@ def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     states: dict = {}
     states["assets"] = grids.assets
     states["aime"] = grids.aime
-    states["pension_wealth"] = SolveSimulateStatePair(
+    states["pension_wealth"] = Phased(
         solve=pensions.wealth,
-        grid=grids.pension_wealth,
-        transition=pensions.wealth_next_before_adjustment,
+        simulate=grids.pension_wealth,
     )
     states["health"] = DiscreteGrid(
         Health if spec["mc"] == "oamc" else HealthWithDisability,
@@ -610,13 +608,13 @@ def _zero_pension_assets_adjustment() -> FloatND:
 def build_pension_functions(spec: RegimeSpec) -> dict:
     """Build the pension DAG functions shared by every living regime.
 
-    `pension_wealth` itself is a `SolveSimulateStatePair` declared in
-    `build_states`: imputed from AIME in solve, carried as the agent's true
-    wealth in simulate. These functions complete the French & Jones (2011)
-    pension block around it:
+    `pension_wealth` itself is a carried state declared in `build_states`
+    (its law of motion lives in `build_state_transitions`): imputed from AIME
+    in solve, carried as the agent's true wealth in simulate. These functions
+    complete the French & Jones (2011) pension block around it:
 
-    - `full_benefit` (eq. D.2) and the pair's solve variant `pensions.wealth`
-      (eq. D.3) impute pension wealth from PIA.
+    - `full_benefit` (eq. D.2) and the carried state's solve variant
+      `pensions.wealth` (eq. D.3) impute pension wealth from PIA.
     - `pension_benefit` (eq. D.4) draws the received benefit from whichever
       pension wealth the phase supplies — imputed in solve, true in simulate.
     - `pension_accrual` is the labour-earnings accrual where the agent can
@@ -646,7 +644,7 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
     functions["imputed_pension_wealth_next_period"] = (
         pensions.imputed_pension_wealth_next_period
     )
-    functions["pension_assets_adjustment"] = SolveSimulateFunctionPair(
+    functions["pension_assets_adjustment"] = Phased(
         solve=pensions.assets_adjustment,
         simulate=_zero_pension_assets_adjustment,
     )
@@ -766,6 +764,9 @@ def build_state_transitions(spec: RegimeSpec) -> dict:
         else social_security.next_aime_disabled
     )
     transitions["spousal_income"] = MarkovTransition(labor_market.next_spousal_income)
+    # Carried state: evolved only in simulate (in solve, `pension_wealth` is
+    # re-imputed from AIME each period and has no transition).
+    transitions["pension_wealth"] = pensions.wealth_next_before_adjustment
     return transitions
 
 

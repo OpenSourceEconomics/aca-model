@@ -146,7 +146,7 @@ def get_benchmark_initial_conditions(
     ref_regime = model.user_regimes[_INITIAL_REGIMES[0]]
     grids = ref_regime.states
     # Every state read here is a plain `Grid`; `pension_wealth` (a
-    # `SolveSimulateStatePair`) is never indexed, so the union widening
+    # carried state) is never indexed, so the union widening
     # ty sees on `states` does not apply.
     assets_pts = np.asarray(grids["assets"].to_jax())  # ty: ignore[unresolved-attribute]
     aime_pts = np.asarray(grids["aime"].to_jax())  # ty: ignore[unresolved-attribute]
@@ -168,7 +168,7 @@ def get_benchmark_initial_conditions(
         "age": jnp.full(n_subjects, 51.0),
         "assets": jnp.asarray(rng.uniform(assets_lo, assets_hi, n_subjects)),
         "aime": jnp.asarray(rng.uniform(aime_lo, aime_hi, n_subjects)),
-        # pension_wealth is a SolveSimulateStatePair seeded as the agent's true
+        # pension_wealth is a carried state seeded as the agent's true
         # pension wealth; the synthetic benchmark draws a modest positive stock.
         "pension_wealth": jnp.asarray(rng.uniform(0.0, 200_000.0, n_subjects)),
         "health": jnp.asarray(rng.integers(0, 3, n_subjects).astype(np.int32)),

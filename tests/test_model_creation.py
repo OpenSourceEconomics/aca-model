@@ -8,7 +8,7 @@ from helpers.model import (  # ty: ignore[unresolved-import]
     make_aca_model,
     make_baseline_model,
 )
-from lcm import DiscreteGrid, SolveSimulateFunctionPair, SolveSimulateStatePair
+from lcm import DiscreteGrid, Phased
 
 from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
@@ -177,8 +177,8 @@ def test_regime_specs_keys_match_regime_id() -> None:
         assert hasattr(RegimeId, name), f"RegimeId missing field for {name}"
 
 
-def test_all_non_terminal_regimes_carry_pension_wealth_as_state_pair() -> None:
-    """`pension_wealth` is a solve/simulate state pair in every living regime.
+def test_all_non_terminal_regimes_carry_pension_wealth_as_carried_state() -> None:
+    """`pension_wealth` is a carried state in every living regime.
 
     Imputed from AIME during solve (never a solve grid axis) yet seeded and
     evolved as the agent's actual pension wealth during simulate, so the true
@@ -187,14 +187,17 @@ def test_all_non_terminal_regimes_carry_pension_wealth_as_state_pair() -> None:
     """
     for name in REGIME_SPECS:
         regime = build_regime(name)
-        pair = regime.states["pension_wealth"]
-        assert isinstance(pair, SolveSimulateStatePair), name
-        assert pair.solve is pensions.wealth
-        assert pair.transition is pensions.wealth_next_before_adjustment
+        carried = regime.states["pension_wealth"]
+        assert isinstance(carried, Phased), name
+        assert carried.solve is pensions.wealth
+        assert (
+            regime.state_transitions["pension_wealth"]
+            is pensions.wealth_next_before_adjustment
+        ), name
 
 
 def test_pension_wealth_is_not_a_solve_function() -> None:
-    """The pension-wealth pair lives in `states`, not `functions`.
+    """The carried pension-wealth state lives in `states`, not `functions`.
 
     Its solve variant supplies the imputed value, so a separate
     `functions["pension_wealth"]` entry would double-define it.
@@ -203,15 +206,15 @@ def test_pension_wealth_is_not_a_solve_function() -> None:
     assert "pension_wealth" not in regime.functions
 
 
-def test_pension_assets_adjustment_is_solve_simulate_pair() -> None:
+def test_pension_assets_adjustment_is_phase_variant() -> None:
     """The pension assets adjustment corrects the imputation gap in solve only.
 
     In simulate the true pension wealth is carried directly, so the adjustment
-    is zero — a `SolveSimulateFunctionPair` with a zero simulate variant.
+    is zero — a `Phased` function with a zero simulate variant.
     """
     regime = build_regime("retiree_nomc_inelig_canwork")
     adjustment = regime.functions["pension_assets_adjustment"]
-    assert isinstance(adjustment, SolveSimulateFunctionPair)
+    assert isinstance(adjustment, Phased)
     assert adjustment.solve is pensions.assets_adjustment
 
 
