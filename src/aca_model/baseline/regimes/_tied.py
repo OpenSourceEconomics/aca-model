@@ -9,6 +9,7 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 from lcm import Regime
+from lcm.solvers import DCEGM
 from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
 
 from aca_model.agent import preferences
@@ -81,7 +82,9 @@ def _build_functions(spec: RegimeSpec) -> dict:
     return functions
 
 
-def build_regime(name: str, grids: Grids) -> Regime:
+def build_regime(
+    name: str, grids: Grids, *, dcegm_solver: DCEGM | None = None
+) -> Regime:
     """Build a tied regime (all tied regimes are canwork)."""
     spec = REGIME_SPECS[name]
     gets_mc = spec["mc"] != "nomc"
@@ -90,15 +93,19 @@ def build_regime(name: str, grids: Grids) -> Regime:
     transition_func = _make_transition_canwork(gets_mc, own, ng)
 
     states = build_states(spec, grids)
+    solver_kwargs: dict = {} if dcegm_solver is None else {"solver": dcegm_solver}
     return Regime(
         transition=build_granular_regime_transition(
             transition_func=transition_func, target_ids=(*own.values(), *ng.values())
         ),
         active=make_active_func(spec),
         states=states,
-        state_transitions=build_state_transitions(spec),
+        state_transitions=build_state_transitions(
+            spec, solver="brute_force" if dcegm_solver is None else "dcegm"
+        ),
         actions=build_actions(spec, grids),
         functions=_build_functions(spec),
         # `borrowing_constraint` is broadcast from the model level.
         constraints={"positive_leisure": preferences.positive_leisure},
+        **solver_kwargs,
     )

@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import DiscreteGrid, Regime
+from lcm.solvers import DCEGM
 from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import _nongroup as nongroup
@@ -23,6 +24,7 @@ from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
     Grids,
     RegimeId,
+    SolverName,
     build_dead_regime,
     build_grids,
     build_model_constraints,
@@ -30,6 +32,7 @@ from aca_model.baseline.regimes._common import (
     build_model_state_transitions,
     build_model_states,
 )
+from aca_model.baseline.regimes._dcegm import build_dcegm_solver
 from aca_model.config import GridConfig
 
 __all__ = [
@@ -50,17 +53,21 @@ _HIS_BUILDERS = {
 }
 
 
-def build_regime(name: str, grids: Grids) -> Regime:
+def build_regime(
+    name: str, grids: Grids, *, dcegm_solver: DCEGM | None = None
+) -> Regime:
     """Build a single baseline Regime object for the given regime name."""
     if name == "dead":
-        return build_dead_regime()
+        return build_dead_regime(
+            solver="brute_force" if dcegm_solver is None else "dcegm"
+        )
 
     spec = REGIME_SPECS[name]
     builder = _HIS_BUILDERS.get(spec["his"])
     if builder is None:
         msg = f"Unknown HIS type: {spec['his']}"
         raise ValueError(msg)
-    return builder(name, grids)
+    return builder(name, grids, dcegm_solver=dcegm_solver)
 
 
 def build_all_regimes(
@@ -69,13 +76,16 @@ def build_all_regimes(
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
+    solver: SolverName = "brute_force",
 ) -> dict[str, Regime]:
     """Build all 19 baseline regimes (18 non-terminal + dead).
 
     `fixed_params` carries the PIA bends for the AIME piecewise grid;
     `wage_params` sizes the assets-floor to `-max_annual_labor_income`;
     `pref_type_grid` selects the pref-type cardinality (production
-    `DiscreteGrid(PrefType)` or the benchmark's 2-type variant).
+    `DiscreteGrid(PrefType)` or the benchmark's 2-type variant);
+    `solver` selects brute force or DC-EGM for every living regime
+    (`dead` is terminal and keeps the default).
     """
     grids = build_grids(
         grid_config=grid_config,
@@ -83,10 +93,11 @@ def build_all_regimes(
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
     )
+    dcegm_solver = build_dcegm_solver(grids) if solver == "dcegm" else None
     regimes = {}
     for name in REGIME_SPECS:
-        regimes[name] = build_regime(name, grids)
-    regimes["dead"] = build_dead_regime()
+        regimes[name] = build_regime(name, grids, dcegm_solver=dcegm_solver)
+    regimes["dead"] = build_dead_regime(solver=solver)
     return regimes
 
 
@@ -96,6 +107,7 @@ def build_model_slots(
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
+    solver: SolverName = "brute_force",
 ) -> dict[str, Any]:
     """Build the model-level regime slots broadcast into every regime.
 
@@ -103,7 +115,8 @@ def build_model_slots(
     constraint, states, and laws of motion shared by all living regimes.
     Both the baseline and the ACA `create_model` consume this — the ACA
     overlay swaps only regime-level functions, so the broadcast slots are
-    policy-invariant.
+    policy-invariant. Under DC-EGM the solver-contract functions join the
+    broadcast set and no borrowing constraint is declared.
     """
     grids = build_grids(
         grid_config=grid_config,
@@ -112,8 +125,8 @@ def build_model_slots(
         pref_type_grid=pref_type_grid,
     )
     return {
-        "functions": build_model_functions(),
-        "constraints": build_model_constraints(),
+        "functions": build_model_functions(solver=solver),
+        "constraints": build_model_constraints(solver=solver),
         "states": build_model_states(grids),
         "state_transitions": build_model_state_transitions(),
     }

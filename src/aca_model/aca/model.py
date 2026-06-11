@@ -12,7 +12,7 @@ from lcm.typing import UserParams
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
-from aca_model.baseline.regimes import RegimeId, build_model_slots
+from aca_model.baseline.regimes import RegimeId, SolverName, build_model_slots
 from aca_model.config import MODEL_CONFIG, GridConfig
 
 
@@ -25,6 +25,7 @@ def create_model(
     derived_categoricals: Mapping[str, DiscreteGrid],
     grid_config: GridConfig,
     pref_type_grid: DiscreteGrid,
+    solver: SolverName = "brute_force",
 ) -> Model:
     """Create an ACA policy variant model.
 
@@ -45,6 +46,8 @@ def create_model(
             `pref_type`.
         grid_config: Continuous-grid point counts.
         pref_type_grid: Pref-type `DiscreteGrid`.
+        solver: `"brute_force"` (the default) or `"dcegm"`; see
+            `aca_model.baseline.model.create_model`.
 
     Returns:
         pylcm Model.
@@ -61,6 +64,7 @@ def create_model(
         fixed_params=fixed_params,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
+        solver=solver,
     )
     # The overlay swaps only regime-level functions; the broadcast slots
     # are policy-invariant.
@@ -69,6 +73,7 @@ def create_model(
         fixed_params=fixed_params,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
+        solver=solver,
     )
 
     return Model(
