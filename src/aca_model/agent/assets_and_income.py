@@ -123,6 +123,57 @@ def next_assets_when_dead(
     return cash_on_hand + transfers - consumption_dollars - oop_costs
 
 
+def resources(
+    cash_on_hand: FloatND,
+    consumption_dollars_floor: FloatND,
+) -> FloatND:
+    """Post-transfer resources out of which consumption is paid (DC-EGM `R`).
+
+    Algebraically `cash_on_hand + transfers`; the `max` form is preferred
+    because the additive form rounds to `floor + ε` at extreme cash (see
+    `borrowing_constraint`). Non-decreasing in `assets` (flat where the
+    floor binds), as the DC-EGM contract requires.
+    """
+    return jnp.maximum(cash_on_hand, consumption_dollars_floor)
+
+
+def savings(
+    resources: FloatND,
+    consumption_dollars: ContinuousAction,
+) -> FloatND:
+    """End-of-period savings (the DC-EGM post-decision state).
+
+    `savings >= 0` encodes the borrowing constraint
+    `consumption_dollars <= max(cash_on_hand, floor)` via the savings
+    grid's lower bound, so no explicit constraint is declared under DC-EGM.
+    """
+    return resources - consumption_dollars
+
+
+def next_assets_from_savings(
+    savings: FloatND,
+    pension_assets_adjustment: FloatND,
+    oop_costs: FloatND,
+) -> ContinuousState:
+    """Assets law for non-terminal targets in post-decision form.
+
+    Algebraically identical to `next_assets`:
+    `savings = cash_on_hand + transfers - consumption_dollars`.
+    """
+    return savings + pension_assets_adjustment - oop_costs
+
+
+def next_assets_when_dead_from_savings(
+    savings: FloatND,
+    oop_costs: FloatND,
+) -> ContinuousState:
+    """Assets law for the dead/terminal target in post-decision form.
+
+    No `pension_assets_adjustment` term, mirroring `next_assets_when_dead`.
+    """
+    return savings - oop_costs
+
+
 def borrowing_constraint(
     consumption_dollars: ContinuousAction,
     cash_on_hand: FloatND,

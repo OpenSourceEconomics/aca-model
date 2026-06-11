@@ -161,6 +161,33 @@ def u_alive(
     return u * utility_scale_factor
 
 
+def inverse_marginal_utility(
+    marginal_continuation: FloatND,
+    leisure: FloatND,
+    equivalence_scale: FloatND,
+    consumption_weight: FloatND,
+    coefficient_rra: FloatND,
+    utility_scale_factor: FloatND,
+) -> FloatND:
+    """Invert `du_alive/dc` in consumption dollars (DC-EGM Euler inversion).
+
+    With `composite = (c/e)^w · l^(1-w)` and `u = s · composite^(1-γ)/(1-γ)`,
+    the marginal utility in consumption dollars is
+    `u'(c) = s w c^(a-1) e^(-a) l^((1-w)(1-γ))` with `a = w(1-γ)`, so
+    `c = (m / (s w e^(-a) l^((1-w)(1-γ))))^(1/(a-1))`. The `γ = 1` (log)
+    branch of `u_alive` is the `a = 0` case of the same formula, so no
+    special-casing is needed.
+    """
+    exponent = consumption_weight * (1.0 - coefficient_rra)
+    base = (
+        utility_scale_factor
+        * consumption_weight
+        * equivalence_scale ** (-exponent)
+        * leisure ** ((1.0 - consumption_weight) * (1.0 - coefficient_rra))
+    )
+    return (marginal_continuation / base) ** (1.0 / (exponent - 1.0))
+
+
 def consumption_weight(
     consumption_weights: FloatND,
     pref_type: DiscreteState,

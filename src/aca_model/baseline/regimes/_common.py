@@ -42,6 +42,8 @@ from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment import pensions, social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
+SolverName = Literal["brute_force", "dcegm"]
+
 
 @categorical(ordered=False)
 class RegimeId:
@@ -500,7 +502,7 @@ _DEAD_KEEPS = frozenset(
 )
 
 
-def build_dead_regime() -> Regime:
+def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
     """Build the terminal dead regime.
 
     Everything `dead` carries arrives via the model-level broadcast:
@@ -512,17 +514,21 @@ def build_dead_regime() -> Regime:
       inputs (e.g. `pension_benefit`) don't surface as params in the dead
       template.
     - constraints: the borrowing constraint is masked — `dead` has no
-      consumption action.
+      consumption action. (Under DC-EGM no constraint is broadcast, so
+      there is nothing to mask.)
     - `pension_wealth` is masked explicitly: a carried state is rejected in
       terminal regimes before pruning could drop it.
     """
     function_masks = {
-        name: None for name in build_model_functions() if name not in _DEAD_KEEPS
+        name: None
+        for name in build_model_functions(solver=solver)
+        if name not in _DEAD_KEEPS
     }
+    constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
     return Regime(
         transition=None,
         functions={"utility": preferences.bequest, **function_masks},
-        constraints={"borrowing_constraint": None},
+        constraints=constraint_masks,
         states={"pension_wealth": None},
         active=lambda _age: True,
     )
@@ -550,7 +556,7 @@ def _select_leisure(spec: RegimeSpec) -> Callable[..., Any]:
     return preferences.leisure_canwork_retiree_or_nongroup
 
 
-def build_model_functions() -> dict:
+def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     """Build the model-level functions broadcast into every regime.
 
     Contains exactly the functions that are identical across all 18 living
@@ -558,9 +564,12 @@ def build_model_functions() -> dict:
     selections (`good_health`, `leisure`, …) and overlay-swapped names
     (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`) stay regime-level
     in `build_common_functions`. The `dead` regime masks every entry the
-    bequest DAG does not read (see `build_dead_regime`).
+    bequest DAG does not read (see `build_dead_regime`). Under DC-EGM the
+    solver-contract functions join the broadcast set.
     """
     functions: dict = {}
+    if solver == "dcegm":
+        functions |= build_dcegm_functions()
     functions["total_health_costs"] = health_insurance.total_costs
     functions["oop_costs"] = health_insurance.oop_with_medicaid
     functions["capital_income"] = assets_and_income.capital_income
@@ -599,11 +608,28 @@ def build_model_functions() -> dict:
     return functions
 
 
-def build_model_constraints() -> dict:
+def build_dcegm_functions() -> dict:
+    """Build the regime functions the DC-EGM contract requires.
+
+    Invariant across all living regimes, so they join the model-level
+    broadcast; `dead` masks them like the other broadcast functions.
+    """
+    return {
+        "resources": assets_and_income.resources,
+        "savings": assets_and_income.savings,
+        "inverse_marginal_utility": preferences.inverse_marginal_utility,
+    }
+
+
+def build_model_constraints(*, solver: SolverName = "brute_force") -> dict:
     """Build the model-level constraints broadcast into every regime.
 
     `dead` masks the borrowing constraint — it has no consumption action.
+    Under DC-EGM there is no explicit borrowing constraint: the savings
+    grid's lower bound enforces it.
     """
+    if solver == "dcegm":
+        return {}
     return {"borrowing_constraint": assets_and_income.borrowing_constraint}
 
 
@@ -870,16 +896,19 @@ def select_target_for_age(
     )
 
 
-def build_state_transitions(spec: RegimeSpec) -> dict:
+def build_state_transitions(
+    spec: RegimeSpec, *, solver: SolverName = "brute_force"
+) -> dict:
     """Build the regime-level state transitions dict for a non-dead regime.
 
     Contains only the spec-dependent laws; uniform laws for the broadcast
     states live at the model level (`build_model_state_transitions`).
     `assets` and `aime` are broadcast states whose laws differ per spec,
-    so the laws stay here.
+    so the laws stay here. Under DC-EGM the assets laws take their
+    post-decision (savings) form.
     """
     transitions: dict = {}
-    transitions["assets"] = _build_per_target_regime_assets(spec)
+    transitions["assets"] = _build_per_target_regime_assets(spec, solver=solver)
     transitions["health"] = _build_per_target_regime_health(spec)
     claimed_ss_transition = _build_per_target_regime_claimed_ss(spec)
     if claimed_ss_transition:
@@ -919,7 +948,7 @@ def _select_aime_law(spec: RegimeSpec) -> Callable[..., FloatND]:
 
 
 def _build_per_target_regime_assets(
-    spec: RegimeSpec,
+    spec: RegimeSpec, *, solver: SolverName = "brute_force"
 ) -> dict[RegimeName, Callable[..., FloatND]]:
     """Build per-target assets transitions.
 
@@ -928,7 +957,15 @@ def _build_per_target_regime_assets(
     pull in the `next_aime`-dependent imputation chain — `dead` has no
     `aime` state and pylcm cannot resolve `next_aime` there. Non-dead
     targets use the full `next_assets` with the pension correction.
+    Under DC-EGM both laws take their post-decision (savings) form.
     """
+    if solver == "dcegm":
+        living_law = assets_and_income.next_assets_from_savings
+        dead_law = assets_and_income.next_assets_when_dead_from_savings
+    else:
+        living_law = assets_and_income.next_assets
+        dead_law = assets_and_income.next_assets_when_dead
+
     target_regimes = precompute_target_regimes(spec)
     id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
@@ -942,9 +979,9 @@ def _build_per_target_regime_assets(
         target_name = id_to_name.get(target_id)
         if target_name is None:
             continue
-        result[target_name] = assets_and_income.next_assets
+        result[target_name] = living_law
 
-    result["dead"] = assets_and_income.next_assets_when_dead
+    result["dead"] = dead_law
     return result
 
 

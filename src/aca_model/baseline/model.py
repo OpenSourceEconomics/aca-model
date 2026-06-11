@@ -16,7 +16,12 @@ from typing import Any
 from lcm import AgeGrid, DiscreteGrid, Model
 from lcm.typing import UserParams
 
-from aca_model.baseline.regimes import RegimeId, build_all_regimes, build_model_slots
+from aca_model.baseline.regimes import (
+    RegimeId,
+    SolverName,
+    build_all_regimes,
+    build_model_slots,
+)
 from aca_model.config import MODEL_CONFIG, GridConfig
 
 
@@ -28,6 +33,7 @@ def create_model(
     derived_categoricals: Mapping[str, DiscreteGrid],
     grid_config: GridConfig,
     pref_type_grid: DiscreteGrid,
+    solver: SolverName = "brute_force",
 ) -> Model:
     """Create the baseline structural retirement model.
 
@@ -52,6 +58,11 @@ def create_model(
         pref_type_grid: Pref-type `DiscreteGrid`. Pass
             `DiscreteGrid(PrefType)` for the production 3-type layout,
             or a compact variant (e.g. `DiscreteGrid(BenchmarkPrefType)`).
+        solver: `"brute_force"` (the default) or `"dcegm"`. DC-EGM swaps
+            the spec to its post-decision form: savings-form assets laws,
+            broadcast `resources`/`savings`/`inverse_marginal_utility`
+            functions, no borrowing constraint, and a `DCEGM` solver
+            config on every living regime.
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
@@ -68,12 +79,14 @@ def create_model(
         fixed_params=fixed_params,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
+        solver=solver,
     )
     model_slots = build_model_slots(
         grid_config=grid_config,
         fixed_params=fixed_params,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
+        solver=solver,
     )
 
     return Model(

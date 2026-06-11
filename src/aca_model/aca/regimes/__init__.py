@@ -9,6 +9,7 @@ from lcm.typing import UserParams
 
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes._overrides import apply_aca_overrides
+from aca_model.baseline.regimes import SolverName
 from aca_model.baseline.regimes import build_all_regimes as baseline_build_all_regimes
 from aca_model.baseline.regimes._common import REGIME_SPECS
 from aca_model.config import GridConfig
@@ -21,6 +22,7 @@ def build_all_regimes(
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
+    solver: SolverName = "brute_force",
 ) -> dict[str, Regime]:
     """Build all 19 regimes with ACA policy overrides."""
     regimes = baseline_build_all_regimes(
@@ -28,6 +30,7 @@ def build_all_regimes(
         fixed_params=fixed_params,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
+        solver=solver,
     )
     result = {}
     for name, regime in regimes.items():
