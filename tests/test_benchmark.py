@@ -95,6 +95,22 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     `cash_on_hand + transfers`: the additive form rounds short by
     sub-ULP at extreme `|cash_on_hand|`, so the post-hoc check would
     also flip on the same kink.
+
+    Scope — this is the CPU/exact-arithmetic spec, and holds exactly
+    there. On GPU at coarse asset grids, a handful of mid-wealth rows can
+    show `consumption_dollars > max(cash_on_hand, floor)`: the consumption
+    policy interpolated across sparse asset nodes overshoots the exact
+    simulated budget by one action-grid cell. That is brute-force
+    coarse-grid interpolation noise (the same low-resolution unreliability
+    the DC-EGM oracle comparisons exclude), and it disappears at
+    production asset resolution — it is not a feasibility regression.
+
+    Such overshoot rows are NOT the consumption-floor segment, and
+    must not be mistaken for it: `consumption_dollars_floor` pins the
+    single/married floor onto the lowest action-grid points, whereas the
+    overshooting rows sit at cash-on-hand far above the floor (so
+    `max(cash_on_hand, floor) = cash_on_hand`) and pick an interior
+    consumption point, not the floor.
     """
     n_subjects = 4
     model = create_benchmark_model(
