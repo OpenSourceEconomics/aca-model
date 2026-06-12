@@ -35,6 +35,7 @@ def create_model(
     grid_config: GridConfig,
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
+    consumption_dollars_points: tuple[float, ...] | None = None,
 ) -> Model:
     """Create the baseline structural retirement model.
 
@@ -64,6 +65,11 @@ def create_model(
             broadcast `resources`/`savings`/`inverse_marginal_utility`
             functions, no borrowing constraint, and a `DCEGM` solver
             config on every living regime.
+        consumption_dollars_points: Construction-time consumption action
+            gridpoints. Required under DC-EGM (the kernel needs the
+            continuous-action grid at model construction); `None` keeps
+            the runtime-points grid completed per iteration via
+            `inject_consumption_dollars_points`.
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
@@ -75,6 +81,9 @@ def create_model(
         stop=MODEL_CONFIG.end_age - 1,
         step="Y",
     )
+    _fail_if_dcegm_without_consumption_points(
+        solver=solver, consumption_dollars_points=consumption_dollars_points
+    )
     fixed_params = with_nongroup_imputation_slices(fixed_params)
     regimes = build_all_regimes(
         grid_config=grid_config,
@@ -82,6 +91,7 @@ def create_model(
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
         solver=solver,
+        consumption_dollars_points=consumption_dollars_points,
     )
     model_slots = build_model_slots(
         grid_config=grid_config,
@@ -101,3 +111,21 @@ def create_model(
         n_subjects=n_subjects,
         **model_slots,
     )
+
+
+def _fail_if_dcegm_without_consumption_points(
+    *,
+    solver: SolverName,
+    consumption_dollars_points: tuple[float, ...] | None,
+) -> None:
+    if solver == "dcegm" and consumption_dollars_points is None:
+        msg = (
+            "solver='dcegm' requires `consumption_dollars_points`: the "
+            "DC-EGM kernel needs the continuous-action grid at model "
+            "construction, so the runtime params injection "
+            "(`inject_consumption_dollars_points`) cannot supply it. "
+            "Compute the points with `compute_consumption_dollars_points` "
+            "(or `get_benchmark_consumption_dollars_points` for the frozen "
+            "benchmark snapshot)."
+        )
+        raise ValueError(msg)

@@ -12,6 +12,7 @@ from lcm.typing import UserParams
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
+from aca_model.baseline.model import _fail_if_dcegm_without_consumption_points
 from aca_model.baseline.regimes import RegimeId, SolverName, build_model_slots
 from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment.pensions import with_nongroup_imputation_slices
@@ -27,6 +28,7 @@ def create_model(
     grid_config: GridConfig,
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
+    consumption_dollars_points: tuple[float, ...] | None = None,
 ) -> Model:
     """Create an ACA policy variant model.
 
@@ -49,6 +51,9 @@ def create_model(
         pref_type_grid: Pref-type `DiscreteGrid`.
         solver: `"brute_force"` (the default) or `"dcegm"`; see
             `aca_model.baseline.model.create_model`.
+        consumption_dollars_points: Construction-time consumption action
+            gridpoints; required under DC-EGM. See
+            `aca_model.baseline.model.create_model`.
 
     Returns:
         pylcm Model.
@@ -59,6 +64,9 @@ def create_model(
         stop=MODEL_CONFIG.end_age - 1,
         step="Y",
     )
+    _fail_if_dcegm_without_consumption_points(
+        solver=solver, consumption_dollars_points=consumption_dollars_points
+    )
     fixed_params = with_nongroup_imputation_slices(fixed_params)
     regimes = build_all_regimes(
         policy=policy,
@@ -67,6 +75,7 @@ def create_model(
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
         solver=solver,
+        consumption_dollars_points=consumption_dollars_points,
     )
     # The overlay swaps only regime-level functions; the broadcast slots
     # are policy-invariant.

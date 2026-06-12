@@ -77,6 +77,7 @@ def build_all_regimes(
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
+    consumption_dollars_points: tuple[float, ...] | None = None,
 ) -> dict[str, Regime]:
     """Build all 19 baseline regimes (18 non-terminal + dead).
 
@@ -85,13 +86,16 @@ def build_all_regimes(
     `pref_type_grid` selects the pref-type cardinality (production
     `DiscreteGrid(PrefType)` or the benchmark's 2-type variant);
     `solver` selects brute force or DC-EGM for every living regime
-    (`dead` is terminal and keeps the default).
+    (`dead` is terminal and keeps the default);
+    `consumption_dollars_points` fixes the consumption action grid at
+    construction (required under DC-EGM).
     """
     grids = build_grids(
         grid_config=grid_config,
         fixed_params=fixed_params,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
+        consumption_dollars_points=consumption_dollars_points,
     )
     dcegm_solver = build_dcegm_solver(grids) if solver == "dcegm" else None
     regimes = {}

@@ -239,6 +239,7 @@ def build_grids(
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
+    consumption_dollars_points: tuple[float, ...] | None = None,
 ) -> Grids:
     """Build continuous-state/action grids from a `GridConfig`.
 
@@ -252,6 +253,10 @@ def build_grids(
     because `log_ft_wage_mean` is a per-iteration param at estimation
     time (reconstructed from `wage_bias_coeffs_*`), not a fixed one;
     the grid floor must still be known at build time.
+
+    `consumption_dollars_points` fixes the consumption action grid at
+    construction (the DC-EGM kernel needs it then); `None` keeps the
+    runtime-points grid completed per iteration via params injection.
     """
     # Unit-variance standardised shocks: the total_costs / wage
     # formulas rescale these by fixed_params-level std parameters
@@ -286,8 +291,10 @@ def build_grids(
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         pension_wealth=_PENSION_WEALTH_GRID,
-        consumption_dollars=IrregSpacedGrid(
-            n_points=grid_config.n_consumption_dollars_gridpoints,
+        consumption_dollars=(
+            IrregSpacedGrid(n_points=grid_config.n_consumption_dollars_gridpoints)
+            if consumption_dollars_points is None
+            else IrregSpacedGrid(points=consumption_dollars_points)
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,

@@ -21,7 +21,7 @@ point equals `start`, but XLA backends can drift by sub-ULP for some
 A positive drift above the floor flips the kink-boundary `<=` and
 rejects every action for the affected subjects.
 
-`_compute_consumption_dollars_points` therefore prepends the singles'
+`compute_consumption_dollars_points` therefore prepends the singles'
 floor as `pts[0]`, runs `geomspace` from the married floor up to the
 caller-supplied `max_consumption_dollars` for the rest, and pins the
 geomspace start back to the married floor exactly. Test those invariants
@@ -31,7 +31,7 @@ directly.
 import jax.numpy as jnp
 import pytest
 
-from aca_model.consumption_dollars_grid import _compute_consumption_dollars_points
+from aca_model.consumption_dollars_grid import compute_consumption_dollars_points
 
 EXPONENT = 0.7  # production value (env_constants["exponent"])
 SINGLE_FLOOR = 1597.0921419521899  # production value
@@ -40,11 +40,11 @@ MAX_CONSUMPTION_DOLLARS = 300_000.0  # production value (env_constants)
 
 
 @pytest.mark.parametrize("n_points", [5, 16, 64, 70, 100])
-def test_compute_consumption_dollars_points_first_equals_singles_floor(
+def testcompute_consumption_dollars_points_first_equals_singles_floor(
     n_points: int,
 ) -> None:
     """`pts[0]` equals the singles' floor exactly under any `n_points`."""
-    pts = _compute_consumption_dollars_points(
+    pts = compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
         exponent=jnp.asarray(EXPONENT),
         max_consumption_dollars=jnp.asarray(MAX_CONSUMPTION_DOLLARS),
@@ -54,11 +54,11 @@ def test_compute_consumption_dollars_points_first_equals_singles_floor(
 
 
 @pytest.mark.parametrize("n_points", [5, 16, 64, 70, 100])
-def test_compute_consumption_dollars_points_second_equals_married_floor(
+def testcompute_consumption_dollars_points_second_equals_married_floor(
     n_points: int,
 ) -> None:
     """`pts[1]` equals `consumption_equiv_floor * 2 ** exponent` exactly."""
-    pts = _compute_consumption_dollars_points(
+    pts = compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
         exponent=jnp.asarray(EXPONENT),
         max_consumption_dollars=jnp.asarray(MAX_CONSUMPTION_DOLLARS),
@@ -68,9 +68,9 @@ def test_compute_consumption_dollars_points_second_equals_married_floor(
     assert float(pts[1]) == expected
 
 
-def test_compute_consumption_dollars_points_strictly_increasing() -> None:
+def testcompute_consumption_dollars_points_strictly_increasing() -> None:
     """Gridpoints are strictly increasing — no kink-pinning ties."""
-    pts = _compute_consumption_dollars_points(
+    pts = compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
         exponent=jnp.asarray(EXPONENT),
         max_consumption_dollars=jnp.asarray(MAX_CONSUMPTION_DOLLARS),
@@ -80,9 +80,9 @@ def test_compute_consumption_dollars_points_strictly_increasing() -> None:
     assert bool((diffs > 0).all())
 
 
-def test_compute_consumption_dollars_points_last_equals_max() -> None:
+def testcompute_consumption_dollars_points_last_equals_max() -> None:
     """The final point is the configured upper bound."""
-    pts = _compute_consumption_dollars_points(
+    pts = compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
         exponent=jnp.asarray(EXPONENT),
         max_consumption_dollars=jnp.asarray(MAX_CONSUMPTION_DOLLARS),
