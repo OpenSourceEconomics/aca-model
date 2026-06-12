@@ -28,7 +28,8 @@ def build_dcegm_solver(grids: Grids) -> DCEGM:
     grid's (negative) floor. Nodes are cubically clustered toward the
     constraint, where the value function curves hardest.
     """
-    savings_stop = float(grids.assets.stop) - float(grids.assets.start)
+    assets_points = grids.assets.to_jax()
+    savings_stop = float(assets_points[-1]) - float(assets_points[0])
     savings_grid = IrregSpacedGrid(
         points=tuple(
             savings_stop * (i / (_N_SAVINGS_POINTS - 1)) ** 3

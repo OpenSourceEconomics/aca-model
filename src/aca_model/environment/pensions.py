@@ -3,6 +3,9 @@
 Ported from struct-ret/src/model/baseline/soc_sec_pensions_taxes.py.
 """
 
+from collections.abc import Mapping
+from typing import Any
+
 import jax.numpy as jnp
 from lcm.typing import ContinuousState, FloatND, IntND, Period, ScalarFloat
 
@@ -191,7 +194,7 @@ def assets_adjustment(
     )
 
 
-def imputed_pension_wealth_next_period(
+def imputed_pension_wealth_next_period_no_medicaid(
     next_aime: ContinuousState,
     target_his: IntND,
     period: Period,
@@ -205,7 +208,7 @@ def imputed_pension_wealth_next_period(
     imp_kink_1_next_period: FloatND,
     epdv_constant_pension_next_period: FloatND,
 ) -> FloatND:
-    """Imputed pension wealth at next period using the target regime's HIS.
+    """Imputed next-period pension wealth at the deterministic target HIS.
 
     `pw_{t+1} = Γ_{t+1} · pbmax_{t+1}` (French & Jones 2011, eq. D.3): the
     *full* next-period benefit times the next-period annuity factor, with no
@@ -213,7 +216,10 @@ def imputed_pension_wealth_next_period(
     `full_benefit` and `wealth` but indexes 1-period-shifted views so all
     subscripts use bare-name parameters (`period`, `target_his`). Inlining is
     required: pylcm's AST shape inference inspects the registered function's
-    body and does not trace through nested calls.
+    body and does not trace through nested calls; the same inference also
+    allows only one subscript per array parameter, which is why the
+    nongroup (Medicaid-target) leg lives in a separate function reading
+    pre-sliced `_ng` tables.
     """
     next_pia = jnp.interp(next_aime, pia_aime_grid, pia_table)
 
@@ -228,3 +234,82 @@ def imputed_pension_wealth_next_period(
 
     pbmax_next = jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
     return pbmax_next * epdv_constant_pension_next_period[period]
+
+
+def imputed_pension_wealth_next_period_medicaid(
+    next_aime: ContinuousState,
+    period: Period,
+    pia_table: FloatND,
+    pia_aime_grid: FloatND,
+    imp_intercept_next_period_ng: FloatND,
+    imp_pia_coeff_next_period_ng: FloatND,
+    imp_pia_kink_0_coeff_next_period_ng: FloatND,
+    imp_pia_kink_1_coeff_next_period_ng: FloatND,
+    imp_kink_0_next_period: FloatND,
+    imp_kink_1_next_period: FloatND,
+    epdv_constant_pension_next_period: FloatND,
+) -> FloatND:
+    """Imputed next-period pension wealth at the Medicaid target (nongroup).
+
+    Same imputation as
+    `imputed_pension_wealth_next_period_no_medicaid`, evaluated at the
+    nongroup HIS that Medicaid-eligible agents transition into. The
+    nongroup coefficients arrive as age-indexed `_ng` slices (produced by
+    `with_nongroup_imputation_slices`) so each table parameter keeps the
+    single bare-name subscript pylcm's AST shape inference requires.
+    """
+    next_pia = jnp.interp(next_aime, pia_aime_grid, pia_table)
+
+    intercept = imp_intercept_next_period_ng[period]
+    pia_pred = imp_pia_coeff_next_period_ng[period] * next_pia
+    kink_0_adj = imp_pia_kink_0_coeff_next_period_ng[period] * jnp.maximum(
+        0.0, next_pia - imp_kink_0_next_period[period]
+    )
+    kink_1_adj = imp_pia_kink_1_coeff_next_period_ng[period] * jnp.maximum(
+        0.0, next_pia - imp_kink_1_next_period[period]
+    )
+
+    pbmax_next = jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
+    return pbmax_next * epdv_constant_pension_next_period[period]
+
+
+def imputed_pension_wealth_next_period(
+    imputed_pension_wealth_next_period_no_medicaid: FloatND,
+    imputed_pension_wealth_next_period_medicaid: FloatND,
+    medicaid_eligibility_share: FloatND,
+) -> FloatND:
+    """Expected next-period pension-wealth imputation over the Medicaid mix.
+
+    The regime transition routes the agent to the nongroup target with
+    probability `medicaid_eligibility_share` and to the deterministic
+    target otherwise; the imputation anticipated by `assets_adjustment` is
+    the same share-weighted mixture, keeping the solve-phase assets law
+    smooth in the states the share depends on.
+    """
+    return (
+        medicaid_eligibility_share * imputed_pension_wealth_next_period_medicaid
+        + (1.0 - medicaid_eligibility_share)
+        * imputed_pension_wealth_next_period_no_medicaid
+    )
+
+
+_NG_SLICED_IMPUTATION_TABLES = (
+    "imp_intercept_next_period",
+    "imp_pia_coeff_next_period",
+    "imp_pia_kink_0_coeff_next_period",
+    "imp_pia_kink_1_coeff_next_period",
+)
+
+
+def with_nongroup_imputation_slices(fixed_params: Mapping[str, Any]) -> dict[str, Any]:
+    """Add age-indexed nongroup slices of the his-indexed imputation tables.
+
+    For each table in `_NG_SLICED_IMPUTATION_TABLES` (a `pd.Series` with an
+    `(age, target_his)` MultiIndex), add a `<name>_ng` sibling holding its
+    `target_his="nongroup"` slice. The slices feed
+    `imputed_pension_wealth_next_period_medicaid`. Original keys are kept.
+    """
+    out = dict(fixed_params)
+    for name in _NG_SLICED_IMPUTATION_TABLES:
+        out[f"{name}_ng"] = fixed_params[name].xs("nongroup", level="target_his")
+    return out

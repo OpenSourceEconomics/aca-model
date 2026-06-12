@@ -201,29 +201,29 @@ def test_cost_sharing_scale_uninsured_one() -> None:
     assert jnp.isclose(result, 1.0)
 
 
-def test_medicaid_eligible_aca_below_threshold() -> None:
-    """Income below 133% FPL produces eligible."""
-    result = aca_hi.is_medicaid_eligible(
+def test_medicaid_share_aca_below_threshold() -> None:
+    """Income below the 133%-FPL band gives share 1."""
+    result = aca_hi.medicaid_eligibility_share(
         countable_income=jnp.array(10000.0),  # below 15580
         spousal_income=jnp.int32(0),
         medicaid_schedule=MEDICAID_SCHEDULE,
     )
-    assert result
+    assert jnp.isclose(result, 1.0)
 
 
-def test_medicaid_eligible_aca_above_threshold() -> None:
-    """Income above 133% FPL produces not eligible."""
-    result = aca_hi.is_medicaid_eligible(
+def test_medicaid_share_aca_above_threshold() -> None:
+    """Income above the 133%-FPL band gives share 0."""
+    result = aca_hi.medicaid_eligibility_share(
         countable_income=jnp.array(20000.0),  # above 15580
         spousal_income=jnp.int32(0),
         medicaid_schedule=MEDICAID_SCHEDULE,
     )
-    assert not result
+    assert jnp.isclose(result, 0.0)
 
 
-def test_medicaid_eligible_aca_ignores_assets() -> None:
+def test_medicaid_share_aca_ignores_assets() -> None:
     """ACA Medicaid has no asset test; function signature has no assets param."""
-    sig = inspect.signature(aca_hi.is_medicaid_eligible)
+    sig = inspect.signature(aca_hi.medicaid_eligibility_share)
     assert "assets" not in sig.parameters
 
 

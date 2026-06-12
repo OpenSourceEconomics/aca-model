@@ -5,6 +5,7 @@ build_common_functions. No policy logic, no HIS-specific conditionals.
 """
 
 import functools
+import itertools
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -194,7 +195,7 @@ config = MODEL_CONFIG
 
 @dataclass(frozen=True)
 class Grids:
-    assets: LinSpacedGrid
+    assets: LinSpacedGrid | PiecewiseLinSpacedGrid
     aime: PiecewiseLinSpacedGrid
     pension_wealth: LinSpacedGrid
     consumption_dollars: IrregSpacedGrid
@@ -278,11 +279,10 @@ def build_grids(
     )
 
     return Grids(
-        assets=LinSpacedGrid(
-            start=assets_start,
-            stop=500_000.0,
-            n_points=grid_config.n_assets_gridpoints,
-            batch_size=grid_config.n_assets_batch_size,
+        assets=_build_assets_grid(
+            grid_config=grid_config,
+            fixed_params=fixed_params,
+            assets_start=assets_start,
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         pension_wealth=_PENSION_WEALTH_GRID,
@@ -295,6 +295,118 @@ def build_grids(
         pref_type=pref_type_grid,
         grid_config=grid_config,
     )
+
+
+# Smallest assets-grid budget that gets dedicated SSI-band nodes. Below
+# this (smoke-test sizes) there is no base resolution worth refining, so
+# the grid stays plain linspaced.
+MIN_ASSETS_GRIDPOINTS_FOR_BAND_NODES = 8
+
+_ASSETS_GRID_STOP = 500_000.0
+
+
+def _build_assets_grid(
+    *,
+    grid_config: GridConfig,
+    fixed_params: UserParams,
+    assets_start: float,
+) -> LinSpacedGrid | PiecewiseLinSpacedGrid:
+    """Return the assets grid, with dedicated nodes across each SSI band.
+
+    Each distinct `ssi_assets_test` value `t` (one per household type)
+    gets nodes at `{t - h, t, t + h}` with
+    `h = ELIGIBILITY_BAND_HALF_WIDTH`, so the smoothed eligibility ramp
+    is resolved at node resolution — a band narrower than a grid cell is
+    a cliff to any solver that reasons per node. The band nodes sit on
+    top of the configured base resolution, which spreads over the
+    segments between bands proportionally to their span (at least two
+    points per segment, the piecewise-grid minimum). Budgets below
+    `MIN_ASSETS_GRIDPOINTS_FOR_BAND_NODES` keep the plain linspaced grid.
+    """
+    n_base = grid_config.n_assets_gridpoints
+    half_width = health_insurance.ELIGIBILITY_BAND_HALF_WIDTH
+    thresholds = sorted(
+        {
+            float(v)
+            for v in np.asarray(fixed_params["ssi_assets_test"])
+            if assets_start < float(v) - half_width
+            and float(v) + half_width < _ASSETS_GRID_STOP
+        }
+    )
+    if n_base < MIN_ASSETS_GRIDPOINTS_FOR_BAND_NODES or not thresholds:
+        return LinSpacedGrid(
+            start=assets_start,
+            stop=_ASSETS_GRID_STOP,
+            n_points=n_base,
+            batch_size=grid_config.n_assets_batch_size,
+        )
+    _fail_if_bands_overlap(thresholds=thresholds, half_width=half_width)
+
+    outer_bounds = [
+        (assets_start, thresholds[0] - half_width),
+        *[
+            (lo + half_width, hi - half_width)
+            for lo, hi in itertools.pairwise(thresholds)
+        ],
+        (thresholds[-1] + half_width, _ASSETS_GRID_STOP),
+    ]
+    outer_n_points = _allocate_points_by_span(bounds=outer_bounds, total=n_base)
+
+    segments: list[PiecewiseGridSegment] = []
+    for (lo, hi), n_outer, threshold in zip(
+        outer_bounds[:-1], outer_n_points[:-1], thresholds, strict=True
+    ):
+        segments.append(
+            PiecewiseGridSegment(interval=f"[{lo}, {hi})", n_points=n_outer)
+        )
+        segments.append(
+            PiecewiseGridSegment(interval=f"[{hi}, {threshold})", n_points=2)
+        )
+        segments.append(
+            PiecewiseGridSegment(
+                interval=f"[{threshold}, {threshold + half_width})", n_points=2
+            )
+        )
+    final_lo, final_hi = outer_bounds[-1]
+    segments.append(
+        PiecewiseGridSegment(
+            interval=f"[{final_lo}, {final_hi}]", n_points=outer_n_points[-1]
+        )
+    )
+    return PiecewiseLinSpacedGrid(
+        segments=tuple(segments), batch_size=grid_config.n_assets_batch_size
+    )
+
+
+def _allocate_points_by_span(
+    *, bounds: list[tuple[float, float]], total: int
+) -> list[int]:
+    """Split `total` points over segments proportionally to their span.
+
+    Every segment gets at least the two points `PiecewiseLinSpacedGrid`
+    requires; the remainder goes one-by-one to the segment with the
+    largest gap between its proportional entitlement and its current
+    allocation.
+    """
+    spans = [hi - lo for lo, hi in bounds]
+    full_span = sum(spans)
+    entitlements = [total * span / full_span for span in spans]
+    alloc = [2] * len(bounds)
+    for _ in range(max(0, total - 2 * len(bounds))):
+        shortfalls = [e - a for e, a in zip(entitlements, alloc, strict=True)]
+        alloc[shortfalls.index(max(shortfalls))] += 1
+    return alloc
+
+
+def _fail_if_bands_overlap(*, thresholds: list[float], half_width: float) -> None:
+    for lo, hi in itertools.pairwise(thresholds):
+        if hi - lo <= 2.0 * half_width:
+            msg = (
+                f"SSI assets-test thresholds {lo} and {hi} are closer than "
+                f"the {2 * half_width}-wide smoothing band; bands must not "
+                "overlap."
+            )
+            raise ValueError(msg)
 
 
 def get_hcc_persistent_shock(*, grid_config: GridConfig) -> RouwenhorstAR1Process:
@@ -562,8 +674,8 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     Contains exactly the functions that are identical across all 18 living
     regimes AND are never swapped by the ACA policy overlay. Spec-dependent
     selections (`good_health`, `leisure`, …) and overlay-swapped names
-    (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`) stay regime-level
-    in `build_common_functions`. The `dead` regime masks every entry the
+    (`medicaid_eligibility_share`, `cash_on_hand`, `primary_oop`) stay
+    regime-level in `build_common_functions`. The `dead` regime masks every entry the
     bequest DAG does not read (see `build_dead_regime`). Under DC-EGM the
     solver-contract functions join the broadcast set.
     """
@@ -586,7 +698,7 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
 
     # SSI/Medicaid (eligibility itself is overlay-swapped, hence regime-level)
     functions["countable_income"] = health_insurance.countable_income
-    functions["is_ssi_eligible"] = health_insurance.is_ssi_eligible
+    functions["ssi_eligibility_share"] = health_insurance.ssi_eligibility_share
     functions["ssi_benefit"] = health_insurance.ssi_benefit
 
     # Taxes
@@ -709,7 +821,9 @@ def build_common_functions(spec: RegimeSpec) -> dict:
         functions["ssdi_pia"] = social_security.ssdi_pia
 
     # Swapped per policy variant by the ACA overlay, hence regime-level
-    functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
+    functions["medicaid_eligibility_share"] = (
+        health_insurance.medicaid_eligibility_share
+    )
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
 
     # Earnings test credit-back (only choose+canwork: has claim_ss + claimed_ss)
@@ -759,7 +873,10 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
       `imputed_pension_wealth_next_period` feed the solve-phase
       `pension_assets_adjustment`, which reconciles the accrual-evolved
       pension with next period's AIME imputation; in simulate the adjustment
-      is zero because the true wealth is carried directly.
+      is zero because the true wealth is carried directly. The imputation is
+      the `medicaid_eligibility_share`-weighted mixture of two legs — the
+      deterministic `target_his` lookup and the nongroup (Medicaid-target)
+      lookup — matching the probability mixture in the regime transition.
     """
     can_work = spec["canwork"] == "canwork"
 
@@ -776,6 +893,12 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
         health_insurance.target_his
         if can_work
         else health_insurance.target_his_forcedout
+    )
+    functions["imputed_pension_wealth_next_period_no_medicaid"] = (
+        pensions.imputed_pension_wealth_next_period_no_medicaid
+    )
+    functions["imputed_pension_wealth_next_period_medicaid"] = (
+        pensions.imputed_pension_wealth_next_period_medicaid
     )
     functions["imputed_pension_wealth_next_period"] = (
         pensions.imputed_pension_wealth_next_period

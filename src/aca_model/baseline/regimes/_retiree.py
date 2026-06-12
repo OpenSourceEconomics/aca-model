@@ -1,15 +1,15 @@
 """Regime transitions and builder for retiree HIS regimes.
 
 Retiree regimes: agents with employer-sponsored retiree health insurance.
-Medicaid-eligible agents are overridden to nongroup.
+The Medicaid eligibility share routes probability mass to the nongroup
+target.
 """
 
 from collections.abc import Callable
 
-import jax.numpy as jnp
 from lcm import Regime
 from lcm.solvers import DCEGM
-from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
+from lcm.typing import Age, DiscreteAction, FloatND, Period
 
 from aca_model.agent import preferences
 from aca_model.agent.labor_market import LaborSupply
@@ -39,25 +39,28 @@ def _make_transition_canwork(
 ) -> Callable[..., FloatND]:
     """Create transition for canwork retiree regimes.
 
-    Retirees who stop working get Medicare (if gets_medicare).
-    Medicaid-eligible agents are overridden to nongroup targets.
+    Retirees who stop working get Medicare (if gets_medicare). The Medicaid
+    eligibility share routes that fraction of the survival mass to the
+    nongroup target — a smooth probability mixture, not a discrete
+    override, so the transition stays differentiable in the states the
+    share depends on.
     """
 
     def transition(
         age: Age,
         period: Period,
         labor_supply: DiscreteAction,
-        is_medicaid_eligible: BoolND,
+        medicaid_eligibility_share: FloatND,
         survival_probs: FloatND,
     ) -> FloatND:
         sp = survival_probs[period]
         next_age = age + 1
         mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
         target = select_target_for_age(next_age, mc_next, own)
-        # Medicaid eligibility overrides to nongroup
         ng_ssi = select_target_for_age(next_age, mc_next, ng)
-        target = jnp.where(is_medicaid_eligible, ng_ssi, target)
-        return build_regime_probs(target, sp)
+        return medicaid_eligibility_share * build_regime_probs(ng_ssi, sp) + (
+            1.0 - medicaid_eligibility_share
+        ) * build_regime_probs(target, sp)
 
     return transition
 
@@ -69,21 +72,23 @@ def _make_transition_forcedout(
 ) -> Callable[..., FloatND]:
     """Create transition for forcedout retiree regimes.
 
-    No labor supply action. Medicaid-eligible agents are overridden to nongroup.
+    No labor supply action. The Medicaid eligibility share routes that
+    fraction of the survival mass to the nongroup target.
     """
 
     def transition(
         age: Age,
         period: Period,
-        is_medicaid_eligible: BoolND,
+        medicaid_eligibility_share: FloatND,
         survival_probs: FloatND,
     ) -> FloatND:
         sp = survival_probs[period]
         next_age = age + 1
         target = select_target_for_age(next_age, gets_medicare, own)
         ng_ssi = select_target_for_age(next_age, gets_medicare, ng)
-        target = jnp.where(is_medicaid_eligible, ng_ssi, target)
-        return build_regime_probs(target, sp)
+        return medicaid_eligibility_share * build_regime_probs(ng_ssi, sp) + (
+            1.0 - medicaid_eligibility_share
+        ) * build_regime_probs(target, sp)
 
     return transition
 

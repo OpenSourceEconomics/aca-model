@@ -1,7 +1,7 @@
 """Integration tests for SSI → Medicaid → OOP chain.
 
-Compose via dags: countable_income → is_ssi_eligible → ssi_benefit,
-and is_medicaid_eligible → oop_with_medicaid.
+Compose via dags: countable_income → ssi_eligibility_share → ssi_benefit,
+and medicaid_eligibility_share → oop_with_medicaid.
 """
 
 import jax.numpy as jnp
@@ -20,13 +20,13 @@ def test_low_income_qualifies_for_ssi_and_medicaid() -> None:
     """Low-income agent with Medicare → SSI eligible → Medicaid → reduced OOP."""
     functions = {
         "countable_income": health_insurance.countable_income,
-        "is_ssi_eligible": health_insurance.is_ssi_eligible,
+        "ssi_eligibility_share": health_insurance.ssi_eligibility_share,
         "ssi_benefit": health_insurance.ssi_benefit,
-        "is_medicaid_eligible": health_insurance.is_medicaid_eligible,
+        "medicaid_eligibility_share": health_insurance.medicaid_eligibility_share,
     }
     combined = concatenate_functions(
         functions,
-        targets=["is_ssi_eligible", "ssi_benefit", "is_medicaid_eligible"],
+        targets=["ssi_eligibility_share", "ssi_benefit", "medicaid_eligibility_share"],
         return_type="dict",
     )
     result = combined(
@@ -43,8 +43,8 @@ def test_low_income_qualifies_for_ssi_and_medicaid() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert result["is_ssi_eligible"]
-    assert result["is_medicaid_eligible"]
+    assert jnp.isclose(result["ssi_eligibility_share"], 1.0)
+    assert jnp.isclose(result["medicaid_eligibility_share"], 1.0)
     assert result["ssi_benefit"] > 0.0
 
 
@@ -52,12 +52,12 @@ def test_high_income_ineligible_for_ssi() -> None:
     """High-income agent → SSI ineligible → Medicaid ineligible."""
     functions = {
         "countable_income": health_insurance.countable_income,
-        "is_ssi_eligible": health_insurance.is_ssi_eligible,
-        "is_medicaid_eligible": health_insurance.is_medicaid_eligible,
+        "ssi_eligibility_share": health_insurance.ssi_eligibility_share,
+        "medicaid_eligibility_share": health_insurance.medicaid_eligibility_share,
     }
     combined = concatenate_functions(
         functions,
-        targets=["is_ssi_eligible", "is_medicaid_eligible"],
+        targets=["ssi_eligibility_share", "medicaid_eligibility_share"],
         return_type="dict",
     )
     result = combined(
@@ -74,20 +74,20 @@ def test_high_income_ineligible_for_ssi() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert not result["is_ssi_eligible"]
-    assert not result["is_medicaid_eligible"]
+    assert jnp.isclose(result["ssi_eligibility_share"], 0.0)
+    assert jnp.isclose(result["medicaid_eligibility_share"], 0.0)
 
 
 def test_no_medicare_blocks_ssi_under_baseline() -> None:
-    """Baseline SSI requires gets_medicare; without it, even low income fails."""
+    """Baseline SSI requires gets_medicare; without it the share is 0."""
     functions = {
         "countable_income": health_insurance.countable_income,
-        "is_ssi_eligible": health_insurance.is_ssi_eligible,
-        "is_medicaid_eligible": health_insurance.is_medicaid_eligible,
+        "ssi_eligibility_share": health_insurance.ssi_eligibility_share,
+        "medicaid_eligibility_share": health_insurance.medicaid_eligibility_share,
     }
     combined = concatenate_functions(
         functions,
-        targets="is_ssi_eligible",
+        targets="ssi_eligibility_share",
     )
     result = combined(
         labor_income=jnp.array(0.0),
@@ -103,14 +103,14 @@ def test_no_medicare_blocks_ssi_under_baseline() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert not result
+    assert jnp.isclose(result, 0.0)
 
 
 def test_medicaid_reduces_oop() -> None:
     """Medicaid as secondary payer reduces OOP below primary insurance OOP."""
     functions = {
         "primary_oop": health_insurance.primary_oop,
-        "is_medicaid_eligible": health_insurance.is_medicaid_eligible,
+        "medicaid_eligibility_share": health_insurance.medicaid_eligibility_share,
         "oop_costs": health_insurance.oop_with_medicaid,
     }
     combined = concatenate_functions(functions, targets="oop_costs")
@@ -122,7 +122,7 @@ def test_medicaid_reduces_oop() -> None:
         deductible=jnp.asarray(500.0),
         coinsurance_rate=jnp.asarray(0.2),
         oop_max=jnp.asarray(5000.0),
-        is_ssi_eligible=jnp.array(True),
+        ssi_eligibility_share=jnp.array(1.0),
         deductible_medicaid=jnp.asarray(100.0),
         coinsurance_rate_medicaid=jnp.asarray(0.05),
         oop_max_medicaid=jnp.asarray(1000.0),
@@ -135,7 +135,7 @@ def test_medicaid_reduces_oop() -> None:
         deductible=jnp.asarray(500.0),
         coinsurance_rate=jnp.asarray(0.2),
         oop_max=jnp.asarray(5000.0),
-        is_ssi_eligible=jnp.array(False),
+        ssi_eligibility_share=jnp.array(0.0),
         deductible_medicaid=jnp.asarray(100.0),
         coinsurance_rate_medicaid=jnp.asarray(0.05),
         oop_max_medicaid=jnp.asarray(1000.0),

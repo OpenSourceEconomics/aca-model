@@ -119,13 +119,9 @@ def test_aca_primary_oop_scaled_reduces_costs() -> None:
     assert oop_reduced < oop_full
 
 
-def test_medicaid_eligible_baseline_delegates_to_ssi_true() -> None:
-    """is_medicaid_eligible_baseline returns True when is_ssi_eligible is True."""
-    result = health_insurance.is_medicaid_eligible(is_ssi_eligible=jnp.array(True))
-    assert jnp.array_equal(result, jnp.array(True))
-
-
-def test_medicaid_eligible_baseline_delegates_to_ssi_false() -> None:
-    """is_medicaid_eligible_baseline returns False when is_ssi_eligible is False."""
-    result = health_insurance.is_medicaid_eligible(is_ssi_eligible=jnp.array(False))
-    assert jnp.array_equal(result, jnp.array(False))
+def test_medicaid_share_baseline_delegates_to_ssi_share() -> None:
+    """Baseline Medicaid eligibility share passes the SSI share through."""
+    result = health_insurance.medicaid_eligibility_share(
+        ssi_eligibility_share=jnp.array(0.42)
+    )
+    assert jnp.isclose(result, 0.42)

@@ -13,8 +13,9 @@ SSI_ASSETS_TEST = jnp.array([2000.0, 3000.0, 3000.0])
 SSI_MAX_BENEFIT = jnp.array([8000.0, 12000.0, 12000.0])
 
 
-def test_ssi_eligible_assets_too_high() -> None:
-    result = health_insurance.is_ssi_eligible(
+def test_ssi_share_assets_too_high() -> None:
+    """Assets far above the test give share 0 (outside the band)."""
+    result = health_insurance.ssi_eligibility_share(
         assets=jnp.array(5000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.int32(0),
@@ -22,11 +23,12 @@ def test_ssi_eligible_assets_too_high() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert not result
+    assert jnp.isclose(result, 0.0, atol=ATOL)
 
 
-def test_ssi_eligible_income_too_high() -> None:
-    result = health_insurance.is_ssi_eligible(
+def test_ssi_share_income_too_high() -> None:
+    """Income far above the maximum benefit gives share 0."""
+    result = health_insurance.ssi_eligibility_share(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(9000.0),
         spousal_income=jnp.int32(0),
@@ -34,11 +36,12 @@ def test_ssi_eligible_income_too_high() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert not result
+    assert jnp.isclose(result, 0.0, atol=ATOL)
 
 
-def test_ssi_eligible_no_medicare() -> None:
-    result = health_insurance.is_ssi_eligible(
+def test_ssi_share_no_medicare() -> None:
+    """Without Medicare the share is 0 regardless of assets and income."""
+    result = health_insurance.ssi_eligibility_share(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.int32(0),
@@ -46,11 +49,12 @@ def test_ssi_eligible_no_medicare() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert not result
+    assert jnp.isclose(result, 0.0, atol=ATOL)
 
 
-def test_ssi_eligible_all_pass() -> None:
-    result = health_insurance.is_ssi_eligible(
+def test_ssi_share_all_pass() -> None:
+    """Assets and income clearly below both thresholds give share 1."""
+    result = health_insurance.ssi_eligibility_share(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.int32(0),
@@ -58,14 +62,14 @@ def test_ssi_eligible_all_pass() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert result
+    assert jnp.isclose(result, 1.0, atol=ATOL)
 
 
 def test_ssi_benefit_eligible() -> None:
     result = health_insurance.ssi_benefit(
         countable_income=jnp.array(3000.0),
         spousal_income=jnp.int32(0),
-        is_ssi_eligible=jnp.array(True),
+        ssi_eligibility_share=jnp.array(1.0),
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
     assert jnp.isclose(result, 8000.0 - 3000.0, atol=ATOL)
@@ -75,7 +79,7 @@ def test_ssi_benefit_not_eligible() -> None:
     result = health_insurance.ssi_benefit(
         countable_income=jnp.array(3000.0),
         spousal_income=jnp.int32(0),
-        is_ssi_eligible=jnp.array(False),
+        ssi_eligibility_share=jnp.array(0.0),
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
     assert jnp.isclose(result, 0.0, atol=ATOL)

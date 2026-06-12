@@ -13,7 +13,6 @@ from typing import Any, cast
 import jax.numpy as jnp
 from lcm.params import MappingLeaf
 from lcm.typing import (
-    BoolND,
     ContinuousState,
     DiscreteAction,
     DiscreteState,
@@ -21,7 +20,11 @@ from lcm.typing import (
     ScalarFloat,
 )
 
-from aca_model.baseline.health_insurance import BuyPrivate, oop_costs
+from aca_model.baseline.health_insurance import (
+    BuyPrivate,
+    oop_costs,
+    share_below_threshold,
+)
 
 
 class PolicyVariant(Enum):
@@ -103,19 +106,21 @@ def cost_sharing(
     return jnp.where(is_insured, scale, 1.0)
 
 
-def is_medicaid_eligible(
+def medicaid_eligibility_share(
     countable_income: FloatND,
     spousal_income: DiscreteState,
     medicaid_schedule: MappingLeaf,
-) -> BoolND:
-    """Determine ACA Medicaid expansion eligibility: income below 133% FPL.
+) -> FloatND:
+    """ACA Medicaid expansion eligibility share: income below 133% FPL.
 
     Unlike baseline SSI-based Medicaid, ACA expansion uses only income
-    (no assets test, no Medicare requirement).
+    (no assets test, no Medicare requirement). The statutory income
+    threshold is smoothed by the same quintic-smoothstep band as the
+    baseline tests (`share_below_threshold`).
     """
     sched = cast("Mapping[str, Any]", medicaid_schedule.data)
     threshold = sched["income_threshold"]
-    return countable_income < threshold[spousal_income]
+    return share_below_threshold(countable_income, threshold[spousal_income])
 
 
 def cash_on_hand(

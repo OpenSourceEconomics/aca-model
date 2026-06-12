@@ -1,8 +1,8 @@
 """Regime transitions and builder for tied HIS regimes.
 
 Tied regimes: agents with employer-tied health insurance.
-Tied agents who stop working become nongroup.
-Medicaid-eligible agents are also overridden to nongroup.
+Tied agents who stop working become nongroup. The Medicaid eligibility
+share routes probability mass to the nongroup target.
 """
 
 from collections.abc import Callable
@@ -10,7 +10,7 @@ from collections.abc import Callable
 import jax.numpy as jnp
 from lcm import Regime
 from lcm.solvers import DCEGM
-from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
+from lcm.typing import Age, DiscreteAction, FloatND, Period
 
 from aca_model.agent import preferences
 from aca_model.agent.labor_market import LaborSupply
@@ -41,14 +41,16 @@ def _make_transition_canwork(
     """Create transition for canwork tied regimes.
 
     Tied agents who stop working become nongroup (lose employer coverage).
-    Medicaid-eligible agents are also overridden to nongroup targets.
+    The Medicaid eligibility share routes that fraction of the survival
+    mass to the nongroup target — a smooth probability mixture, not a
+    discrete override.
     """
 
     def transition(
         age: Age,
         period: Period,
         labor_supply: DiscreteAction,
-        is_medicaid_eligible: BoolND,
+        medicaid_eligibility_share: FloatND,
         survival_probs: FloatND,
     ) -> FloatND:
         sp = survival_probs[period]
@@ -59,10 +61,10 @@ def _make_transition_canwork(
         stopped = labor_supply == LaborSupply.do_not_work
         ng_target = select_target_for_age(next_age, mc_next, ng)
         target = jnp.where(stopped, ng_target, target)
-        # Medicaid eligibility overrides to nongroup
         ng_ssi = select_target_for_age(next_age, mc_next, ng)
-        target = jnp.where(is_medicaid_eligible, ng_ssi, target)
-        return build_regime_probs(target, sp)
+        return medicaid_eligibility_share * build_regime_probs(ng_ssi, sp) + (
+            1.0 - medicaid_eligibility_share
+        ) * build_regime_probs(target, sp)
 
     return transition
 

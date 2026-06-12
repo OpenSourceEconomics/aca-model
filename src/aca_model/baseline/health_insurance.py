@@ -10,13 +10,20 @@ What remains:
 - Medicaid/SSI eligibility (endogenous, depends on assets + income)
 - Premium and OOP cost computation (depends on regime's HIC category)
 - SSI benefit computation
+
+Eligibility is a smooth share, not a boolean: each statutory threshold is
+replaced by a quintic-smoothstep ramp over the
++/- `ELIGIBILITY_BAND_HALF_WIDTH` band, and every consumer mixes its
+eligible and ineligible branches with that share. This keeps the budget
+chain C² in `assets`, which DC-EGM's per-node evaluation of
+savings-stage functions requires; outside the band the model is
+bit-identical to the boolean rule.
 """
 
 import jax.numpy as jnp
 from lcm import categorical
 from lcm.typing import (
     Age,
-    BoolND,
     ContinuousState,
     DiscreteAction,
     DiscreteState,
@@ -69,37 +76,70 @@ def countable_income(
     )
 
 
-def is_ssi_eligible(
+# Half-width (dollars) of the smoothing band around each statutory
+# SSI/Medicaid threshold. Pre-registered, never tuned against solver
+# output; sensitivity runs vary it explicitly.
+ELIGIBILITY_BAND_HALF_WIDTH = 50.0
+
+
+def share_below_threshold(value: FloatND, threshold: FloatND) -> FloatND:
+    """Smooth share with which `value < threshold` holds.
+
+    Quintic smoothstep (C²) with compact support: exactly 1 at or below
+    `threshold - ELIGIBILITY_BAND_HALF_WIDTH`, exactly 0 at or above
+    `threshold + ELIGIBILITY_BAND_HALF_WIDTH`, 0.5 at the threshold.
+    """
+    ramp_position = jnp.clip(
+        (value - threshold + ELIGIBILITY_BAND_HALF_WIDTH)
+        / (2.0 * ELIGIBILITY_BAND_HALF_WIDTH),
+        0.0,
+        1.0,
+    )
+    return 1.0 - ramp_position**3 * (
+        ramp_position * (6.0 * ramp_position - 15.0) + 10.0
+    )
+
+
+def ssi_eligibility_share(
     assets: ContinuousState,
     countable_income: FloatND,
     spousal_income: DiscreteState,
     gets_medicare: ScalarBool,
     ssi_assets_test: FloatND,
     ssi_maximum_benefit: FloatND,
-) -> BoolND:
-    """Check SSI/Medicaid eligibility.
+) -> FloatND:
+    """Smooth SSI/Medicaid eligibility share in [0, 1].
 
-    Requires: Medicare-eligible AND assets below test AND income below maximum.
-    In the regime decomposition, gets_medicare is a known constant (True in mc regimes,
-    and needs checking in no_mc regimes based on disability).
+    The two statutory tests enter as smoothstep shares whose product is
+    the joint share:
+
+    - assets below the household-specific `ssi_assets_test`
+    - countable income below the household-specific `ssi_maximum_benefit`
+
+    Medicare stays a hard gate: it is a known constant per regime (True in
+    mc regimes, disability-dependent in no_mc regimes), so it cannot
+    produce a cliff in a continuous state.
     """
-    assets_ok = assets < ssi_assets_test[spousal_income]
-    income_ok = countable_income < ssi_maximum_benefit[spousal_income]
-    return gets_medicare & assets_ok & income_ok
+    assets_share = share_below_threshold(assets, ssi_assets_test[spousal_income])
+    income_share = share_below_threshold(
+        countable_income, ssi_maximum_benefit[spousal_income]
+    )
+    return gets_medicare * assets_share * income_share
 
 
 def ssi_benefit(
     countable_income: FloatND,
     spousal_income: DiscreteState,
-    is_ssi_eligible: BoolND,
+    ssi_eligibility_share: FloatND,
     ssi_maximum_benefit: FloatND,
 ) -> FloatND:
     """Compute SSI benefit amount.
 
-    SSI = max_benefit - countable_income, if eligible; 0 otherwise.
+    SSI = share * max(0, max_benefit - countable_income): the statutory
+    benefit weighted by the smooth eligibility share.
     """
     benefit = ssi_maximum_benefit[spousal_income] - countable_income
-    return jnp.where(is_ssi_eligible, jnp.maximum(0.0, benefit), 0.0)
+    return ssi_eligibility_share * jnp.maximum(0.0, benefit)
 
 
 def premium(
@@ -245,64 +285,61 @@ def primary_oop(
     return jnp.where(buy_private == BuyPrivate.yes, insured_oop, total_health_costs)
 
 
-def is_medicaid_eligible(is_ssi_eligible: BoolND) -> BoolND:
-    """Baseline: Medicaid eligibility equals SSI eligibility."""
-    return is_ssi_eligible
+def medicaid_eligibility_share(ssi_eligibility_share: FloatND) -> FloatND:
+    """Baseline: Medicaid eligibility share equals the SSI share."""
+    return ssi_eligibility_share
 
 
 def target_his(
     his: IntND,
     labor_supply: DiscreteAction,
-    is_medicaid_eligible: BoolND,
 ) -> IntND:
-    """Return the HIS class of the surviving target regime.
+    """Return the HIS class of the deterministic surviving target regime.
 
-    Mirrors the cross-HIS branches inside `_make_transition_canwork` (retiree,
-    tied, nongroup): tied agents who stop working become nongroup, and
-    Medicaid-eligible agents are overridden to nongroup. Used by
-    `imputed_pension_wealth_next_period` to look up next-period imputation
-    coefficients at the target's HIS.
+    Mirrors the deterministic cross-HIS branch inside
+    `_make_transition_canwork`: tied agents who stop working become
+    nongroup. The Medicaid path to nongroup is a probability
+    (`medicaid_eligibility_share`), not a deterministic override — it
+    enters the imputation through the share mixture in
+    `imputed_pension_wealth_next_period` instead. Used by
+    `imputed_pension_wealth_next_period_no_medicaid` to look up next-period
+    imputation coefficients at the target's HIS.
     """
     tied_to_ng = (his == HealthInsuranceState.tied) & (
         labor_supply == LaborSupply.do_not_work
     )
     return jnp.where(
-        tied_to_ng | is_medicaid_eligible,
+        tied_to_ng,
         HealthInsuranceState.nongroup,
         his,
     ).astype(jnp.int32)
 
 
-def target_his_forcedout(
-    his: IntND,
-    is_medicaid_eligible: BoolND,
-) -> IntND:
-    """Return the HIS class of the surviving target regime in forced-out regimes.
+def target_his_forcedout(his: IntND) -> IntND:
+    """Return the deterministic target HIS in forced-out regimes.
 
     Forced-out regimes have no labor-supply choice, and tied agents have
-    already moved to nongroup before the forced-out age, so the only HIS
-    override is Medicaid eligibility → nongroup. Used by
-    `imputed_pension_wealth_next_period` to look up next-period imputation
-    coefficients at the target's HIS.
+    already moved to nongroup before the forced-out age, so the
+    deterministic target keeps the regime's own HIS; the Medicaid path is
+    a probability handled by the imputation mixture. Used by
+    `imputed_pension_wealth_next_period_no_medicaid` to look up next-period
+    imputation coefficients at the target's HIS.
     """
-    return jnp.where(
-        is_medicaid_eligible,
-        HealthInsuranceState.nongroup,
-        his,
-    ).astype(jnp.int32)
+    return jnp.asarray(his).astype(jnp.int32)
 
 
 def oop_with_medicaid(
     primary_oop: FloatND,
-    is_medicaid_eligible: BoolND,
+    medicaid_eligibility_share: FloatND,
     deductible_medicaid: ScalarFloat,
     coinsurance_rate_medicaid: ScalarFloat,
     oop_max_medicaid: ScalarFloat,
 ) -> FloatND:
     """Apply Medicaid cost-sharing on top of primary insurance OOP costs.
 
-    When Medicaid-eligible, Medicaid acts as secondary payer: its
-    deductible/coinsurance/OOP-max schedule is applied to the primary OOP.
+    Medicaid acts as secondary payer: its deductible/coinsurance/OOP-max
+    schedule is applied to the primary OOP, and the result is mixed with
+    the uncovered primary OOP by the smooth eligibility share.
     """
     medicaid_oop = oop_costs(
         total_health_costs=primary_oop,
@@ -310,7 +347,10 @@ def oop_with_medicaid(
         coinsurance_rate=coinsurance_rate_medicaid,
         oop_max=oop_max_medicaid,
     )
-    return jnp.where(is_medicaid_eligible, medicaid_oop, primary_oop)
+    return (
+        medicaid_eligibility_share * medicaid_oop
+        + (1.0 - medicaid_eligibility_share) * primary_oop
+    )
 
 
 def hcc_insurer_predicted(

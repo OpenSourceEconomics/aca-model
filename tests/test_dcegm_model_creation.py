@@ -5,6 +5,7 @@ constraint — and the model-level acceptance status against pylcm's DC-EGM
 contract is pinned explicitly.
 """
 
+import dataclasses
 from collections.abc import Mapping
 from typing import cast
 
@@ -26,6 +27,15 @@ from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
+
+# The acceptance build needs the SSI smoothing bands resolved by dedicated
+# assets-grid nodes (pylcm's savings-stage contract rejects a band narrower
+# than a grid cell), which `BENCHMARK_GRID_CONFIG`'s tiny assets grid
+# deliberately skips. Build cost is grid-size-independent, so the
+# acceptance leg raises only the assets budget.
+_ACCEPTANCE_GRID_CONFIG = dataclasses.replace(
+    BENCHMARK_GRID_CONFIG, n_assets_gridpoints=8
+)
 
 
 def _build_regimes(solver: SolverName) -> dict[str, Regime]:
@@ -112,19 +122,33 @@ def test_dead_masks_cover_the_dcegm_contract_functions() -> None:
 @pytest.mark.xfail(
     strict=False,
     reason=(
-        "pylcm's DC-EGM contract does not yet admit the ACA budget: the "
-        "assets law reaches `assets` outside the post-decision function — "
-        "through `oop_costs` (Medicaid eligibility → `countable_income` → "
-        "`capital_income`) and `pension_assets_adjustment` "
-        "(`marginal_tax_rate` → `gross_income` → `capital_income`). "
-        "Fixes land upstream in pylcm, not here."
+        "pylcm's savings-stage rule does not yet admit Euler-state-dependent "
+        "regime transitions: the build dies in "
+        "`_fail_if_savings_stage_function_depends_on_decision` because the "
+        "regime transition probabilities read `assets` (the smoothed "
+        "`medicaid_eligibility_share` ← `countable_income` ← "
+        "`capital_income`, plus the assets test itself). The extension — "
+        "per-node evaluation of smooth savings-stage functions — lands "
+        "upstream in pylcm, not here; the share is C² with dedicated "
+        "assets-grid nodes across each band, so it satisfies the planned "
+        "smooth-at-node-resolution criterion by construction."
     ),
 )
 def test_dcegm_benchmark_model_builds() -> None:
-    """The benchmark model accepts `solver="dcegm"` end to end.
+    """The benchmark-shaped model accepts `solver="dcegm"` end to end.
 
     The acceptance criterion for the upstream DC-EGM stack: once pylcm's
-    contract admits the ACA budget chains, this builds without error.
+    savings-stage contract admits smooth Euler-state-dependent functions,
+    this builds without error (on a grid whose assets axis resolves the
+    SSI smoothing bands).
     """
-    model = _build_model("dcegm")
+    model = create_model(
+        n_subjects=1,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        derived_categoricals=_DERIVED_CATEGORICALS,
+        grid_config=_ACCEPTANCE_GRID_CONFIG,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver="dcegm",
+    )
     assert isinstance(model.user_regimes["retiree_nomc_inelig_canwork"].solver, DCEGM)
