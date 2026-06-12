@@ -59,8 +59,9 @@ def inject_consumption_dollars_points(
 
     Raises:
         ValueError: If a regime is missing the `consumption_dollars`
-            action, or its grid is not an `IrregSpacedGrid` with
-            `pass_points_at_runtime=True`.
+            action.
+        TypeError: If a regime's `consumption_dollars` grid is not an
+            `IrregSpacedGrid`.
     """
     consumption_equiv_floor = jnp.asarray(params["consumption_equiv_floor"])
     exponent = jnp.asarray(model.fixed_params["exponent"])
@@ -76,17 +77,20 @@ def inject_consumption_dollars_points(
                 f"action — the runtime-points grid must be on every regime."
             )
             raise ValueError(msg)
-        if not (isinstance(grid, IrregSpacedGrid) and grid.pass_points_at_runtime):
+        if isinstance(grid, IrregSpacedGrid) and not grid.pass_points_at_runtime:
+            # Construction-time points (the DC-EGM path) — nothing to inject.
+            continue
+        if not isinstance(grid, IrregSpacedGrid):
             msg = (
                 f"Regime {regime_name!r} has a `consumption_dollars` action "
                 f"whose grid is not an `IrregSpacedGrid(pass_points_at_runtime=True)`; "
                 f"got {type(grid).__name__}."
             )
-            raise ValueError(msg)
+            raise TypeError(msg)
         # Runtime-points grids always have `n_points` set (the constructor
         # rejects the (points=None, n_points=None) combo); narrow for ty.
         assert grid.n_points is not None
-        points = _compute_consumption_dollars_points(
+        points = compute_consumption_dollars_points(
             consumption_equiv_floor=consumption_equiv_floor,
             exponent=exponent,
             max_consumption_dollars=max_consumption_dollars_arr,
@@ -98,7 +102,7 @@ def inject_consumption_dollars_points(
     return out
 
 
-def _compute_consumption_dollars_points(
+def compute_consumption_dollars_points(
     *,
     consumption_equiv_floor: Array,
     exponent: Array,

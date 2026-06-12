@@ -38,7 +38,10 @@ from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model
 from aca_model.config import BENCHMARK_GRID_CONFIG
-from aca_model.consumption_dollars_grid import inject_consumption_dollars_points
+from aca_model.consumption_dollars_grid import (
+    compute_consumption_dollars_points,
+    inject_consumption_dollars_points,
+)
 
 _PARAMS_FILE = (
     Path(__file__).resolve().parent / "_benchmark_data" / "benchmark_params.pkl"
@@ -124,6 +127,30 @@ def get_benchmark_params(
             max_consumption_dollars=max_consumption_dollars,
         )
     return fixed_params, wage_params, params
+
+
+def get_benchmark_consumption_dollars_points(*, n_points: int) -> tuple[float, ...]:
+    """Compute construction-time consumption_dollars points from the snapshot.
+
+    Same formula as the runtime injection (single floor, married floor,
+    geomspace tail to `max_consumption_dollars`), evaluated on the frozen
+    snapshot's `consumption_equiv_floor` / `exponent` /
+    `max_consumption_dollars`. DC-EGM builds need the continuous-action
+    grid at model construction, so the points are passed to
+    `create_model(consumption_dollars_points=...)` instead of injected
+    into params.
+    """
+    with _PARAMS_FILE.open("rb") as fh:
+        data = cloudpickle.load(fh)
+    points = compute_consumption_dollars_points(
+        consumption_equiv_floor=jnp.asarray(data["params"]["consumption_equiv_floor"]),
+        exponent=jnp.asarray(data["fixed_params"]["exponent"]),
+        max_consumption_dollars=jnp.asarray(
+            float(data["fixed_params"]["max_consumption_dollars"])
+        ),
+        n_points=n_points,
+    )
+    return tuple(float(p) for p in points)
 
 
 def get_benchmark_initial_conditions(
