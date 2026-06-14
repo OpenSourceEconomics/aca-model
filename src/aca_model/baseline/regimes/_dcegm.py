@@ -34,7 +34,8 @@ def build_dcegm_solver(grids: Grids) -> DCEGM:
         points=tuple(
             savings_stop * (i / (_N_SAVINGS_POINTS - 1)) ** 3
             for i in range(_N_SAVINGS_POINTS)
-        )
+        ),
+        batch_size=grids.grid_config.n_savings_batch_size,
     )
     return DCEGM(
         continuous_state="assets",

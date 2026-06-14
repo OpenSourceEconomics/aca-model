@@ -71,6 +71,13 @@ class GridConfig:
     # on hardware where the ACA-overlay per-cell DAG blows the kernel's
     # compile-time working set past device HBM.
     n_wage_res_batch_size: int = 0
+    # `batch_size` on the DC-EGM savings grid (the post-decision endogenous
+    # grid). pylcm splays the per-savings-node continuation into `lax.map`
+    # blocks of this size, shrinking the binding `egm_step` working buffer by
+    # roughly the block factor while the upper envelope still runs on the full
+    # gathered grid (value function unchanged). `0` keeps the whole grid in one
+    # kernel. Only consulted under `solver="dcegm"`.
+    n_savings_batch_size: int = 0
 
 
 MODEL_CONFIG = ModelConfig()
