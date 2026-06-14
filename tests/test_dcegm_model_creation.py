@@ -95,6 +95,24 @@ def test_savings_grid_batch_size_follows_grid_config() -> None:
         assert solver.savings_grid.batch_size == 50, name
 
 
+def test_savings_grid_length_follows_grid_config() -> None:
+    """`GridConfig.n_savings_gridpoints` sets the number of nodes on every
+    living regime's DC-EGM savings grid."""
+    grid_config = dataclasses.replace(
+        BENCHMARK_GRID_CONFIG, n_savings_gridpoints=70
+    )
+    regimes = build_all_regimes(
+        grid_config=grid_config,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver="dcegm",
+    )
+    for name in REGIME_SPECS:
+        solver = cast("DCEGM", regimes[name].solver)
+        assert len(solver.savings_grid.to_jax()) == 70, name
+
+
 def test_dcegm_assets_laws_take_the_savings_form() -> None:
     """Under DC-EGM every per-target assets law consumes the post-decision
     state instead of cash-on-hand and consumption directly."""

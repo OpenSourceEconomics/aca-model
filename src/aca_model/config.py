@@ -71,6 +71,12 @@ class GridConfig:
     # on hardware where the ACA-overlay per-cell DAG blows the kernel's
     # compile-time working set past device HBM.
     n_wage_res_batch_size: int = 0
+    # Number of nodes on the DC-EGM savings grid (the post-decision endogenous
+    # grid), cubically clustered toward the borrowing constraint. Drives the
+    # padded-grid dimension the egm_step kernel carries, so it scales both the
+    # rolling carry and the gather mesh roughly linearly — the dominant lever on
+    # DC-EGM device memory. Only consulted under `solver="dcegm"`.
+    n_savings_gridpoints: int = 200
     # `batch_size` on the DC-EGM savings grid (the post-decision endogenous
     # grid). pylcm splays the per-savings-node continuation into `lax.map`
     # blocks of this size, shrinking the binding `egm_step` working buffer by
