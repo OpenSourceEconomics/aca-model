@@ -5,9 +5,11 @@ constraint — and the model-level acceptance status against pylcm's DC-EGM
 contract is pinned explicitly.
 """
 
+import dataclasses
 from collections.abc import Mapping
 from typing import cast
 
+import numpy as np
 import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
 from lcm import DiscreteGrid, IrregSpacedGrid, Model, Regime
@@ -22,10 +24,22 @@ from aca_model.baseline.regimes import (
     build_all_regimes,
     build_model_slots,
 )
-from aca_model.benchmark import get_benchmark_params
+from aca_model.benchmark import (
+    get_benchmark_consumption_dollars_points,
+    get_benchmark_params,
+)
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
+
+# The acceptance build needs the SSI smoothing bands resolved by dedicated
+# assets-grid nodes (pylcm's savings-stage contract rejects a band narrower
+# than a grid cell), which `BENCHMARK_GRID_CONFIG`'s tiny assets grid
+# deliberately skips. Build cost is grid-size-independent, so the
+# acceptance leg raises only the assets budget.
+_ACCEPTANCE_GRID_CONFIG = dataclasses.replace(
+    BENCHMARK_GRID_CONFIG, n_assets_gridpoints=8
+)
 
 
 def _build_regimes(solver: SolverName) -> dict[str, Regime]:
@@ -60,6 +74,43 @@ def test_every_living_regime_gets_the_dcegm_solver() -> None:
         assert solver.continuous_state == "assets"
         assert solver.continuous_action == "consumption_dollars"
     assert not isinstance(regimes["dead"].solver, DCEGM)
+
+
+def test_savings_grid_batch_size_follows_grid_config() -> None:
+    """`GridConfig.n_savings_batch_size` sets the `batch_size` on every
+    living regime's DC-EGM savings grid, so the post-decision continuation
+    splays into `lax.map` blocks of that width."""
+    grid_config = dataclasses.replace(
+        BENCHMARK_GRID_CONFIG, n_savings_batch_size=50
+    )
+    regimes = build_all_regimes(
+        grid_config=grid_config,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver="dcegm",
+    )
+    for name in REGIME_SPECS:
+        solver = cast("DCEGM", regimes[name].solver)
+        assert solver.savings_grid.batch_size == 50, name
+
+
+def test_savings_grid_length_follows_grid_config() -> None:
+    """`GridConfig.n_savings_gridpoints` sets the number of nodes on every
+    living regime's DC-EGM savings grid."""
+    grid_config = dataclasses.replace(
+        BENCHMARK_GRID_CONFIG, n_savings_gridpoints=70
+    )
+    regimes = build_all_regimes(
+        grid_config=grid_config,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver="dcegm",
+    )
+    for name in REGIME_SPECS:
+        solver = cast("DCEGM", regimes[name].solver)
+        assert len(solver.savings_grid.to_jax()) == 70, name
 
 
 def test_dcegm_assets_laws_take_the_savings_form() -> None:
@@ -109,22 +160,52 @@ def test_dead_masks_cover_the_dcegm_contract_functions() -> None:
         assert regimes["dead"].functions[name] is None
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "pylcm's DC-EGM contract does not yet admit the ACA budget: the "
-        "assets law reaches `assets` outside the post-decision function — "
-        "through `oop_costs` (Medicaid eligibility → `countable_income` → "
-        "`capital_income`) and `pension_assets_adjustment` "
-        "(`marginal_tax_rate` → `gross_income` → `capital_income`). "
-        "Fixes land upstream in pylcm, not here."
-    ),
-)
-def test_dcegm_benchmark_model_builds() -> None:
-    """The benchmark model accepts `solver="dcegm"` end to end.
+def test_dcegm_requires_construction_time_consumption_points() -> None:
+    """`solver="dcegm"` without `consumption_dollars_points` fails at the
+    aca-model boundary: the DC-EGM kernel needs the continuous-action grid
+    at model construction, so the runtime-injection path cannot be used."""
+    with pytest.raises(ValueError, match="consumption_dollars_points"):
+        create_model(
+            n_subjects=1,
+            fixed_params=_FIXED_PARAMS,
+            wage_params=_WAGE_PARAMS,
+            derived_categoricals=_DERIVED_CATEGORICALS,
+            grid_config=_ACCEPTANCE_GRID_CONFIG,
+            pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+            solver="dcegm",
+        )
 
-    The acceptance criterion for the upstream DC-EGM stack: once pylcm's
-    contract admits the ACA budget chains, this builds without error.
+
+def test_benchmark_consumption_points_pin_both_floors() -> None:
+    """The construction-time benchmark consumption grid uses the same
+    formula as the runtime injection: the single floor first, the married
+    floor second, a geomspace tail up to `max_consumption_dollars`."""
+    _, _, params = get_benchmark_params(model=None)
+    points = get_benchmark_consumption_dollars_points(n_points=5)
+    floor = float(params["consumption_equiv_floor"])
+    exponent = float(_FIXED_PARAMS["exponent"])
+    np.testing.assert_allclose(points[:2], [floor, floor * 2.0**exponent], rtol=1e-12)
+
+
+def test_dcegm_benchmark_model_builds() -> None:
+    """The benchmark-shaped model accepts `solver="dcegm"` end to end.
+
+    The acceptance criterion for the upstream DC-EGM stack: with pylcm's
+    savings-stage contract admitting smooth Euler-state-dependent
+    functions per node, the build succeeds on a grid whose assets axis
+    resolves the SSI smoothing bands and with construction-time
+    consumption points.
     """
-    model = _build_model("dcegm")
+    model = create_model(
+        n_subjects=1,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        derived_categoricals=_DERIVED_CATEGORICALS,
+        grid_config=_ACCEPTANCE_GRID_CONFIG,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver="dcegm",
+        consumption_dollars_points=get_benchmark_consumption_dollars_points(
+            n_points=_ACCEPTANCE_GRID_CONFIG.n_consumption_dollars_gridpoints
+        ),
+    )
     assert isinstance(model.user_regimes["retiree_nomc_inelig_canwork"].solver, DCEGM)
