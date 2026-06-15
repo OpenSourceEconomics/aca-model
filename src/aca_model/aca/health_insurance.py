@@ -18,6 +18,7 @@ from lcm.typing import (
     DiscreteAction,
     DiscreteState,
     FloatND,
+    ScalarBool,
     ScalarFloat,
 )
 
@@ -38,12 +39,14 @@ def mandate_penalty(
     gross_income: FloatND,
     spousal_income: DiscreteState,
     buy_private: DiscreteAction,
+    is_medicaid_eligible: BoolND,
     mandate_schedule: MappingLeaf,
 ) -> FloatND:
     """Compute individual mandate penalty for the uninsured.
 
     Penalty = clip(income * income_fraction, min, max) if uninsured and
-    income above exemption threshold; 0 otherwise.
+    income above exemption threshold; 0 otherwise. Medicaid is
+    minimum-essential coverage, so the Medicaid-eligible owe no penalty.
     """
     sched = cast("Mapping[str, Any]", mandate_schedule.data)
     is_uninsured = buy_private == BuyPrivate.no
@@ -53,7 +56,7 @@ def mandate_penalty(
         sched["min"],
         sched["max"],
     )
-    return jnp.where(is_uninsured & ~exempt, raw, 0.0)
+    return jnp.where(is_uninsured & ~exempt & ~is_medicaid_eligible, raw, 0.0)
 
 
 def premium_subsidy(
@@ -61,13 +64,16 @@ def premium_subsidy(
     gross_income: FloatND,
     spousal_income: DiscreteState,
     buy_private: DiscreteAction,
+    is_medicaid_eligible: BoolND,
     premium_credit_schedule: MappingLeaf,
 ) -> FloatND:
     """Compute ACA premium tax credit (advance premium subsidy).
 
     Piecewise-linear interpolation of applicable income percentage on
     FPL kink points, subsidy = max(0, premium - income * applicable_rate).
-    Return 0 when buy_private==no or income outside 100-400% FPL range.
+    Return 0 when buy_private==no, when income is outside the 100-400% FPL
+    range, or when Medicaid-eligible (Medicaid is minimum-essential coverage,
+    so no exchange subsidy applies).
     """
     sched = cast("Mapping[str, Any]", premium_credit_schedule.data)
     kinks = sched["kinks"]  # [n_kinks, 3]
@@ -79,20 +85,22 @@ def premium_subsidy(
 
     in_range = (gross_income >= sp_kinks[0]) & (gross_income < sp_kinks[-1])
     is_insured = buy_private == BuyPrivate.yes
-    return jnp.where(is_insured & in_range, subsidy, 0.0)
+    return jnp.where(is_insured & in_range & ~is_medicaid_eligible, subsidy, 0.0)
 
 
 def cost_sharing(
     gross_income: FloatND,
     spousal_income: DiscreteState,
     buy_private: DiscreteAction,
+    is_medicaid_eligible: BoolND,
     cost_sharing_schedule: MappingLeaf,
 ) -> FloatND:
     """Compute ACA cost-sharing reduction scale factor.
 
     Bracket lookup on FPL kink points to step-function scale factor.
-    Applied to deductible, coinsurance, and OOP max.
-    Return 1.0 when buy_private==no (no reduction for uninsured).
+    Applied to deductible, coinsurance, and OOP max. Returns the neutral
+    scale 1.0 when buy_private==no (no reduction for uninsured) or when
+    Medicaid-eligible (Medicaid cost-sharing is handled separately).
     """
     sched = cast("Mapping[str, Any]", cost_sharing_schedule.data)
     kinks = sched["kinks"]  # [n_kinks, 3]
@@ -100,22 +108,36 @@ def cost_sharing(
     bracket = jnp.searchsorted(kinks[:, spousal_income], gross_income, side="right")
     scale = factors[bracket]
     is_insured = buy_private == BuyPrivate.yes
-    return jnp.where(is_insured, scale, 1.0)
+    return jnp.where(is_insured & ~is_medicaid_eligible, scale, 1.0)
 
 
 def is_medicaid_eligible(
-    countable_income: FloatND,
+    is_ssi_eligible: BoolND,
+    aca_magi: FloatND,
     spousal_income: DiscreteState,
+    is_aged: ScalarBool,
+    is_disabled: BoolND,
     medicaid_schedule: MappingLeaf,
 ) -> BoolND:
-    """Determine ACA Medicaid expansion eligibility: income below 133% FPL.
+    """Determine Medicaid eligibility on two tracks under ACA expansion.
 
-    Unlike baseline SSI-based Medicaid, ACA expansion uses only income
-    (no assets test, no Medicare requirement).
+    A household is eligible when it qualifies on either track:
+
+    - **Categorical** (SSI-linked): `is_ssi_eligible`, which applies the
+      aged-or-disabled gate plus the SSI asset and income tests.
+    - **Expansion** (ACA): the under-65, non-disabled population with MAGI
+      below the expansion threshold (138% FPL encoded in
+      `medicaid_schedule["income_threshold"]`). Expansion never reaches the
+      aged or the disabled; they stay on the categorical track with its
+      asset test.
+
+    Expansion uses full-count MAGI, not the half-counted SSI
+    `countable_income`.
     """
     sched = cast("Mapping[str, Any]", medicaid_schedule.data)
     threshold = sched["income_threshold"]
-    return countable_income < threshold[spousal_income]
+    expansion = (~is_aged) & (~is_disabled) & (aca_magi < threshold[spousal_income])
+    return is_ssi_eligible | expansion
 
 
 def premium_default(

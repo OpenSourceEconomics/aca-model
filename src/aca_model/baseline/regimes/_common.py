@@ -682,6 +682,17 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     if spec["mc"] != "oamc":  # pre-65: SSDI needs dropout-adjusted PIA
         functions["ssdi_pia"] = social_security.ssdi_pia
 
+    # SSI categorical track: `is_aged` is a per-regime constant fixed param;
+    # `is_disabled` reads the disability health state where the regime carries
+    # it (pre-65 `nomc`/`dimc`) and is constant False post-65 (`oamc`).
+    functions["is_disabled"] = (
+        health_insurance.is_disabled_never
+        if spec["mc"] == "oamc"
+        else health_insurance.is_disabled_from_health
+    )
+    # MAGI for the ACA Medicaid expansion track; pruned in the baseline DAG.
+    functions["aca_magi"] = health_insurance.aca_magi
+
     # Swapped per policy variant by the ACA overlay, hence regime-level
     functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
     functions["premium_default"] = assets_and_income.premium_default

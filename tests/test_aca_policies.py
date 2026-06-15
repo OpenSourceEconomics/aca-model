@@ -65,6 +65,7 @@ def test_mandate_penalty_uninsured_above_exempt() -> None:
         gross_income=income,
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.no),
+        is_medicaid_eligible=jnp.array(False),
         mandate_schedule=MANDATE_SCHEDULE,
     )
     assert jnp.isclose(result, 1000.0)
@@ -76,6 +77,7 @@ def test_mandate_penalty_insured_zero() -> None:
         gross_income=jnp.array(40000.0),
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(False),
         mandate_schedule=MANDATE_SCHEDULE,
     )
     assert jnp.isclose(result, 0.0)
@@ -87,6 +89,7 @@ def test_mandate_penalty_below_exempt_zero() -> None:
         gross_income=jnp.array(5000.0),  # below 10350
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.no),
+        is_medicaid_eligible=jnp.array(False),
         mandate_schedule=MANDATE_SCHEDULE,
     )
     assert jnp.isclose(result, 0.0)
@@ -99,6 +102,7 @@ def test_mandate_penalty_clips_to_min() -> None:
         gross_income=jnp.array(12000.0),
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.no),
+        is_medicaid_eligible=jnp.array(False),
         mandate_schedule=MANDATE_SCHEDULE,
     )
     assert jnp.isclose(result, 695.0)
@@ -111,6 +115,7 @@ def test_mandate_penalty_clips_to_max() -> None:
         gross_income=jnp.array(200000.0),
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.no),
+        is_medicaid_eligible=jnp.array(False),
         mandate_schedule=MANDATE_SCHEDULE,
     )
     assert jnp.isclose(result, 2085.0)
@@ -123,6 +128,7 @@ def test_hic_premium_subsidy_below_fpl_zero() -> None:
         gross_income=jnp.array(10000.0),  # below FPL_SINGLE
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(False),
         premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
     )
     assert jnp.isclose(result, 0.0)
@@ -135,6 +141,7 @@ def test_hic_premium_subsidy_above_400_fpl_zero() -> None:
         gross_income=jnp.array(50000.0),  # above 4 * FPL_SINGLE = 47080
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(False),
         premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
     )
     assert jnp.isclose(result, 0.0)
@@ -150,6 +157,7 @@ def test_hic_premium_subsidy_at_200_fpl() -> None:
         gross_income=jnp.array(income),
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(False),
         premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
     )
     assert jnp.isclose(result, expected, atol=1.0)
@@ -162,6 +170,7 @@ def test_hic_premium_subsidy_uninsured_zero() -> None:
         gross_income=jnp.array(2.0 * FPL_SINGLE),
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.no),
+        is_medicaid_eligible=jnp.array(False),
         premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
     )
     assert jnp.isclose(result, 0.0)
@@ -185,6 +194,7 @@ def test_cost_sharing_scale_brackets(
         gross_income=jnp.array(income_fpl_frac * FPL_SINGLE),
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(False),
         cost_sharing_schedule=COST_SHARING_SCHEDULE,
     )
     assert jnp.isclose(result, expected_factor, atol=0.001)
@@ -196,35 +206,122 @@ def test_cost_sharing_scale_uninsured_one() -> None:
         gross_income=jnp.array(1.2 * FPL_SINGLE),  # would be 0.1721 if insured
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.no),
+        is_medicaid_eligible=jnp.array(False),
         cost_sharing_schedule=COST_SHARING_SCHEDULE,
     )
     assert jnp.isclose(result, 1.0)
 
 
-def test_medicaid_eligible_aca_below_threshold() -> None:
-    """Income below 133% FPL produces eligible."""
-    result = aca_hi.is_medicaid_eligible(
-        countable_income=jnp.array(10000.0),  # below 15580
+def test_mandate_penalty_medicaid_eligible_zero() -> None:
+    """A Medicaid-eligible household owes no mandate penalty."""
+    result = aca_hi.mandate_penalty(
+        gross_income=jnp.array(40000.0),  # would owe 1000 if not eligible
         spousal_income=jnp.int32(0),
-        medicaid_schedule=MEDICAID_SCHEDULE,
+        buy_private=jnp.array(BuyPrivate.no),
+        is_medicaid_eligible=jnp.array(True),
+        mandate_schedule=MANDATE_SCHEDULE,
+    )
+    assert jnp.isclose(result, 0.0)
+
+
+def test_premium_subsidy_medicaid_eligible_zero() -> None:
+    """A Medicaid-eligible household gets no exchange premium subsidy."""
+    result = aca_hi.premium_subsidy(
+        hic_premium=jnp.array(5000.0),
+        gross_income=jnp.array(2.0 * FPL_SINGLE),  # would subsidize if not eligible
+        spousal_income=jnp.int32(0),
+        buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(True),
+        premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
+    )
+    assert jnp.isclose(result, 0.0)
+
+
+def test_cost_sharing_medicaid_eligible_neutral() -> None:
+    """A Medicaid-eligible household gets the neutral cost-sharing scale 1.0."""
+    result = aca_hi.cost_sharing(
+        gross_income=jnp.array(1.2 * FPL_SINGLE),  # would be 0.1721 if not eligible
+        spousal_income=jnp.int32(0),
+        buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(True),
+        cost_sharing_schedule=COST_SHARING_SCHEDULE,
+    )
+    assert jnp.isclose(result, 1.0)
+
+
+def _aca_medicaid_kwargs(**overrides: object) -> dict:
+    """Default kwargs for the two-track ACA Medicaid eligibility.
+
+    Defaults describe an under-65, non-disabled household that is not
+    categorically eligible; tests override the expansion-relevant fields.
+    """
+    base = {
+        "is_ssi_eligible": jnp.array(False),
+        "aca_magi": jnp.array(10000.0),
+        "spousal_income": jnp.int32(0),
+        "is_aged": jnp.asarray(False),
+        "is_disabled": jnp.asarray(False),
+        "medicaid_schedule": MEDICAID_SCHEDULE,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_medicaid_eligible_aca_expansion_below_threshold() -> None:
+    """Under-65 non-disabled with MAGI below the threshold gets expansion coverage."""
+    result = aca_hi.is_medicaid_eligible(
+        **_aca_medicaid_kwargs(aca_magi=jnp.array(10000.0))  # below 15580
     )
     assert result
 
 
-def test_medicaid_eligible_aca_above_threshold() -> None:
-    """Income above 133% FPL produces not eligible."""
+def test_medicaid_eligible_aca_expansion_above_threshold() -> None:
+    """Under-65 non-disabled with MAGI above the threshold gets no expansion."""
     result = aca_hi.is_medicaid_eligible(
-        countable_income=jnp.array(20000.0),  # above 15580
-        spousal_income=jnp.int32(0),
-        medicaid_schedule=MEDICAID_SCHEDULE,
+        **_aca_medicaid_kwargs(aca_magi=jnp.array(20000.0))  # above 15580
+    )
+    assert not result
+
+
+def test_medicaid_eligible_aca_categorical_overrides_high_magi() -> None:
+    """A categorically eligible household stays eligible regardless of MAGI."""
+    result = aca_hi.is_medicaid_eligible(
+        **_aca_medicaid_kwargs(
+            is_ssi_eligible=jnp.array(True), aca_magi=jnp.array(20000.0)
+        )
+    )
+    assert result
+
+
+def test_medicaid_eligible_aca_expansion_excludes_aged() -> None:
+    """Post-65 (aged) households are not reached by the expansion track."""
+    result = aca_hi.is_medicaid_eligible(
+        **_aca_medicaid_kwargs(is_aged=jnp.asarray(True), aca_magi=jnp.array(10000.0))
+    )
+    assert not result
+
+
+def test_medicaid_eligible_aca_expansion_excludes_disabled() -> None:
+    """Disabled households are not reached by the expansion track."""
+    result = aca_hi.is_medicaid_eligible(
+        **_aca_medicaid_kwargs(
+            is_disabled=jnp.asarray(True), aca_magi=jnp.array(10000.0)
+        )
     )
     assert not result
 
 
 def test_medicaid_eligible_aca_ignores_assets() -> None:
-    """ACA Medicaid has no asset test; function signature has no assets param."""
+    """ACA Medicaid expansion has no asset test; signature has no assets param."""
     sig = inspect.signature(aca_hi.is_medicaid_eligible)
     assert "assets" not in sig.parameters
+
+
+def test_medicaid_eligible_aca_expansion_uses_magi_not_countable_income() -> None:
+    """The expansion test reads MAGI, never the half-counted SSI countable income."""
+    sig = inspect.signature(aca_hi.is_medicaid_eligible)
+    assert "aca_magi" in sig.parameters
+    assert "countable_income" not in sig.parameters
 
 
 # --- Premium subsidy at exact FPL boundaries ---
@@ -237,6 +334,7 @@ def test_premium_subsidy_exactly_at_100_fpl() -> None:
         gross_income=jnp.array(1.0 * FPL_SINGLE),
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(False),
         premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
     )
     assert result > 0.0
@@ -249,6 +347,7 @@ def test_premium_subsidy_exactly_at_400_fpl() -> None:
         gross_income=jnp.array(4.0 * FPL_SINGLE),
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(False),
         premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
     )
     assert jnp.isclose(result, 0.0)
@@ -261,6 +360,7 @@ def test_premium_subsidy_just_below_400_fpl() -> None:
         gross_income=jnp.array(4.0 * FPL_SINGLE - 1.0),
         spousal_income=jnp.int32(0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_medicaid_eligible=jnp.array(False),
         premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
     )
     assert result > 0.0

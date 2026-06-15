@@ -18,7 +18,8 @@ def test_ssi_eligible_assets_too_high() -> None:
         assets=jnp.array(5000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.int32(0),
-        gets_medicare=jnp.asarray(True),
+        is_aged=jnp.asarray(True),
+        is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -30,31 +31,49 @@ def test_ssi_eligible_income_too_high() -> None:
         assets=jnp.array(1000.0),
         countable_income=jnp.array(9000.0),
         spousal_income=jnp.int32(0),
-        gets_medicare=jnp.asarray(True),
+        is_aged=jnp.asarray(True),
+        is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
     assert not result
 
 
-def test_ssi_eligible_no_medicare() -> None:
+def test_ssi_eligible_neither_aged_nor_disabled() -> None:
+    """The categorical track requires aged or disabled status to qualify."""
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.int32(0),
-        gets_medicare=jnp.asarray(False),
+        is_aged=jnp.asarray(False),
+        is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
     assert not result
 
 
-def test_ssi_eligible_all_pass() -> None:
+def test_ssi_eligible_disabled_under_65_qualifies() -> None:
+    """A disabled (non-aged), asset/income-eligible household qualifies."""
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.int32(0),
-        gets_medicare=jnp.asarray(True),
+        is_aged=jnp.asarray(False),
+        is_disabled=jnp.asarray(True),
+        ssi_assets_test=SSI_ASSETS_TEST,
+        ssi_maximum_benefit=SSI_MAX_BENEFIT,
+    )
+    assert result
+
+
+def test_ssi_eligible_aged_all_pass() -> None:
+    result = health_insurance.is_ssi_eligible(
+        assets=jnp.array(1000.0),
+        countable_income=jnp.array(1000.0),
+        spousal_income=jnp.int32(0),
+        is_aged=jnp.asarray(True),
+        is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
