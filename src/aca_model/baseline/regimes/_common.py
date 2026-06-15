@@ -684,6 +684,7 @@ def build_common_functions(spec: RegimeSpec) -> dict:
 
     # Swapped per policy variant by the ACA overlay, hence regime-level
     functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
+    functions["premium_default"] = assets_and_income.premium_default
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
 
     # Earnings test credit-back (only choose+canwork: has claim_ss + claimed_ss)

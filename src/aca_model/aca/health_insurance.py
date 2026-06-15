@@ -118,28 +118,59 @@ def is_medicaid_eligible(
     return countable_income < threshold[spousal_income]
 
 
+def premium_default(
+    assets: ContinuousState,
+    after_tax_income: FloatND,
+    ssi_benefit: FloatND,
+    hic_premium: FloatND,
+    hic_premium_subsidy: FloatND,
+    consumption_dollars_floor: FloatND,
+) -> FloatND:
+    """Compute the unpaid (defaulted) part of the ACA net premium.
+
+    The premium subject to default is the household's net premium, after the
+    ACA premium tax credit: `net_premium = hic_premium - hic_premium_subsidy`.
+    A household pays the net premium only up to what it can afford while
+    staying at the consumption floor; it defaults on the rest as
+    uncompensated care:
+
+    ```
+    affordable_premium = max(0, resources - consumption_dollars_floor)
+    premium_default    = max(0, net_premium - affordable_premium)
+    ```
+
+    The mandate penalty is a separate non-defaultable tax and is excluded
+    from this computation.
+    """
+    net_premium = hic_premium - hic_premium_subsidy
+    resources = assets + after_tax_income + ssi_benefit
+    affordable_premium = jnp.maximum(0.0, resources - consumption_dollars_floor)
+    return jnp.maximum(0.0, net_premium - affordable_premium)
+
+
 def cash_on_hand(
     assets: ContinuousState,
     after_tax_income: FloatND,
     ssi_benefit: FloatND,
     hic_premium: FloatND,
     hic_premium_subsidy: FloatND,
+    premium_default: FloatND,
     mandate_penalty: FloatND,
 ) -> FloatND:
     """Compute cash on hand with ACA premium subsidies and mandate penalty.
+
+    Only the affordable part of the net premium
+    (`hic_premium - hic_premium_subsidy - premium_default`) leaves
+    cash-on-hand; the defaulted part is never paid. The mandate penalty is a
+    separate non-defaultable tax that always leaves cash-on-hand.
 
     OOP health costs are NOT deducted here — they are deducted from
     next-period assets instead, matching the timing where HCC shocks are
     integrated over (agent does not condition consumption on OOP).
     """
-    return (
-        assets
-        + after_tax_income
-        + ssi_benefit
-        - hic_premium
-        + hic_premium_subsidy
-        - mandate_penalty
-    )
+    net_premium = hic_premium - hic_premium_subsidy
+    effective_premium = net_premium - premium_default
+    return assets + after_tax_income + ssi_benefit - effective_premium - mandate_penalty
 
 
 def primary_oop(

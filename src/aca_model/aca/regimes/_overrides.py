@@ -46,5 +46,6 @@ def apply_aca_overrides(
         # dict, not a DAG function — no entry needed here.
         functions["hic_premium_subsidy"] = aca_hi.premium_subsidy
         functions["cost_sharing_scale"] = aca_hi.cost_sharing
+        functions["premium_default"] = aca_hi.premium_default
         functions["cash_on_hand"] = aca_hi.cash_on_hand
         functions["primary_oop"] = aca_hi.primary_oop
