@@ -682,7 +682,8 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     if spec["mc"] != "oamc":  # pre-65: SSDI needs dropout-adjusted PIA
         functions["ssdi_pia"] = social_security.ssdi_pia
 
-    # SSI categorical track: `is_aged` is a per-regime constant fixed param;
+    # SSI categorical track: `crossed_oamc_threshold` is a per-regime constant
+    # fixed param;
     # `is_disabled` reads the disability health state where the regime carries
     # it (pre-65 `nomc`/`dimc`) and is constant False post-65 (`oamc`).
     functions["is_disabled"] = (

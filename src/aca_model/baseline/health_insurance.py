@@ -74,7 +74,7 @@ def is_ssi_eligible(
     assets: ContinuousState,
     countable_income: FloatND,
     spousal_income: DiscreteState,
-    is_aged: ScalarBool,
+    crossed_oamc_threshold: ScalarBool,
     is_disabled: BoolND,
     ssi_assets_test: FloatND,
     ssi_maximum_benefit: FloatND,
@@ -83,12 +83,12 @@ def is_ssi_eligible(
 
     The household qualifies when it is categorically eligible — aged
     (post-65) or disabled — AND passes the SSI asset test AND has SSI
-    countable income below the SSI maximum benefit. `is_aged` is a known
-    per-regime constant (post-65 regimes); `is_disabled` reads the
-    disability health state where the regime carries it and is constant
-    False otherwise.
+    countable income below the SSI maximum benefit.
+    `crossed_oamc_threshold` is a known per-regime constant (post-65
+    regimes); `is_disabled` reads the disability health state where the
+    regime carries it and is constant False otherwise.
     """
-    categorical = is_aged | is_disabled
+    categorical = crossed_oamc_threshold | is_disabled
     assets_ok = assets < ssi_assets_test[spousal_income]
     income_ok = countable_income < ssi_maximum_benefit[spousal_income]
     return categorical & assets_ok & income_ok

@@ -259,7 +259,7 @@ def _aca_medicaid_kwargs(**overrides: object) -> dict:
         "is_ssi_eligible": jnp.array(False),
         "aca_magi": jnp.array(10000.0),
         "spousal_income": jnp.int32(0),
-        "is_aged": jnp.asarray(False),
+        "crossed_oamc_threshold": jnp.asarray(False),
         "is_disabled": jnp.asarray(False),
         "medicaid_schedule": MEDICAID_SCHEDULE,
     }
@@ -296,7 +296,9 @@ def test_medicaid_eligible_aca_categorical_overrides_high_magi() -> None:
 def test_medicaid_eligible_aca_expansion_excludes_aged() -> None:
     """Post-65 (aged) households are not reached by the expansion track."""
     result = aca_hi.is_medicaid_eligible(
-        **_aca_medicaid_kwargs(is_aged=jnp.asarray(True), aca_magi=jnp.array(10000.0))
+        **_aca_medicaid_kwargs(
+            crossed_oamc_threshold=jnp.asarray(True), aca_magi=jnp.array(10000.0)
+        )
     )
     assert not result
 

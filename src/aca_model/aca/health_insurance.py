@@ -115,7 +115,7 @@ def is_medicaid_eligible(
     is_ssi_eligible: BoolND,
     aca_magi: FloatND,
     spousal_income: DiscreteState,
-    is_aged: ScalarBool,
+    crossed_oamc_threshold: ScalarBool,
     is_disabled: BoolND,
     medicaid_schedule: MappingLeaf,
 ) -> BoolND:
@@ -136,7 +136,11 @@ def is_medicaid_eligible(
     """
     sched = cast("Mapping[str, Any]", medicaid_schedule.data)
     threshold = sched["income_threshold"]
-    expansion = (~is_aged) & (~is_disabled) & (aca_magi < threshold[spousal_income])
+    expansion = (
+        (~crossed_oamc_threshold)
+        & (~is_disabled)
+        & (aca_magi < threshold[spousal_income])
+    )
     return is_ssi_eligible | expansion
 
 
