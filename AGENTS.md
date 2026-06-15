@@ -75,8 +75,10 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 
 ### Key State Variables
 
-- `assets`: Savings grid [0, 500k], 24 points
-- `aime`: Average Indexed Monthly Earnings [0, 8k], 12 points
+- `assets`: Savings grid `[≈ −221k, 500k]`, 24 points (lower bound = minus one year of
+  maximum full-time earnings, so it shifts with the wage parameters; finer at low levels)
+- `aime`: Average Indexed Monthly Earnings — piecewise grid at the PIA bend points
+  (32 points total; `n_aime_gridpoints` is ignored on this path)
 - `health`: `HealthWithDisability` (disabled/bad/good) pre-65, `Health` (bad/good)
   post-65
 - `log_ft_wage_res`: AR(1) wage residual shock (5-point Rouwenhorst)
@@ -107,3 +109,30 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 - **`reference_age` parameter**: Fixed cost of work uses `age - reference_age` (not a
   hardcoded constant). Same parameter appears in `leisure()`, `tied()`, `with_hours()`,
   and `utility_scale_factor()`.
+- **Premium default (uncompensated care)**: a household pays its insurance premium only
+  up to what it can afford while staying at the consumption floor and defaults on the
+  rest. `premium_default = max(0, hic_premium − max(0, resources − consumption_dollars_floor))`
+  is a tracked DAG node; `cash_on_hand` subtracts only the affordable part. The floor is
+  therefore on pre-premium resources; OOP stays the post-decision shock in `next_assets`.
+  Coverage is unchanged on default (the defaulted premium is uncompensated care).
+- **Two-track Medicaid eligibility**: `is_medicaid_eligible` is the union of a
+  *categorical* track — `(crossed_oamc_threshold OR is_disabled)` AND the SSI asset and
+  income tests (on SSI countable income) — and, under the ACA Medicaid-expansion variant,
+  an *income-only* track — `aca_magi < 138% FPL`, scoped to the under-65 non-disabled
+  population. The expansion uses MAGI (full income via `aca_magi`), distinct from the
+  half-counted SSI countable income of the categorical track.
+- **`crossed_oamc_threshold`**: per-regime constant fixed param (`= spec["mc"] == "oamc"`,
+  i.e. age ≥ 65), the *aged* indicator in eligibility. It replaced the `gets_medicare`
+  gate there; `is_disabled` (= `health == disabled`, a DAG function in `nomc`/`dimc`
+  regimes) supplies the disabled arm. The Medicare *transition* still uses its own
+  build-time `gets_medicare` constant (`mc != nomc`) — distinct from this.
+- **SS claim-age adjustment baked into AIME**: at the voluntary claim the early-retirement
+  reduction / delayed-retirement credit is applied to PIA and converted back to AIME via
+  `find_aime` (the exact inverse of `pia`), so the permanent adjustment rides in the
+  carried `aime` with no extra state and persists into the forced regimes. Pension
+  imputation reads an *unadjusted* PIA (`pia_unadjusted_next_period`); the DI path
+  (`ssdi_pia`) reads the un-baked AIME. `inelig`/`forced` regimes use a plain `next_aime`
+  with no claim inputs (`_select_aime_law` routes on `spec["ss"]`).
+- **ACA subsidies/mandate respect Medicaid**: `premium_subsidy`, `cost_sharing`, and
+  `mandate_penalty` take `is_medicaid_eligible` and return the neutral value when the
+  household is Medicaid-eligible (Medicaid is minimum-essential coverage).
