@@ -260,3 +260,27 @@ def test_convert_total_ben_to_pia_zero_mtr() -> None:
         **_PBMAX_KWARGS,
     )
     assert jnp.isclose(recovered, pia_input, atol=ATOL)
+
+
+def test_imputed_pension_wealth_uses_unadjusted_pia() -> None:
+    """Next-period pension wealth is imputed from the unadjusted PIA channel.
+
+    `imputed_pension_wealth_next_period` reads `pia_unadjusted_next_period` (pure labor
+    accrual) and returns `Γ · pbmax(pia_unadjusted_next_period)`. Feeding the unreduced
+    PIA yields the unreduced imputed wealth, independent of any claim-age
+    reduction baked into the carried AIME.
+    """
+    result = pensions.imputed_pension_wealth_next_period(
+        pia_unadjusted_next_period=jnp.array(500.0),
+        target_his=jnp.int32(0),
+        period=jnp.int32(28),
+        imp_intercept_next_period=jnp.zeros((30, 1)).at[28, 0].set(-50.0),
+        imp_pia_coeff_next_period=jnp.zeros((30, 1)).at[28, 0].set(0.2),
+        imp_pia_kink_0_coeff_next_period=jnp.zeros((30, 1)),
+        imp_pia_kink_1_coeff_next_period=jnp.zeros((30, 1)),
+        imp_kink_0_next_period=jnp.full(30, 99999.0),
+        imp_kink_1_next_period=jnp.full(30, 99999.0),
+        epdv_constant_pension_next_period=EPDV,
+    )
+    # pbmax = max(0, -50 + 500·0.2) = 50, pw = 50 · Γ(=10) = 500.
+    assert jnp.isclose(result, 500.0, atol=ATOL)
