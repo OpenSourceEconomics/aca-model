@@ -16,6 +16,7 @@ from lcm.solvers import DCEGM
 
 from aca_model.baseline.regimes._common import Grids
 
+
 def build_dcegm_solver(grids: Grids) -> DCEGM:
     """Build the per-regime DC-EGM configuration.
 
@@ -29,9 +30,7 @@ def build_dcegm_solver(grids: Grids) -> DCEGM:
     savings_stop = float(assets_points[-1]) - float(assets_points[0])
     n_points = grids.grid_config.n_savings_gridpoints
     savings_grid = IrregSpacedGrid(
-        points=tuple(
-            savings_stop * (i / (n_points - 1)) ** 3 for i in range(n_points)
-        ),
+        points=tuple(savings_stop * (i / (n_points - 1)) ** 3 for i in range(n_points)),
         batch_size=grids.grid_config.n_savings_batch_size,
     )
     return DCEGM(
