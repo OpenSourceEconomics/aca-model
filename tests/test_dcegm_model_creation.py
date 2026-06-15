@@ -206,3 +206,17 @@ def test_savings_grid_length_follows_grid_config() -> None:
     for name in REGIME_SPECS:
         solver = cast("DCEGM", regimes[name].solver)
         assert len(solver.savings_grid.to_jax()) == 70, name
+
+
+def test_dcegm_savings_grid_rejects_too_few_points() -> None:
+    """`n_savings_gridpoints < 2` cannot form the cubically clustered DC-EGM
+    savings grid, so building the dcegm regimes raises a clear `ValueError`."""
+    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, n_savings_gridpoints=1)
+    with pytest.raises(ValueError, match="n_savings_gridpoints"):
+        build_all_regimes(
+            grid_config=grid_config,
+            fixed_params=_FIXED_PARAMS,
+            wage_params=_WAGE_PARAMS,
+            pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+            solver="dcegm",
+        )

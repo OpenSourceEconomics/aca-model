@@ -26,9 +26,10 @@ def build_dcegm_solver(grids: Grids) -> DCEGM:
     grid's (negative) floor. Nodes are cubically clustered toward the
     constraint, where the value function curves hardest.
     """
+    n_points = grids.grid_config.n_savings_gridpoints
+    _fail_if_too_few_savings_gridpoints(n_points)
     assets_points = grids.assets.to_jax()
     savings_stop = float(assets_points[-1]) - float(assets_points[0])
-    n_points = grids.grid_config.n_savings_gridpoints
     savings_grid = IrregSpacedGrid(
         points=tuple(savings_stop * (i / (n_points - 1)) ** 3 for i in range(n_points)),
         batch_size=grids.grid_config.n_savings_batch_size,
@@ -40,3 +41,12 @@ def build_dcegm_solver(grids: Grids) -> DCEGM:
         post_decision_function="savings",
         savings_grid=savings_grid,
     )
+
+
+def _fail_if_too_few_savings_gridpoints(n_savings_gridpoints: int) -> None:
+    if n_savings_gridpoints < 2:
+        msg = (
+            f"n_savings_gridpoints must be >= 2 to form the cubically clustered "
+            f"DC-EGM savings grid, got {n_savings_gridpoints}."
+        )
+        raise ValueError(msg)

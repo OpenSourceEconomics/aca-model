@@ -40,7 +40,7 @@ MAX_CONSUMPTION_DOLLARS = 300_000.0  # production value (env_constants)
 
 
 @pytest.mark.parametrize("n_points", [5, 16, 64, 70, 100])
-def testcompute_consumption_dollars_points_first_equals_singles_floor(
+def test_compute_consumption_dollars_points_first_equals_singles_floor(
     n_points: int,
 ) -> None:
     """`pts[0]` equals the singles' floor exactly under any `n_points`."""
@@ -54,7 +54,7 @@ def testcompute_consumption_dollars_points_first_equals_singles_floor(
 
 
 @pytest.mark.parametrize("n_points", [5, 16, 64, 70, 100])
-def testcompute_consumption_dollars_points_second_equals_married_floor(
+def test_compute_consumption_dollars_points_second_equals_married_floor(
     n_points: int,
 ) -> None:
     """`pts[1]` equals `consumption_equiv_floor * 2 ** exponent` exactly."""
@@ -68,7 +68,7 @@ def testcompute_consumption_dollars_points_second_equals_married_floor(
     assert float(pts[1]) == expected
 
 
-def testcompute_consumption_dollars_points_strictly_increasing() -> None:
+def test_compute_consumption_dollars_points_strictly_increasing() -> None:
     """Gridpoints are strictly increasing — no kink-pinning ties."""
     pts = compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
@@ -80,7 +80,7 @@ def testcompute_consumption_dollars_points_strictly_increasing() -> None:
     assert bool((diffs > 0).all())
 
 
-def testcompute_consumption_dollars_points_last_equals_max() -> None:
+def test_compute_consumption_dollars_points_last_equals_max() -> None:
     """The final point is the configured upper bound."""
     pts = compute_consumption_dollars_points(
         consumption_equiv_floor=jnp.asarray(SINGLE_FLOOR),
