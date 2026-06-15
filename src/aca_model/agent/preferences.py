@@ -258,10 +258,14 @@ def bequest(
     """Bequest function for terminal/dead states.
 
     bequest = scale * bwt *
-        (max(0,a) + shifter)^(consumption_weight*(1 - coefficient_rra))
+        (assets + shifter)^(consumption_weight*(1 - coefficient_rra))
         / (1 - coefficient_rra)
+
+    Assets enter unclamped, matching the paper's `b(A) = θ_B · (A + κ)^(…)`.
+    The asset-grid floor plus `bequest_shifter` (κ) stay strictly positive
+    everywhere reachable, so the estate base never turns non-positive.
     """
-    assets_shifted = jnp.maximum(0.0, assets) + bequest_shifter
+    assets_shifted = assets + bequest_shifter
 
     one_minus_rra = jnp.where(
         jnp.isclose(coefficient_rra, 1.0), 1.0, 1.0 - coefficient_rra
