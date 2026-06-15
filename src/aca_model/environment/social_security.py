@@ -322,9 +322,12 @@ def next_aime(
         normal_retirement_age=normal_retirement_age,
         early_ret_adjustment=early_ret_adjustment,
     )
-    adjusted_aime = jnp.interp(adjusted_pia, pia_table, pia_aime_grid)
-
-    return jnp.minimum(adjusted_aime, aime_kink_2)
+    # The extended `pia_table`/`pia_aime_grid` reach above the taxable max so a
+    # delayed-retirement credit on a top earner's PIA round-trips to an AIME
+    # above `aime_kink_2` rather than clamping there. `_accrue_aime` already
+    # capped the labor-earnings base at the taxable max; the actuarial credit is
+    # the only thing carried beyond it.
+    return jnp.interp(adjusted_pia, pia_table, pia_aime_grid)
 
 
 def next_aime_plain(

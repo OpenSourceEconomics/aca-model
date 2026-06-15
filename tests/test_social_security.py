@@ -93,15 +93,19 @@ DI_SCALE = jnp.array(
     )
 )
 
-# Pre-computed PIA lookup table (4-point exact grid)
-MAX_AIME = AIME_KINK_2 * float(DI_SCALE.max()) * 1.1
+# Pre-computed PIA lookup table (5-point exact grid). The fourth point is
+# the taxable-max AIME; the fifth extends AIME above it so the largest
+# delayed-retirement credit (max of the cumulative factors) baked into the
+# carried AIME survives the round-trip instead of clamping at the taxable max.
+MAX_DELAYED_FACTOR = float(EARLY_RET_ADJ.max())
 _pia_grid_np, _pia_table_np = compute_pia_table(
     AIME_KINK_0,
     AIME_KINK_1,
     PIA_CONVERSION_RATE_0,
     PIA_CONVERSION_RATE_1,
     PIA_CONVERSION_RATE_2,
-    MAX_AIME,
+    AIME_KINK_2,
+    MAX_DELAYED_FACTOR,
 )
 PIA_AIME_GRID = jnp.asarray(_pia_grid_np)
 PIA_TABLE = jnp.asarray(_pia_table_np)
@@ -247,7 +251,14 @@ def test_next_aime_no_indexing_low_income() -> None:
     assert jnp.isclose(result, 1000, atol=ATOL)
 
 
-def test_next_aime_cap_high_aime_high_income() -> None:
+def test_next_aime_high_aime_high_income_accrues_above_taxable_max() -> None:
+    """Within-period labor accrual above the taxable-max-indexed base is preserved.
+
+    `_accrue_aime` caps the *indexed* base at the taxable max; the small extra
+    accrual from current labor earnings then rides on top. The carried AIME is
+    the round-trip of that accrued PIA — not re-clamped at the taxable max — so
+    it lands just above `aime_kink_2`.
+    """
     result = social_security.next_aime(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
@@ -268,7 +279,10 @@ def test_next_aime_cap_high_aime_high_income() -> None:
         aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
-    assert jnp.isclose(result, 39000, atol=ATOL)
+    capped_base = AIME_KINK_2
+    lowest_year = _RATIO_NP[62] * capped_base
+    expected = capped_base + (20000.0 - lowest_year) * float(AIME_ACCRUAL_FACTOR)
+    assert jnp.isclose(result, expected, atol=ATOL)
 
 
 def test_next_aime_cap_high_aime_low_income() -> None:
@@ -555,6 +569,46 @@ def test_delayed_claim_yields_credit_increased_benefit() -> None:
 
     benefit_at_68 = social_security.benefit_forced(pia=_pia_of(carried))
     np.testing.assert_allclose(benefit_at_68, 1.16 * pia_unreduced, rtol=1e-4)
+
+
+def test_delayed_claim_at_taxable_max_carries_credit_above_max() -> None:
+    """A top earner who defers does not lose the delayed credit at the taxable max.
+
+    For an agent at the taxable-max AIME who is unclaimed at the normal
+    retirement age, the one-year delayed-retirement credit scales PIA above the
+    maximum PIA. Converting that credited PIA back to AIME lands above the
+    taxable max instead of clamping there, so the credit is carried forward.
+    """
+    aime_at_max = AIME_KINK_2_SCALAR
+    result = social_security.next_aime(
+        claim_ss=jnp.array(ClaimedSS.no),
+        claimed_ss=jnp.array(ClaimedSS.no),
+        normal_retirement_age=NORMAL_RETIREMENT_AGE,
+        early_ret_adjustment=EARLY_RET_ADJ,
+        benefit_withheld_fraction=jnp.array(0.0),
+        earnings_test_credited_back=jnp.zeros(100),
+        earnings_test_repealed_age=jnp.int32(70),
+        pia_table=PIA_TABLE,
+        pia_aime_grid=PIA_AIME_GRID,
+        aime=aime_at_max,
+        labor_income=jnp.array(0.0),
+        period=jnp.int32(66),
+        age=jnp.int32(66),
+        aime_accrual_factor=AIME_ACCRUAL_FACTOR,
+        aggregate_wage_growth=AGGREGATE_WAGE_GROWTH,
+        aime_last_age_with_indexing=AIME_LAST_AGE_WITH_INDEXING,
+        aime_kink_2=AIME_KINK_2_SCALAR,
+        ratio_lowest_earnings=RATIO,
+    )
+
+    max_pia = float(_pia_table_np[3])
+    pia_kink_1 = float(_pia_table_np[2])
+    delayed_factor = float(EARLY_RET_ADJ[67]) / float(EARLY_RET_ADJ[66])
+    credited_pia = delayed_factor * max_pia
+    expected_aime = AIME_KINK_1 + (credited_pia - pia_kink_1) / PIA_CONVERSION_RATE_2
+
+    assert result > AIME_KINK_2
+    np.testing.assert_allclose(result, expected_aime, rtol=1e-4)
 
 
 def test_forced_claim_without_early_claim_pays_full_pia() -> None:

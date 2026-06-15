@@ -134,9 +134,18 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   early-retirement reduction / delayed-retirement credit is applied to PIA and converted
   back to AIME via `find_aime` (the exact inverse of `pia`), so the permanent adjustment
   rides in the carried `aime` with no extra state and persists into the forced regimes.
-  Pension imputation reads an *unadjusted* PIA (`pia_unadjusted_next_period`); the DI
-  path (`ssdi_pia`) reads the un-baked AIME. `inelig`/`forced` regimes use a plain
-  `next_aime` with no claim inputs (`_select_aime_law` routes on `spec["ss"]`).
+  The `pia_aime_grid` / `pia_table` carry a fifth bend point above the taxable max
+  (`max_delayed_factor * max_pia`, round-tripped to AIME), so a top earner who delays
+  keeps the delayed-retirement credit in the carried AIME instead of clamping at the
+  taxable max — matching the reference (struct-ret's
+  `convert_pia_to_aime(..., impose_upper_bound_on_aime=False)`). Post-claim labor
+  accrual runs on this adjusted AIME; `_accrue_aime` still caps the labor-earnings base
+  at the taxable max, and the solve-phase `pension_assets_adjustment` corrects the
+  pension imputation gap, with pension imputation reading an *unadjusted* PIA
+  (`pia_unadjusted_next_period`) so the claim-age credit never feeds the pension node —
+  faithful to the reference. The DI path (`ssdi_pia`) reads the un-baked AIME.
+  `inelig`/`forced` regimes use a plain `next_aime` with no claim inputs
+  (`_select_aime_law` routes on `spec["ss"]`).
 - **ACA subsidies/mandate respect Medicaid**: `premium_subsidy`, `cost_sharing`, and
   `mandate_penalty` take `is_medicaid_eligible` and return the neutral value when the
   household is Medicaid-eligible (Medicaid is minimum-essential coverage).

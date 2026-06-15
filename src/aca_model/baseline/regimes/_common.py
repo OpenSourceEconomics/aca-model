@@ -210,8 +210,10 @@ class Grids:
 
 
 # AIME piecewise grid: number of points per segment between the PIA
-# bend points (0 → kink_0 → kink_1 → kink_2). Total = 32.
-_AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
+# bend points (0 → kink_0 → kink_1 → kink_2 → extension). The fourth
+# segment covers the sparse delayed-retirement-credit region above the
+# taxable max, so it carries fewer points than the dense lower segments.
+_AIME_PIECE_N_POINTS: tuple[int, int, int, int] = (10, 11, 11, 6)
 
 
 # `pension_wealth` is a carried state (`Phased(solve=..., simulate=Grid)`):
@@ -332,8 +334,10 @@ def _build_aime_grid(
 
     The grid is piecewise-linspaced with breakpoints at the PIA bends
     in `fixed_params["pia_aime_grid"]` and `_AIME_PIECE_N_POINTS` in
-    each segment. `n_aime_gridpoints` from `grid_config` is ignored on
-    this path; the total is fixed by the PIA structure (32 points).
+    each segment. The fifth bend point is the delayed-retirement-credit
+    extension above the taxable max, so the grid carries four segments.
+    `n_aime_gridpoints` from `grid_config` is ignored on this path; the
+    total is fixed by the PIA structure (`sum(_AIME_PIECE_N_POINTS)`).
     """
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
     segments = (
@@ -344,7 +348,10 @@ def _build_aime_grid(
             interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]
         ),
         PiecewiseGridSegment(
-            interval=f"[{kinks[2]}, {kinks[3]}]", n_points=_AIME_PIECE_N_POINTS[2]
+            interval=f"[{kinks[2]}, {kinks[3]})", n_points=_AIME_PIECE_N_POINTS[2]
+        ),
+        PiecewiseGridSegment(
+            interval=f"[{kinks[3]}, {kinks[4]}]", n_points=_AIME_PIECE_N_POINTS[3]
         ),
     )
     return PiecewiseLinSpacedGrid(
