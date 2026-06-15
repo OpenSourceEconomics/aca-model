@@ -186,9 +186,6 @@ def test_savings_grid_batch_size_follows_grid_config() -> None:
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver="dcegm",
-        consumption_dollars_points=get_benchmark_consumption_dollars_points(
-            n_points=_ACCEPTANCE_GRID_CONFIG.n_consumption_dollars_gridpoints
-        ),
     )
     for name in REGIME_SPECS:
         solver = cast("DCEGM", regimes[name].solver)
