@@ -20,11 +20,16 @@ def apply_aca_overrides(
 
     Three orthogonal feature flags derived from the policy variant:
 
-    - **Medicaid expansion**: ACA-style income-only eligibility (all regimes).
+    - **Medicaid expansion**: two-track eligibility (categorical SSI plus the
+      under-65 non-disabled MAGI expansion) installed on all regimes. The
+      expansion arm is internally scoped to the under-65 non-disabled
+      population, so post-65 and disabled households keep the categorical
+      track with its asset test.
     - **Subsidies**: premium credits, cost-sharing reductions, and their
-      consuming functions (nongroup+nomc only).
+      consuming functions (nongroup+nomc only). All mask to their neutral
+      value when Medicaid-eligible (minimum-essential coverage).
     - **Mandate**: individual mandate penalty (nongroup+nomc only, requires
-      subsidies).
+      subsidies), waived when Medicaid-eligible.
     """
     has_medicaid_expansion = policy not in (
         PolicyVariant.ACA_NO_MEDICAID_EXPANSION,
@@ -46,5 +51,6 @@ def apply_aca_overrides(
         # dict, not a DAG function — no entry needed here.
         functions["hic_premium_subsidy"] = aca_hi.premium_subsidy
         functions["cost_sharing_scale"] = aca_hi.cost_sharing
+        functions["premium_default"] = aca_hi.premium_default
         functions["cash_on_hand"] = aca_hi.cash_on_hand
         functions["primary_oop"] = aca_hi.primary_oop

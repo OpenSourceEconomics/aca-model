@@ -4,6 +4,7 @@ Parameter values from struct-ret PreferenceParameters fixture.
 """
 
 import jax.numpy as jnp
+import numpy as np
 
 from aca_model.agent import preferences
 
@@ -212,3 +213,46 @@ def test_bequest_crra_regression() -> None:
         utility_scale_factor=scale,
     )
     assert jnp.isclose(result, -37.932_748_117_035_63, rtol=1e-5)
+
+
+def test_bequest_uses_signed_assets_for_indebted_decedent() -> None:
+    """A decedent with negative assets values their estate at `(A + κ)`.
+
+    Negative assets enter the bequest unclamped: the estate argument is
+    `assets + bequest_shifter`, so an indebted decedent's bequest is strictly
+    below what a zero-asset decedent would receive.
+    """
+    assets = jnp.array(-50_000.0)
+    consumption_weight = jnp.asarray(0.6)
+    coefficient_rra = jnp.asarray(5.0)
+    scale = preferences.utility_scale_factor(
+        average_consumption_equiv=AVERAGE_CONSUMPTION,
+        consumption_weight=consumption_weight,
+        coefficient_rra=coefficient_rra,
+        time_endowment=TIME_ENDOWMENT,
+        fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
+        reference_hours=REFERENCE_HOURS,
+    )
+    bwt = preferences.scaled_bequest_weight(
+        bequest_weight=BEQUEST_WEIGHT,
+        consumption_weight=consumption_weight,
+        coefficient_rra=coefficient_rra,
+        time_endowment=TIME_ENDOWMENT,
+        time_discount_factor=TIME_DISCOUNT_FACTOR,
+        rate_of_return=RATE_OF_RETURN,
+    )
+    result = preferences.bequest(
+        assets=assets,
+        bequest_shifter=BEQUEST_SHIFTER,
+        scaled_bequest_weight=bwt,
+        consumption_weight=consumption_weight,
+        coefficient_rra=coefficient_rra,
+        utility_scale_factor=scale,
+    )
+
+    # bequest = scale · bwt · (A + κ)^(0.6·(1−5)) / (1−5), with A + κ = 450_000.
+    estate = assets + BEQUEST_SHIFTER
+    expected = (
+        scale * bwt * estate ** (consumption_weight * (1.0 - coefficient_rra)) / -4.0
+    )
+    np.testing.assert_allclose(result, expected, atol=1e-9)

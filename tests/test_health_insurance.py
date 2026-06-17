@@ -19,7 +19,8 @@ def test_ssi_share_assets_too_high() -> None:
         assets=jnp.array(5000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.int32(0),
-        gets_medicare=jnp.asarray(True),
+        crossed_oamc_threshold=jnp.asarray(True),
+        is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -32,33 +33,55 @@ def test_ssi_share_income_too_high() -> None:
         assets=jnp.array(1000.0),
         countable_income=jnp.array(9000.0),
         spousal_income=jnp.int32(0),
-        gets_medicare=jnp.asarray(True),
+        crossed_oamc_threshold=jnp.asarray(True),
+        is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
     assert jnp.isclose(result, 0.0, atol=ATOL)
 
 
-def test_ssi_share_no_medicare() -> None:
-    """Without Medicare the share is 0 regardless of assets and income."""
+def test_ssi_share_neither_aged_nor_disabled() -> None:
+    """Without the aged-or-disabled categorical gate the share is 0.
+
+    The categorical track requires aged (`crossed_oamc_threshold`) or
+    disabled status; failing both zeroes the share regardless of assets
+    and income.
+    """
     result = health_insurance.ssi_eligibility_share(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.int32(0),
-        gets_medicare=jnp.asarray(False),
+        crossed_oamc_threshold=jnp.asarray(False),
+        is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
     assert jnp.isclose(result, 0.0, atol=ATOL)
 
 
-def test_ssi_share_all_pass() -> None:
-    """Assets and income clearly below both thresholds give share 1."""
+def test_ssi_share_disabled_under_65_qualifies() -> None:
+    """A disabled (non-aged), asset/income-eligible household gets share 1."""
     result = health_insurance.ssi_eligibility_share(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
         spousal_income=jnp.int32(0),
-        gets_medicare=jnp.asarray(True),
+        crossed_oamc_threshold=jnp.asarray(False),
+        is_disabled=jnp.asarray(True),
+        ssi_assets_test=SSI_ASSETS_TEST,
+        ssi_maximum_benefit=SSI_MAX_BENEFIT,
+    )
+    assert jnp.isclose(result, 1.0, atol=ATOL)
+
+
+def test_ssi_share_aged_all_pass() -> None:
+    """An aged household below both thresholds gets share 1."""
+    result = health_insurance.ssi_eligibility_share(
+        assets=jnp.array(1000.0),
+        countable_income=jnp.array(1000.0),
+        spousal_income=jnp.int32(0),
+        crossed_oamc_threshold=jnp.asarray(True),
+        is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )

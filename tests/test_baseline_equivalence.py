@@ -14,7 +14,10 @@ from aca_model.baseline.health_insurance import BuyPrivate
 
 
 def test_baseline_cash_on_hand_no_aca_params() -> None:
-    """Baseline cash_on_hand has no subsidy or mandate params."""
+    """Baseline cash_on_hand has no subsidy or mandate params.
+
+    With nothing defaulted, the full premium leaves cash-on-hand.
+    """
     assets = jnp.array(100000.0)
     ati = jnp.array(30000.0)
     ssi = jnp.array(5000.0)
@@ -24,13 +27,18 @@ def test_baseline_cash_on_hand_no_aca_params() -> None:
         after_tax_income=ati,
         ssi_benefit=ssi,
         hic_premium=premium,
+        premium_default=jnp.array(0.0),
     )
     expected = assets + ati + ssi - premium
     assert jnp.isclose(result, expected)
 
 
 def test_aca_cash_on_hand_with_subsidy_and_penalty() -> None:
-    """ACA cash_on_hand adds subsidy and subtracts penalty."""
+    """ACA cash_on_hand adds subsidy and subtracts penalty.
+
+    With nothing defaulted, the subsidy-net premium and the mandate penalty
+    both leave cash-on-hand.
+    """
     assets = jnp.array(100000.0)
     ati = jnp.array(30000.0)
     ssi = jnp.array(5000.0)
@@ -43,6 +51,7 @@ def test_aca_cash_on_hand_with_subsidy_and_penalty() -> None:
         ssi_benefit=ssi,
         hic_premium=premium,
         hic_premium_subsidy=subsidy,
+        premium_default=jnp.array(0.0),
         mandate_penalty=penalty,
     )
     expected = assets + ati + ssi - premium + subsidy - penalty
@@ -60,6 +69,7 @@ def test_aca_cash_on_hand_matches_baseline_when_neutral() -> None:
         after_tax_income=ati,
         ssi_benefit=ssi,
         hic_premium=premium,
+        premium_default=jnp.array(0.0),
     )
     aca_result = aca_hi.cash_on_hand(
         assets=assets,
@@ -67,6 +77,7 @@ def test_aca_cash_on_hand_matches_baseline_when_neutral() -> None:
         ssi_benefit=ssi,
         hic_premium=premium,
         hic_premium_subsidy=jnp.array(0.0),
+        premium_default=jnp.array(0.0),
         mandate_penalty=jnp.array(0.0),
     )
     assert jnp.isclose(baseline_result, aca_result)

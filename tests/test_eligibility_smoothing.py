@@ -45,13 +45,15 @@ def _ssi_share(
     assets: float,
     countable_income: float = 0.0,
     spousal_income: int = 0,
-    gets_medicare: bool = True,
+    crossed_oamc_threshold: bool = True,
+    is_disabled: bool = False,
 ) -> jnp.ndarray:
     return health_insurance.ssi_eligibility_share(
         assets=jnp.array(assets),
         countable_income=jnp.array(countable_income),
         spousal_income=jnp.int32(spousal_income),
-        gets_medicare=jnp.asarray(gets_medicare),
+        crossed_oamc_threshold=jnp.asarray(crossed_oamc_threshold),
+        is_disabled=jnp.asarray(is_disabled),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -112,9 +114,9 @@ def test_ssi_share_income_leg(countable_income: float, expected: float) -> None:
     np.testing.assert_allclose(share, expected, atol=ATOL)
 
 
-def test_ssi_share_zero_without_medicare() -> None:
-    """Without Medicare the share is exactly 0 even inside the band."""
-    share = _ssi_share(assets=2000.0, gets_medicare=False)
+def test_ssi_share_zero_without_categorical_gate() -> None:
+    """Failing the aged-or-disabled gate gives share exactly 0 inside the band."""
+    share = _ssi_share(assets=2000.0, crossed_oamc_threshold=False, is_disabled=False)
     np.testing.assert_allclose(share, 0.0, atol=ATOL)
 
 
@@ -125,7 +127,8 @@ def test_ssi_share_monotone_nonincreasing_in_assets() -> None:
         assets=assets,
         countable_income=jnp.zeros_like(assets),
         spousal_income=jnp.int32(0),
-        gets_medicare=jnp.asarray(True),
+        crossed_oamc_threshold=jnp.asarray(True),
+        is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -215,8 +218,6 @@ def test_target_his_forcedout_is_own_his() -> None:
 
 
 _IMP_TABLES_HIS = {
-    "pia_table": jnp.array([0.0, 100.0]),
-    "pia_aime_grid": jnp.array([0.0, 1000.0]),
     "imp_intercept_next_period": jnp.array([[0.0, 0.0, 0.0], [5.0, 10.0, 7.0]]),
     "imp_pia_coeff_next_period": jnp.array([[0.0, 0.0, 0.0], [1.0, 2.0, 1.5]]),
     "imp_pia_kink_0_coeff_next_period": jnp.zeros((2, 3)),
@@ -230,10 +231,10 @@ _IMP_TABLES_HIS = {
 def test_imputed_pension_wealth_no_medicaid_looks_up_target_his() -> None:
     """The deterministic-target leg imputes at `[period, target_his]`.
 
-    next_pia = 50, intercept = 10, coeff = 2 -> pbmax = 110, epdv = 3.
+    pia_unadjusted = 50, intercept = 10, coeff = 2 -> pbmax = 110, epdv = 3.
     """
     result = pensions.imputed_pension_wealth_next_period_no_medicaid(
-        next_aime=jnp.array(500.0),
+        pia_unadjusted_next_period=jnp.array(50.0),
         target_his=jnp.int32(HealthInsuranceState.tied),
         period=jnp.int32(1),
         **_IMP_TABLES_HIS,
@@ -244,13 +245,11 @@ def test_imputed_pension_wealth_no_medicaid_looks_up_target_his() -> None:
 def test_imputed_pension_wealth_medicaid_uses_nongroup_slices() -> None:
     """The Medicaid leg imputes from age-indexed nongroup table slices.
 
-    next_pia = 50, intercept_ng = 20, coeff_ng = 1 -> pbmax = 70, epdv = 3.
+    pia_unadjusted = 50, intercept_ng = 20, coeff_ng = 1 -> pbmax = 70, epdv = 3.
     """
     result = pensions.imputed_pension_wealth_next_period_medicaid(
-        next_aime=jnp.array(500.0),
+        pia_unadjusted_next_period=jnp.array(50.0),
         period=jnp.int32(1),
-        pia_table=jnp.array([0.0, 100.0]),
-        pia_aime_grid=jnp.array([0.0, 1000.0]),
         imp_intercept_next_period_ng=jnp.array([0.0, 20.0]),
         imp_pia_coeff_next_period_ng=jnp.array([0.0, 1.0]),
         imp_pia_kink_0_coeff_next_period_ng=jnp.zeros(2),
@@ -334,14 +333,17 @@ def test_regime_transition_at_share_zero_matches_discrete_target() -> None:
 
 def test_aca_medicaid_share_smooths_the_income_threshold() -> None:
     """The ACA expansion share ramps over the same +/- $50 band around the
-    133%-FPL income threshold (income-only test, no assets leg)."""
+    133%-FPL MAGI threshold (income-only expansion track, no categorical share)."""
     schedule = MappingLeaf(
         data={"income_threshold": jnp.array([15000.0, 20000.0, 20000.0])}
     )
     shares = [
         aca_hi.medicaid_eligibility_share(
-            countable_income=jnp.array(income),
+            ssi_eligibility_share=jnp.array(0.0),
+            aca_magi=jnp.array(income),
             spousal_income=jnp.int32(0),
+            crossed_oamc_threshold=jnp.asarray(False),
+            is_disabled=jnp.asarray(False),
             medicaid_schedule=schedule,
         )
         for income in (14950.0, 15000.0, 15050.0)

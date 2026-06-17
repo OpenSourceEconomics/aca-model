@@ -80,9 +80,7 @@ def test_savings_grid_batch_size_follows_grid_config() -> None:
     """`GridConfig.n_savings_batch_size` sets the `batch_size` on every
     living regime's DC-EGM savings grid, so the post-decision continuation
     splays into `lax.map` blocks of that width."""
-    grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG, n_savings_batch_size=50
-    )
+    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, n_savings_batch_size=50)
     regimes = build_all_regimes(
         grid_config=grid_config,
         fixed_params=_FIXED_PARAMS,
@@ -98,9 +96,7 @@ def test_savings_grid_batch_size_follows_grid_config() -> None:
 def test_savings_grid_length_follows_grid_config() -> None:
     """`GridConfig.n_savings_gridpoints` sets the number of nodes on every
     living regime's DC-EGM savings grid."""
-    grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG, n_savings_gridpoints=70
-    )
+    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, n_savings_gridpoints=70)
     regimes = build_all_regimes(
         grid_config=grid_config,
         fixed_params=_FIXED_PARAMS,

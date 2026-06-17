@@ -211,8 +211,10 @@ class Grids:
 
 
 # AIME piecewise grid: number of points per segment between the PIA
-# bend points (0 → kink_0 → kink_1 → kink_2). Total = 32.
-_AIME_PIECE_N_POINTS: tuple[int, int, int] = (10, 11, 11)
+# bend points (0 → kink_0 → kink_1 → kink_2 → extension). The fourth
+# segment covers the sparse delayed-retirement-credit region above the
+# taxable max, so it carries fewer points than the dense lower segments.
+_AIME_PIECE_N_POINTS: tuple[int, int, int, int] = (10, 11, 11, 6)
 
 
 # `pension_wealth` is a carried state (`Phased(solve=..., simulate=Grid)`):
@@ -444,8 +446,10 @@ def _build_aime_grid(
 
     The grid is piecewise-linspaced with breakpoints at the PIA bends
     in `fixed_params["pia_aime_grid"]` and `_AIME_PIECE_N_POINTS` in
-    each segment. `n_aime_gridpoints` from `grid_config` is ignored on
-    this path; the total is fixed by the PIA structure (32 points).
+    each segment. The fifth bend point is the delayed-retirement-credit
+    extension above the taxable max, so the grid carries four segments.
+    `n_aime_gridpoints` from `grid_config` is ignored on this path; the
+    total is fixed by the PIA structure (`sum(_AIME_PIECE_N_POINTS)`).
     """
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
     segments = (
@@ -456,7 +460,10 @@ def _build_aime_grid(
             interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]
         ),
         PiecewiseGridSegment(
-            interval=f"[{kinks[2]}, {kinks[3]}]", n_points=_AIME_PIECE_N_POINTS[2]
+            interval=f"[{kinks[2]}, {kinks[3]})", n_points=_AIME_PIECE_N_POINTS[2]
+        ),
+        PiecewiseGridSegment(
+            interval=f"[{kinks[3]}, {kinks[4]}]", n_points=_AIME_PIECE_N_POINTS[3]
         ),
     )
     return PiecewiseLinSpacedGrid(
@@ -827,10 +834,23 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     if spec["mc"] != "oamc":  # pre-65: SSDI needs dropout-adjusted PIA
         functions["ssdi_pia"] = social_security.ssdi_pia
 
+    # SSI categorical track: `crossed_oamc_threshold` is a per-regime constant
+    # fixed param;
+    # `is_disabled` reads the disability health state where the regime carries
+    # it (pre-65 `nomc`/`dimc`) and is constant False post-65 (`oamc`).
+    functions["is_disabled"] = (
+        health_insurance.is_disabled_never
+        if spec["mc"] == "oamc"
+        else health_insurance.is_disabled_from_health
+    )
+    # MAGI for the ACA Medicaid expansion track; pruned in the baseline DAG.
+    functions["aca_magi"] = health_insurance.aca_magi
+
     # Swapped per policy variant by the ACA overlay, hence regime-level
     functions["medicaid_eligibility_share"] = (
         health_insurance.medicaid_eligibility_share
     )
+    functions["premium_default"] = assets_and_income.premium_default
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
 
     # Earnings test credit-back (only choose+canwork: has claim_ss + claimed_ss)
@@ -901,6 +921,7 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
         if can_work
         else health_insurance.target_his_forcedout
     )
+    functions["pia_unadjusted_next_period"] = social_security.pia_unadjusted_next_period
     functions["imputed_pension_wealth_next_period_no_medicaid"] = (
         pensions.imputed_pension_wealth_next_period_no_medicaid
     )
@@ -1032,12 +1053,35 @@ def build_state_transitions(
     lagged_labor_supply_transition = _build_per_target_regime_lagged_labor_supply(spec)
     if lagged_labor_supply_transition:
         transitions["lagged_labor_supply"] = lagged_labor_supply_transition
-    transitions["aime"] = (
-        social_security.next_aime
-        if spec["mc"] == "oamc"
-        else social_security.next_aime_disabled
-    )
+    transitions["aime"] = _select_aime_law(spec)
     return transitions
+
+
+def _select_aime_law(spec: RegimeSpec) -> Callable[..., FloatND]:
+    """Select the AIME law of motion for a non-dead regime.
+
+    The claim-age actuarial bake applies only where the agent chooses when to
+    claim (`ss=choose`), so only those regimes carry the `claim_ss`/`claimed_ss`
+    inputs. `ss=inelig` (cannot claim) and `ss=forced` (claims by rule) use the
+    plain-accrual variant: no claim adjustment, no claim inputs. A forced
+    claimant who claimed early carries the reduction in from the choose regime;
+    plain accrual preserves it.
+
+    - post-65 (`oamc`), `choose` → `next_aime` (claim-adjusted)
+    - post-65 (`oamc`), `forced` → `next_aime_plain`
+    - pre-65 (`nomc`/`dimc`), `choose` → `next_aime_disabled` (claim-adjusted)
+    - pre-65 (`nomc`/`dimc`), `inelig` → `next_aime_disabled_plain`
+    """
+    is_choose = spec["ss"] == "choose"
+    if spec["mc"] == "oamc":
+        return (
+            social_security.next_aime if is_choose else social_security.next_aime_plain
+        )
+    return (
+        social_security.next_aime_disabled
+        if is_choose
+        else social_security.next_aime_disabled_plain
+    )
 
 
 def _build_per_target_regime_assets(

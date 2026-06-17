@@ -75,7 +75,7 @@ def _build_functions(spec: RegimeSpec) -> dict:
 
     functions["ss_benefit"] = select_ss_benefit(spec)
 
-    # his and gets_medicare are fixed params (constants per regime),
+    # his and crossed_oamc_threshold are fixed params (constants per regime),
     # not DAG functions. pylcm resolves them from the params dict.
 
     functions["hic_premium"] = health_insurance.premium_insured

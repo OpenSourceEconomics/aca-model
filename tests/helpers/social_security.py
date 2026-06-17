@@ -16,24 +16,25 @@ def compute_pia_table(
     pia_conversion_rate_1: float,
     pia_conversion_rate_2: float,
     max_aime: float,
+    max_delayed_factor: float,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Pre-compute PIA lookup table on the minimal 4-point grid.
+    """Pre-compute PIA lookup table on the minimal 5-point grid.
 
-    PIA is piecewise linear with 2 kinks, so 4 grid points suffice for
-    exact interpolation via `jnp.interp` at any AIME value.
+    PIA is piecewise linear with 2 kinks, so the first four points
+    (0, kink_0, kink_1, max_aime) reproduce it exactly via `jnp.interp`.
+    A fifth point extends AIME above the taxable max so the
+    delayed-retirement credit baked into the carried AIME (PIA scaled
+    up by `max_delayed_factor`) survives the round-trip to AIME.
     """
     pia_kink_0 = pia_conversion_rate_0 * aime_kink_0
     pia_kink_1 = pia_kink_0 + pia_conversion_rate_1 * (aime_kink_1 - aime_kink_0)
+    max_pia = pia_kink_1 + pia_conversion_rate_2 * (max_aime - aime_kink_1)
 
-    aime_grid = np.array([0.0, aime_kink_0, aime_kink_1, max_aime])
-    pia_table = np.array(
-        [
-            0.0,
-            pia_kink_0,
-            pia_kink_1,
-            pia_kink_1 + pia_conversion_rate_2 * (max_aime - aime_kink_1),
-        ]
-    )
+    pia_ext = max_delayed_factor * max_pia
+    aime_ext = aime_kink_1 + (pia_ext - pia_kink_1) / pia_conversion_rate_2
+
+    aime_grid = np.array([0.0, aime_kink_0, aime_kink_1, max_aime, aime_ext])
+    pia_table = np.array([0.0, pia_kink_0, pia_kink_1, max_pia, pia_ext])
     return aime_grid, pia_table
 
 

@@ -24,6 +24,7 @@ import jax.numpy as jnp
 from lcm import categorical
 from lcm.typing import (
     Age,
+    BoolND,
     ContinuousState,
     DiscreteAction,
     DiscreteState,
@@ -35,6 +36,7 @@ from lcm.typing import (
     ScalarInt,
 )
 
+from aca_model.agent.health import HealthWithDisability
 from aca_model.agent.labor_market import LaborSupply
 
 
@@ -104,27 +106,75 @@ def ssi_eligibility_share(
     assets: ContinuousState,
     countable_income: FloatND,
     spousal_income: DiscreteState,
-    gets_medicare: ScalarBool,
+    crossed_oamc_threshold: ScalarBool,
+    is_disabled: BoolND,
     ssi_assets_test: FloatND,
     ssi_maximum_benefit: FloatND,
 ) -> FloatND:
     """Smooth SSI/Medicaid eligibility share in [0, 1].
 
-    The two statutory tests enter as smoothstep shares whose product is
-    the joint share:
+    The two continuous statutory tests enter as smoothstep shares; their
+    product is multiplied by the discrete categorical gate:
 
     - assets below the household-specific `ssi_assets_test`
     - countable income below the household-specific `ssi_maximum_benefit`
+    - categorical eligibility: aged (`crossed_oamc_threshold`) or `is_disabled`
 
-    Medicare stays a hard gate: it is a known constant per regime (True in
-    mc regimes, disability-dependent in no_mc regimes), so it cannot
-    produce a cliff in a continuous state.
+    The categorical gate stays a hard gate — `crossed_oamc_threshold` is a
+    known per-regime constant (post-65 regimes) and `is_disabled` reads a
+    discrete health state, so it selects a discrete branch and cannot
+    produce a cliff in a continuous state. Only the asset and income tests
+    get the smoothstep, keeping the budget chain C² in `assets` as DC-EGM's
+    per-node evaluation requires; outside the bands the share is bit-identical
+    to the boolean rule.
     """
     assets_share = share_below_threshold(assets, ssi_assets_test[spousal_income])
     income_share = share_below_threshold(
         countable_income, ssi_maximum_benefit[spousal_income]
     )
-    return gets_medicare * assets_share * income_share
+    categorical = crossed_oamc_threshold | is_disabled
+    return categorical * assets_share * income_share
+
+
+def is_disabled_from_health(health: DiscreteState) -> BoolND:
+    """Disability indicator for regimes carrying the disability health state.
+
+    Pre-65 `nomc`/`dimc` regimes use `HealthWithDisability`, whose lowest
+    state is `disabled`. The household is disabled exactly in that state.
+    """
+    return health == HealthWithDisability.disabled
+
+
+def is_disabled_never() -> BoolND:
+    """Disability indicator for regimes without a disability health state.
+
+    Post-65 (`oamc`) regimes use the 2-state `Health` grid with no
+    disability category, so no household is disabled there.
+    """
+    return jnp.asarray(False)
+
+
+def aca_magi(
+    labor_income: FloatND,
+    capital_income: FloatND,
+    spousal_income: DiscreteState,
+    spousal_income_amounts: FloatND,
+    ss_benefit: FloatND,
+    pension_benefit: FloatND,
+) -> FloatND:
+    """Compute MAGI for ACA Medicaid expansion eligibility.
+
+    Modified adjusted gross income counts every income source in full —
+    no SSI disregards and no half-counting of earnings — so it is distinct
+    from the SSI `countable_income`.
+    """
+    return (
+        labor_income
+        + capital_income
+        + spousal_income_amounts[spousal_income]
+        + ss_benefit
+        + pension_benefit
+    )
 
 
 def ssi_benefit(

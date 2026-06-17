@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import jax.numpy as jnp
-from lcm.typing import ContinuousState, FloatND, IntND, Period, ScalarFloat
+from lcm.typing import FloatND, IntND, Period, ScalarFloat
 
 
 def full_benefit(
@@ -195,11 +195,9 @@ def assets_adjustment(
 
 
 def imputed_pension_wealth_next_period_no_medicaid(
-    next_aime: ContinuousState,
+    pia_unadjusted_next_period: FloatND,
     target_his: IntND,
     period: Period,
-    pia_table: FloatND,
-    pia_aime_grid: FloatND,
     imp_intercept_next_period: FloatND,
     imp_pia_coeff_next_period: FloatND,
     imp_pia_kink_0_coeff_next_period: FloatND,
@@ -220,16 +218,20 @@ def imputed_pension_wealth_next_period_no_medicaid(
     allows only one subscript per array parameter, which is why the
     nongroup (Medicaid-target) leg lives in a separate function reading
     pre-sliced `_ng` tables.
-    """
-    next_pia = jnp.interp(next_aime, pia_aime_grid, pia_table)
 
+    The PIA input is `pia_unadjusted_next_period` — the next-period PIA from pure labor
+    accrual. French & Jones impute pension wealth from the unadjusted PIA, so the
+    claim-age reduction or credit baked into the carried AIME never enters here.
+    """
     intercept = imp_intercept_next_period[period, target_his]
-    pia_pred = imp_pia_coeff_next_period[period, target_his] * next_pia
+    pia_pred = (
+        imp_pia_coeff_next_period[period, target_his] * pia_unadjusted_next_period
+    )
     kink_0_adj = imp_pia_kink_0_coeff_next_period[period, target_his] * jnp.maximum(
-        0.0, next_pia - imp_kink_0_next_period[period]
+        0.0, pia_unadjusted_next_period - imp_kink_0_next_period[period]
     )
     kink_1_adj = imp_pia_kink_1_coeff_next_period[period, target_his] * jnp.maximum(
-        0.0, next_pia - imp_kink_1_next_period[period]
+        0.0, pia_unadjusted_next_period - imp_kink_1_next_period[period]
     )
 
     pbmax_next = jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
@@ -237,10 +239,8 @@ def imputed_pension_wealth_next_period_no_medicaid(
 
 
 def imputed_pension_wealth_next_period_medicaid(
-    next_aime: ContinuousState,
+    pia_unadjusted_next_period: FloatND,
     period: Period,
-    pia_table: FloatND,
-    pia_aime_grid: FloatND,
     imp_intercept_next_period_ng: FloatND,
     imp_pia_coeff_next_period_ng: FloatND,
     imp_pia_kink_0_coeff_next_period_ng: FloatND,
@@ -257,16 +257,18 @@ def imputed_pension_wealth_next_period_medicaid(
     nongroup coefficients arrive as age-indexed `_ng` slices (produced by
     `with_nongroup_imputation_slices`) so each table parameter keeps the
     single bare-name subscript pylcm's AST shape inference requires.
-    """
-    next_pia = jnp.interp(next_aime, pia_aime_grid, pia_table)
 
+    The PIA input is `pia_unadjusted_next_period` — the unadjusted next-period
+    PIA from pure labor accrual, so the claim-age adjustment baked into the
+    carried AIME never feeds the pension node.
+    """
     intercept = imp_intercept_next_period_ng[period]
-    pia_pred = imp_pia_coeff_next_period_ng[period] * next_pia
+    pia_pred = imp_pia_coeff_next_period_ng[period] * pia_unadjusted_next_period
     kink_0_adj = imp_pia_kink_0_coeff_next_period_ng[period] * jnp.maximum(
-        0.0, next_pia - imp_kink_0_next_period[period]
+        0.0, pia_unadjusted_next_period - imp_kink_0_next_period[period]
     )
     kink_1_adj = imp_pia_kink_1_coeff_next_period_ng[period] * jnp.maximum(
-        0.0, next_pia - imp_kink_1_next_period[period]
+        0.0, pia_unadjusted_next_period - imp_kink_1_next_period[period]
     )
 
     pbmax_next = jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)

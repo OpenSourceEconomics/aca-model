@@ -21,19 +21,52 @@ def capital_income(
     return assets * rate_of_return
 
 
+def premium_default(
+    assets: ContinuousState,
+    after_tax_income: FloatND,
+    ssi_benefit: FloatND,
+    hic_premium: FloatND,
+    consumption_dollars_floor: FloatND,
+) -> FloatND:
+    """Compute the unpaid (defaulted) part of the insurance premium.
+
+    A household pays its premium only up to what it can afford while staying
+    at the consumption floor; it defaults on the rest as uncompensated care
+    (non-payment of medical bills). Affordability is measured against the
+    consumption floor, not the chosen consumption level, so the default is a
+    clean function of resources and the premium:
+
+    ```
+    affordable_premium = max(0, resources - consumption_dollars_floor)
+    premium_default    = max(0, hic_premium - affordable_premium)
+    ```
+
+    where `resources = assets + after_tax_income + ssi_benefit`.
+    """
+    resources = assets + after_tax_income + ssi_benefit
+    affordable_premium = jnp.maximum(0.0, resources - consumption_dollars_floor)
+    return jnp.maximum(0.0, hic_premium - affordable_premium)
+
+
 def cash_on_hand(
     assets: ContinuousState,
     after_tax_income: FloatND,
     ssi_benefit: FloatND,
     hic_premium: FloatND,
+    premium_default: FloatND,
 ) -> FloatND:
     """Compute cash on hand available for consumption and saving.
+
+    Only the affordable part of the premium leaves cash-on-hand; the defaulted
+    part (`premium_default`) is never paid, so the effective premium is
+    `hic_premium - premium_default`.
 
     OOP health costs are NOT deducted here — they are deducted from
     next-period assets instead, matching the timing where HCC shocks are
     integrated over (agent does not condition consumption on OOP).
     """
-    return assets + after_tax_income + ssi_benefit - hic_premium
+    effective_premium = hic_premium - premium_default
+    return assets + after_tax_income + ssi_benefit - effective_premium
 
 
 def consumption_dollars_floor(
