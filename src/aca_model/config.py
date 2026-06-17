@@ -84,6 +84,14 @@ class GridConfig:
     # gathered grid (value function unchanged). `0` keeps the whole grid in one
     # kernel. Only consulted under `solver="dcegm"`.
     n_savings_batch_size: int = 0
+    # `batch_size` on the DC-EGM child stochastic-node expectation (the
+    # process-state mesh the egm_step kernel sums over). pylcm splays that
+    # expectation into `lax.map` blocks of this size, collapsing the gather
+    # buffer's node axis by roughly the block factor (value function
+    # unchanged) — the grid-independent lever for the residual egm_step
+    # transient that savings-batching leaves behind. `0` evaluates the whole
+    # mesh in one kernel. Only consulted under `solver="dcegm"`.
+    n_stochastic_node_batch_size: int = 0
 
 
 MODEL_CONFIG = ModelConfig()

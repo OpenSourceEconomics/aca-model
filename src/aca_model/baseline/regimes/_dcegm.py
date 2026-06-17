@@ -40,6 +40,7 @@ def build_dcegm_solver(grids: Grids) -> DCEGM:
         resources="resources",
         post_decision_function="savings",
         savings_grid=savings_grid,
+        stochastic_node_batch_size=grids.grid_config.n_stochastic_node_batch_size,
     )
 
 
