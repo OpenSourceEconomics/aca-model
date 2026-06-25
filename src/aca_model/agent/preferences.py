@@ -19,6 +19,11 @@ from lcm.typing import (
 
 from aca_model.agent.labor_market import LaggedLaborSupply
 
+# Width of the smooth leisure floor, as a fraction of the time endowment. Small enough
+# that leisure equals `time_endowment - cost` wherever work costs sit well below the
+# endowment; it only bends the map near and beyond the endowment.
+_LEISURE_SMOOTHING_FRACTION = 0.01
+
 
 @categorical(ordered=False)
 class PrefType:
@@ -69,6 +74,22 @@ def fixed_cost_of_work(
     )
 
 
+def _smooth_leisure_floor(
+    leisure_available: FloatND, time_endowment: ScalarFloat
+) -> FloatND:
+    """Bend leisure to a strictly positive floor as work costs approach the endowment.
+
+    `softplus(x) = log(1 + e^x)` via `jnp.logaddexp(0, x)`, scaled by a small fraction
+    of the endowment. Where `leisure_available` is large relative to the smoothing width
+    the map reduces to `leisure_available` (bulk unchanged); as it falls to zero leisure
+    bends to `0⁺` — never negative, never a kinked clamp — so the CRRA aggregator never
+    receives a non-positive base. The smoothing width scales with the endowment, so the
+    map is scale-invariant.
+    """
+    smoothing = _LEISURE_SMOOTHING_FRACTION * time_endowment
+    return smoothing * jnp.logaddexp(0.0, leisure_available / smoothing)
+
+
 def leisure_canwork_retiree_or_nongroup(
     working_hours_value: FloatND,
     good_health: IntND,
@@ -94,7 +115,8 @@ def leisure_canwork_retiree_or_nongroup(
         0.0,
     )
 
-    return time_endowment - health_loss - work_loss
+    leisure_available = time_endowment - health_loss - work_loss
+    return _smooth_leisure_floor(leisure_available, time_endowment)
 
 
 def leisure_canwork_tied(
@@ -112,7 +134,8 @@ def leisure_canwork_tied(
     work_loss = jnp.where(
         working_hours_value > 0.0, working_hours_value + fixed_cost_of_work, 0.0
     )
-    return time_endowment - health_loss - work_loss
+    leisure_available = time_endowment - health_loss - work_loss
+    return _smooth_leisure_floor(leisure_available, time_endowment)
 
 
 def leisure_forcedout(
@@ -122,7 +145,8 @@ def leisure_forcedout(
 ) -> FloatND:
     """Compute leisure for forcedout regimes (no work)."""
     health_loss = jnp.where(good_health, 0.0, leisure_cost_of_bad_health)
-    return time_endowment - health_loss
+    leisure_available = time_endowment - health_loss
+    return _smooth_leisure_floor(leisure_available, time_endowment)
 
 
 def consumption_equiv(
