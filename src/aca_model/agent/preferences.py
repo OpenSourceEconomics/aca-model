@@ -7,7 +7,6 @@ import jax.numpy as jnp
 from lcm import categorical
 from lcm.typing import (
     Age,
-    BoolND,
     ContinuousAction,
     ContinuousState,
     DiscreteState,
@@ -47,11 +46,6 @@ class BenchmarkPrefType:
 
     type_0: ScalarInt
     type_1: ScalarInt
-
-
-def positive_leisure(leisure: FloatND) -> BoolND:
-    """Return True where leisure is strictly positive."""
-    return leisure > 0
 
 
 def equivalence_scale(is_married: IntND, exponent: ScalarFloat) -> FloatND:

@@ -10,7 +10,6 @@ from lcm import Regime
 from lcm.solvers import DCEGM
 from lcm.typing import Age, DiscreteAction, FloatND, Period
 
-from aca_model.agent import preferences
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
 from aca_model.baseline.regimes._common import (
@@ -112,10 +111,6 @@ def build_regime(
         transition_func = _make_transition_forcedout(gets_mc, own)
 
     states = build_states(spec, grids)
-    # `borrowing_constraint` is broadcast from the model level.
-    constraints: dict = {}
-    if spec["canwork"] == "canwork":
-        constraints["positive_leisure"] = preferences.positive_leisure
 
     solver_kwargs: dict = {} if dcegm_solver is None else {"solver": dcegm_solver}
     return Regime(
@@ -129,6 +124,5 @@ def build_regime(
         ),
         actions=build_actions(spec, grids),
         functions=_build_functions(spec),
-        constraints=constraints,
         **solver_kwargs,
     )
