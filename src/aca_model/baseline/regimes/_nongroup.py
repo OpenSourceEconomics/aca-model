@@ -7,7 +7,7 @@ Already nongroup, so no SSI/Medicaid override needed for HIS transitions.
 from collections.abc import Callable
 
 from lcm import Regime
-from lcm.solvers import DCEGM
+from lcm.solvers import BQSEGM, DCEGM
 from lcm.typing import Age, DiscreteAction, FloatND, Period
 
 from aca_model.agent.labor_market import LaborSupply
@@ -98,7 +98,11 @@ def _build_functions(spec: RegimeSpec) -> dict:
 
 
 def build_regime(
-    name: str, grids: Grids, *, dcegm_solver: DCEGM | None = None
+    name: str,
+    grids: Grids,
+    *,
+    dcegm_solver: DCEGM | None = None,
+    bqsegm_solver: BQSEGM | None = None,
 ) -> Regime:
     """Build a nongroup regime."""
     spec = REGIME_SPECS[name]
@@ -112,16 +116,20 @@ def build_regime(
 
     states = build_states(spec, grids)
 
-    solver_kwargs: dict = {} if dcegm_solver is None else {"solver": dcegm_solver}
+    egm_solver = dcegm_solver if dcegm_solver is not None else bqsegm_solver
+    solver_kwargs: dict = {} if egm_solver is None else {"solver": egm_solver}
+    state_solver = (
+        "brute_force"
+        if egm_solver is None
+        else ("bqsegm" if bqsegm_solver is not None else "dcegm")
+    )
     return Regime(
         transition=build_granular_regime_transition(
             transition_func=transition_func, target_ids=own.values()
         ),
         active=make_active_func(spec),
         states=states,
-        state_transitions=build_state_transitions(
-            spec, solver="brute_force" if dcegm_solver is None else "dcegm"
-        ),
+        state_transitions=build_state_transitions(spec, solver=state_solver),
         actions=build_actions(spec, grids),
         functions=_build_functions(spec),
         **solver_kwargs,

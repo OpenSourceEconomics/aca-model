@@ -42,7 +42,7 @@ from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment import pensions, social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
-SolverName = Literal["brute_force", "dcegm"]
+SolverName = Literal["brute_force", "dcegm", "bqsegm"]
 
 
 @categorical(ordered=False)
@@ -582,7 +582,7 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     solver-contract functions join the broadcast set.
     """
     functions: dict = {}
-    if solver == "dcegm":
+    if solver in ("dcegm", "bqsegm"):
         functions |= build_dcegm_functions()
     functions["total_health_costs"] = health_insurance.total_costs
     functions["oop_costs"] = health_insurance.oop_with_medicaid
@@ -642,7 +642,7 @@ def build_model_constraints(*, solver: SolverName = "brute_force") -> dict:
     Under DC-EGM there is no explicit borrowing constraint: the savings
     grid's lower bound enforces it.
     """
-    if solver == "dcegm":
+    if solver in ("dcegm", "bqsegm"):
         return {}
     return {"borrowing_constraint": assets_and_income.borrowing_constraint}
 
@@ -973,7 +973,7 @@ def _build_per_target_regime_assets(
     targets use the full `next_assets` with the pension correction.
     Under DC-EGM both laws take their post-decision (savings) form.
     """
-    if solver == "dcegm":
+    if solver in ("dcegm", "bqsegm"):
         living_law = assets_and_income.next_assets_from_savings
         dead_law = assets_and_income.next_assets_when_dead_from_savings
     else:
