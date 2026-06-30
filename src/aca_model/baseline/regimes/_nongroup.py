@@ -77,17 +77,31 @@ def _make_transition_forcedout(
     return transition
 
 
-def _build_functions(spec: RegimeSpec, *, fix_buy_private: bool = False) -> dict:
+def _fixed_full_time_labor_supply() -> DiscreteAction:
+    """Labor supply fixed to full-time work for the BQSEGM M1 slice."""
+    return LaborSupply.h2000
+
+
+def _build_functions(
+    spec: RegimeSpec, *, fix_buy_private: bool = False, fix_labor_supply: bool = False
+) -> dict:
     """Build functions dict for a nongroup regime.
 
-    With `fix_buy_private`, the BQSEGM M1 slice binds `buy_private` to
-    `BuyPrivate.yes` in its consumers (premium, OOP), so the discrete action is
-    a single fixed level. The binding selects the purchase branch of each
-    consumer — algebraically the `buy_private == BuyPrivate.yes` arm — and
-    leaves the remaining budget structure untouched.
+    The BQSEGM M1 slice fixes both discrete actions to a single level so the
+    only choice is continuous consumption:
+
+    - `fix_buy_private` binds `buy_private` to `BuyPrivate.yes` in its consumers
+      (premium, OOP) — the `buy_private == BuyPrivate.yes` arm — leaving the
+      remaining budget structure untouched.
+    - `fix_labor_supply` supplies `labor_supply` as a fixed full-time node read
+      by labor income, AIME accrual, and the lagged-supply transition (which
+      stays a state, so the cross-regime continuation space is unchanged).
     """
     can_work = spec["canwork"] == "canwork"
     functions = build_common_functions(spec)
+
+    if can_work and fix_labor_supply:
+        functions["labor_supply"] = _fixed_full_time_labor_supply
 
     functions["ss_benefit"] = select_ss_benefit(spec)
 
@@ -151,7 +165,14 @@ def build_regime(
         active=make_active_func(spec),
         states=states,
         state_transitions=build_state_transitions(spec, solver=state_solver),
-        actions=build_actions(spec, grids, drop_buy_private=fix_for_bqsegm),
-        functions=_build_functions(spec, fix_buy_private=fix_for_bqsegm),
+        actions=build_actions(
+            spec,
+            grids,
+            drop_buy_private=fix_for_bqsegm,
+            drop_labor_supply=fix_for_bqsegm,
+        ),
+        functions=_build_functions(
+            spec, fix_buy_private=fix_for_bqsegm, fix_labor_supply=fix_for_bqsegm
+        ),
         **solver_kwargs,
     )

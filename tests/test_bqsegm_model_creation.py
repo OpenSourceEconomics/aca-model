@@ -79,6 +79,25 @@ def test_bqsegm_m1_regime_fixes_buy_private() -> None:
     assert "buy_private" in brute_m1.actions
 
 
+def test_bqsegm_m1_regime_fixes_labor_supply() -> None:
+    """The BQSEGM M1 slice drops `labor_supply` as an action (fixed to full-time
+    work), so no discrete action remains and the only choice is continuous
+    consumption; the brute M1 regime keeps `labor_supply`."""
+    bqsegm_m1 = _build_regimes("bqsegm")[_M1_REGIME]
+    brute_m1 = _build_regimes("brute_force")[_M1_REGIME]
+    assert "labor_supply" not in bqsegm_m1.actions
+    assert "labor_supply" in brute_m1.actions
+
+
+def test_bqsegm_m1_regime_has_no_discrete_action() -> None:
+    """With both discrete actions fixed, the BQSEGM M1 slice leaves only the
+    continuous consumption choice — no `DiscreteGrid` action remains."""
+    bqsegm_m1 = _build_regimes("bqsegm")[_M1_REGIME]
+    assert not any(
+        isinstance(grid, DiscreteGrid) for grid in bqsegm_m1.actions.values()
+    )
+
+
 def test_bqsegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
     """The M1 regime under BQSEGM consumes the post-decision assets laws, like
     DC-EGM; the other (brute) regimes keep the cash-on-hand form."""
