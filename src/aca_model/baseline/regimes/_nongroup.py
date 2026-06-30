@@ -19,6 +19,7 @@ from aca_model.baseline.regimes._common import (
     Grids,
     RegimeSpec,
     build_actions,
+    build_bqsegm_functions,
     build_common_functions,
     build_granular_regime_transition,
     build_pension_functions,
@@ -158,6 +159,17 @@ def build_regime(
     # The BQSEGM M1 slice fixes the discrete actions to a single level so the
     # only choice is continuous consumption against the cliffed budget.
     fix_for_bqsegm = bqsegm_solver is not None
+    functions = _build_functions(
+        spec, fix_buy_private=fix_for_bqsegm, fix_labor_supply=fix_for_bqsegm
+    )
+    constraints: dict = {}
+    if fix_for_bqsegm:
+        # BQSEGM solves only this regime, so its solver-contract functions are
+        # regime-level here rather than broadcast model-wide, and the model-level
+        # borrowing constraint is masked — BQSEGM enforces it through the savings
+        # grid's lower bound.
+        functions = {**functions, **build_bqsegm_functions()}
+        constraints = {"borrowing_constraint": None}
     return Regime(
         transition=build_granular_regime_transition(
             transition_func=transition_func, target_ids=own.values()
@@ -171,8 +183,7 @@ def build_regime(
             drop_buy_private=fix_for_bqsegm,
             drop_labor_supply=fix_for_bqsegm,
         ),
-        functions=_build_functions(
-            spec, fix_buy_private=fix_for_bqsegm, fix_labor_supply=fix_for_bqsegm
-        ),
+        functions=functions,
+        constraints=constraints,
         **solver_kwargs,
     )

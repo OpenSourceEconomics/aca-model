@@ -11,11 +11,13 @@ with DC-EGM (BQSEGM's budget node is `resources`, the post-decision function is
 from collections.abc import Mapping
 from typing import cast
 
-from lcm import DiscreteGrid, Regime
+from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
+from lcm import DiscreteGrid, Model, Regime
 from lcm.solvers import BQSEGM, GridSearch
 
 from aca_model.agent import assets_and_income
 from aca_model.agent.preferences import BenchmarkPrefType
+from aca_model.baseline.model import create_model
 from aca_model.baseline.regimes import (
     REGIME_SPECS,
     SolverName,
@@ -29,6 +31,7 @@ from aca_model.config import BENCHMARK_GRID_CONFIG
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
 _M1_REGIME = "nongroup_nomc_inelig_canwork"
+_BRUTE_REGIME = "retiree_nomc_inelig_canwork"
 
 
 def _build_regimes(solver: SolverName) -> dict[str, Regime]:
@@ -36,6 +39,18 @@ def _build_regimes(solver: SolverName) -> dict[str, Regime]:
         grid_config=BENCHMARK_GRID_CONFIG,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver=solver,
+    )
+
+
+def _build_model(solver: SolverName) -> Model:
+    return create_model(
+        n_subjects=1,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        derived_categoricals=_DERIVED_CATEGORICALS,
+        grid_config=BENCHMARK_GRID_CONFIG,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver=solver,
     )
@@ -119,3 +134,31 @@ def test_bqsegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
             else assets_and_income.next_assets_from_savings
         )
         assert law is expected, target_name
+
+
+def test_bqsegm_savings_form_functions_are_scoped_to_the_m1_regime() -> None:
+    """Under BQSEGM only the M1 regime carries the savings-form budget functions
+    (`resources`, `savings`); brute regimes keep the cash-on-hand form and carry
+    neither."""
+    model = _build_model("bqsegm")
+    m1_functions = model.user_regimes[_M1_REGIME].functions
+    assert "resources" in m1_functions
+    assert "savings" in m1_functions
+    assert "resources" not in model.user_regimes[_BRUTE_REGIME].functions
+
+
+def test_bqsegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
+    """BQSEGM inverts the Euler equation internally, so the M1 regime never
+    carries the DC-EGM `inverse_marginal_utility` function (whose
+    solver-supplied `marginal_continuation` would otherwise be a required
+    parameter)."""
+    model = _build_model("bqsegm")
+    assert "inverse_marginal_utility" not in model.user_regimes[_M1_REGIME].functions
+
+
+def test_bqsegm_brute_regimes_keep_the_borrowing_constraint() -> None:
+    """BQSEGM enforces the borrowing limit through its savings grid's lower bound,
+    so the M1 regime drops the explicit constraint; every brute regime keeps it."""
+    model = _build_model("bqsegm")
+    assert "borrowing_constraint" not in model.user_regimes[_M1_REGIME].constraints
+    assert "borrowing_constraint" in model.user_regimes[_BRUTE_REGIME].constraints

@@ -595,7 +595,12 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     solver-contract functions join the broadcast set.
     """
     functions: dict = {}
-    if solver in ("dcegm", "bqsegm"):
+    if solver == "dcegm":
+        # DC-EGM solves every living regime, so the solver-contract functions are
+        # broadcast model-wide. BQSEGM solves only the M1 regime, which carries
+        # them at regime level (see `_nongroup.build_regime`); broadcasting them
+        # would force every brute regime to supply the solver's
+        # `marginal_continuation`.
         functions |= build_dcegm_functions()
     functions["total_health_costs"] = health_insurance.total_costs
     functions["oop_costs"] = health_insurance.oop_with_medicaid
@@ -648,14 +653,30 @@ def build_dcegm_functions() -> dict:
     }
 
 
+def build_bqsegm_functions() -> dict:
+    """Build the regime functions the BQSEGM solver-contract requires.
+
+    BQSEGM inverts the Euler equation internally (CRRA from the utility
+    parameters), so unlike DC-EGM it needs only the savings-form budget
+    (`resources`) and the post-decision savings node — not
+    `inverse_marginal_utility`.
+    """
+    return {
+        "resources": assets_and_income.resources,
+        "savings": assets_and_income.savings,
+    }
+
+
 def build_model_constraints(*, solver: SolverName = "brute_force") -> dict:
     """Build the model-level constraints broadcast into every regime.
 
     `dead` masks the borrowing constraint — it has no consumption action.
     Under DC-EGM there is no explicit borrowing constraint: the savings
-    grid's lower bound enforces it.
+    grid's lower bound enforces it. BQSEGM enforces it the same way, but only
+    in the M1 regime it solves, so the constraint stays broadcast for the brute
+    regimes and the M1 regime masks it (see `_nongroup.build_regime`).
     """
-    if solver in ("dcegm", "bqsegm"):
+    if solver == "dcegm":
         return {}
     return {"borrowing_constraint": assets_and_income.borrowing_constraint}
 
