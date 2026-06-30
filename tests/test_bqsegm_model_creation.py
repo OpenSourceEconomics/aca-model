@@ -70,6 +70,13 @@ def test_build_bqsegm_solver_uses_the_savings_form_resources_budget() -> None:
     assert solver.post_decision_function == "savings"
 
 
+def test_build_bqsegm_solver_names_assets_as_the_euler_axis() -> None:
+    """`assets` is the liquid (Euler) axis; `aime` and the stochastic shock grids
+    ride along, so the solver names the Euler axis explicitly."""
+    solver = build_bqsegm_solver(_grids())
+    assert solver.continuous_state == "assets"
+
+
 def test_bqsegm_m1_regime_fixes_buy_private() -> None:
     """The BQSEGM M1 slice drops `buy_private` as an action (fixed to purchase),
     so the only choice is continuous consumption; the brute M1 regime keeps it."""

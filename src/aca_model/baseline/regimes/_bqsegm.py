@@ -37,6 +37,7 @@ def build_bqsegm_solver(grids: Grids) -> BQSEGM:
     )
     return BQSEGM(
         savings_grid=savings_grid,
+        continuous_state="assets",
         budget_target="resources",
         post_decision_function="savings",
     )
