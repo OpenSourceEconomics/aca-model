@@ -4,6 +4,7 @@ Nongroup regimes: agents purchasing individual-market health insurance.
 Already nongroup, so no SSI/Medicaid override needed for HIS transitions.
 """
 
+import functools
 from collections.abc import Callable
 
 from lcm import Regime
@@ -12,6 +13,7 @@ from lcm.typing import Age, DiscreteAction, FloatND, Period
 
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
+from aca_model.baseline.health_insurance import BuyPrivate
 from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
     Grids,
@@ -75,8 +77,15 @@ def _make_transition_forcedout(
     return transition
 
 
-def _build_functions(spec: RegimeSpec) -> dict:
-    """Build functions dict for a nongroup regime."""
+def _build_functions(spec: RegimeSpec, *, fix_buy_private: bool = False) -> dict:
+    """Build functions dict for a nongroup regime.
+
+    With `fix_buy_private`, the BQSEGM M1 slice binds `buy_private` to
+    `BuyPrivate.yes` in its consumers (premium, OOP), so the discrete action is
+    a single fixed level. The binding selects the purchase branch of each
+    consumer — algebraically the `buy_private == BuyPrivate.yes` arm — and
+    leaves the remaining budget structure untouched.
+    """
     can_work = spec["canwork"] == "canwork"
     functions = build_common_functions(spec)
 
@@ -92,6 +101,15 @@ def _build_functions(spec: RegimeSpec) -> dict:
         functions["hic_premium"] = health_insurance.premium_insured
     else:
         functions["hic_premium"] = health_insurance.premium_retired
+
+    if has_buy_private and fix_buy_private:
+        functions["hic_premium"] = functools.partial(
+            health_insurance.premium, buy_private=BuyPrivate.yes
+        )
+        functions["primary_oop"] = functools.partial(
+            health_insurance.primary_oop, buy_private=BuyPrivate.yes
+        )
+
     functions.update(build_pension_functions(spec))
 
     return functions
@@ -123,6 +141,9 @@ def build_regime(
         if egm_solver is None
         else ("bqsegm" if bqsegm_solver is not None else "dcegm")
     )
+    # The BQSEGM M1 slice fixes the discrete actions to a single level so the
+    # only choice is continuous consumption against the cliffed budget.
+    fix_for_bqsegm = bqsegm_solver is not None
     return Regime(
         transition=build_granular_regime_transition(
             transition_func=transition_func, target_ids=own.values()
@@ -130,7 +151,7 @@ def build_regime(
         active=make_active_func(spec),
         states=states,
         state_transitions=build_state_transitions(spec, solver=state_solver),
-        actions=build_actions(spec, grids),
-        functions=_build_functions(spec),
+        actions=build_actions(spec, grids, drop_buy_private=fix_for_bqsegm),
+        functions=_build_functions(spec, fix_buy_private=fix_for_bqsegm),
         **solver_kwargs,
     )

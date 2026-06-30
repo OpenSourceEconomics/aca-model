@@ -70,6 +70,15 @@ def test_build_bqsegm_solver_uses_the_savings_form_resources_budget() -> None:
     assert solver.post_decision_function == "savings"
 
 
+def test_bqsegm_m1_regime_fixes_buy_private() -> None:
+    """The BQSEGM M1 slice drops `buy_private` as an action (fixed to purchase),
+    so the only choice is continuous consumption; the brute M1 regime keeps it."""
+    bqsegm_m1 = _build_regimes("bqsegm")[_M1_REGIME]
+    brute_m1 = _build_regimes("brute_force")[_M1_REGIME]
+    assert "buy_private" not in bqsegm_m1.actions
+    assert "buy_private" in brute_m1.actions
+
+
 def test_bqsegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
     """The M1 regime under BQSEGM consumes the post-decision assets laws, like
     DC-EGM; the other (brute) regimes keep the cash-on-hand form."""

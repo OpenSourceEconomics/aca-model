@@ -454,14 +454,27 @@ def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     return states
 
 
-def build_actions(spec: RegimeSpec, grids: Grids) -> dict:
-    """Build the action dict for a non-dead regime."""
+def build_actions(
+    spec: RegimeSpec,
+    grids: Grids,
+    *,
+    drop_buy_private: bool = False,
+    drop_labor_supply: bool = False,
+) -> dict:
+    """Build the action dict for a non-dead regime.
+
+    The `drop_*` flags fix a discrete action to a single level for the BQSEGM
+    M1 vertical slice (its case-piece envelope handles at most one discrete
+    action). The dropped action's former consumers are rebound to the fixed
+    level at the regime builder, so removing it here is the action side of the
+    dags remove-and-fix.
+    """
     actions: dict = {}
     if spec["ss"] == "choose":
         actions["claim_ss"] = DiscreteGrid(ClaimedSS)
-    if spec["canwork"] == "canwork":
+    if spec["canwork"] == "canwork" and not drop_labor_supply:
         actions["labor_supply"] = DiscreteGrid(LaborSupply)
-    if spec["his"] == "nongroup" and spec["mc"] == "nomc":
+    if spec["his"] == "nongroup" and spec["mc"] == "nomc" and not drop_buy_private:
         actions["buy_private"] = DiscreteGrid(BuyPrivate)
     actions["consumption_dollars"] = grids.consumption_dollars
     return actions
