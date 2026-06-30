@@ -40,6 +40,10 @@ def build_bqsegm_solver(grids: Grids) -> BQSEGM:
         continuous_state="assets",
         budget_target="resources",
         post_decision_function="savings",
+        # Splay the child stochastic-node expectation per the grid config: `0` (the
+        # default) reads the whole node mesh in one pass on a memory-rich device; a
+        # positive value loops it in blocks to fit a tighter budget (a CPU run).
+        stochastic_node_batch_size=grids.grid_config.n_bqsegm_stochastic_node_batch_size,
     )
 
 

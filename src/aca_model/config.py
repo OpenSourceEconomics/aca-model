@@ -84,6 +84,14 @@ class GridConfig:
     # gathered grid (value function unchanged). `0` keeps the whole grid in one
     # kernel. Only consulted under `solver="dcegm"`.
     n_savings_batch_size: int = 0
+    # Block size for splaying the BQSEGM continuation's child stochastic-node
+    # expectation (health, health-cost shocks, the wage residual). `0` reads the
+    # whole joint node mesh in one pass — fast, but its peak intermediate scales
+    # with the full ride-along × node × child-grid product. A positive value loops
+    # the mesh in blocks of that size, trading runtime for a much smaller peak; `1`
+    # (one node at a time) is the memory-minimal setting for a CPU validation grid.
+    # Only consulted under `solver="bqsegm"`.
+    n_bqsegm_stochastic_node_batch_size: int = 0
 
 
 MODEL_CONFIG = ModelConfig()
