@@ -98,11 +98,12 @@ class GridConfig:
     # either way — the knob trades peak device memory against a sequential scan.
     # Only consulted under `solver="bqsegm"`.
     n_bqsegm_envelope_segment_block_size: int = 0
-    # Streams the BQSEGM envelope core over ride-cell blocks of this size instead
-    # of vmapping the whole flattened ride mesh at once — the dominant peak-memory
-    # term at production mesh sizes. `0` keeps the whole-mesh vmap; the result is
-    # identical either way. Only consulted under `solver="bqsegm"`.
-    n_bqsegm_envelope_cell_block_size: int = 0
+    # Streams both BQSEGM ride-along cores (continuation fan-out and envelope
+    # solve) over ride-cell blocks of this size instead of vmapping the whole
+    # flattened ride mesh at once — the dominant peak-memory term at production
+    # mesh sizes. `0` keeps the whole-mesh vmap; the result is identical either
+    # way. Only consulted under `solver="bqsegm"`.
+    n_bqsegm_cell_block_size: int = 0
 
 
 MODEL_CONFIG = ModelConfig()
