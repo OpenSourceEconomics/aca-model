@@ -49,6 +49,9 @@ def build_bqsegm_solver(grids: Grids) -> BQSEGM:
         envelope_segment_block_size=(
             grids.grid_config.n_bqsegm_envelope_segment_block_size
         ),
+        # Stream the envelope core over ride-cell blocks per the grid config; `0`
+        # vmaps the whole flattened mesh at once.
+        envelope_cell_block_size=grids.grid_config.n_bqsegm_envelope_cell_block_size,
     )
 
 
