@@ -92,6 +92,12 @@ class GridConfig:
     # (one node at a time) is the memory-minimal setting for a CPU validation grid.
     # Only consulted under `solver="bqsegm"`.
     n_bqsegm_stochastic_node_batch_size: int = 0
+    # Streams the per-interval upper envelope over candidate-segment blocks of this
+    # size instead of materialising the full (query x candidate) bracket matrix per
+    # ride cell. `0` keeps the one-shot dense envelope; the result is identical
+    # either way — the knob trades peak device memory against a sequential scan.
+    # Only consulted under `solver="bqsegm"`.
+    n_bqsegm_envelope_segment_block_size: int = 0
 
 
 MODEL_CONFIG = ModelConfig()

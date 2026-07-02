@@ -44,6 +44,11 @@ def build_bqsegm_solver(grids: Grids) -> BQSEGM:
         # default) reads the whole node mesh in one pass on a memory-rich device; a
         # positive value loops it in blocks to fit a tighter budget (a CPU run).
         stochastic_node_batch_size=grids.grid_config.n_bqsegm_stochastic_node_batch_size,
+        # Stream the per-interval upper envelope over candidate-segment blocks per
+        # the grid config; `0` keeps the one-shot dense envelope.
+        envelope_segment_block_size=(
+            grids.grid_config.n_bqsegm_envelope_segment_block_size
+        ),
     )
 
 
