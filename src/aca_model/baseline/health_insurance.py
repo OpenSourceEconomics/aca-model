@@ -13,6 +13,7 @@ What remains:
 """
 
 import jax.numpy as jnp
+import lcm
 from lcm import categorical
 from lcm.typing import (
     Age,
@@ -70,6 +71,15 @@ def countable_income(
     )
 
 
+@lcm.piecewise_affine(
+    "is_ssi_eligible",
+    variable="assets",
+    breakpoints=(
+        lcm.affine_breakpoint(
+            "ssi_assets_test", kind="jump", indexed_by="spousal_income"
+        ),
+    ),
+)
 def is_ssi_eligible(
     assets: ContinuousState,
     countable_income: FloatND,
@@ -87,6 +97,12 @@ def is_ssi_eligible(
     `crossed_oamc_threshold` is a known per-regime constant (post-65
     regimes); `is_disabled` reads the disability health state where the
     regime carries it and is constant False otherwise.
+
+    The asset test is a declared jump breakpoint: where eligibility ends,
+    the SSI benefit leaves cash-on-hand discontinuously and Medicaid OOP
+    switching moves next-period assets, so BQSEGM's partition splits at
+    the per-household `ssi_assets_test` instead of extrapolating one
+    affine budget across the cliff.
     """
     categorical = crossed_oamc_threshold | is_disabled
     assets_ok = assets < ssi_assets_test[spousal_income]
@@ -135,6 +151,17 @@ def aca_magi(
     )
 
 
+@lcm.piecewise_affine(
+    "ssi_benefit",
+    variable="countable_income",
+    breakpoints=(
+        lcm.affine_breakpoint(
+            "ssi_maximum_benefit",
+            kind="continuous_kink",
+            indexed_by="spousal_income",
+        ),
+    ),
+)
 def ssi_benefit(
     countable_income: FloatND,
     spousal_income: DiscreteState,
@@ -144,6 +171,12 @@ def ssi_benefit(
     """Compute SSI benefit amount.
 
     SSI = max_benefit - countable_income, if eligible; 0 otherwise.
+
+    The income test is a declared continuous-kink breakpoint: the benefit
+    reaches zero exactly at `countable_income == ssi_maximum_benefit`, so
+    cash-on-hand is continuous there but its asset slope changes (the
+    benefit stops offsetting capital income). BQSEGM maps the threshold to
+    its per-cell asset preimage and splits the partition there.
     """
     benefit = ssi_maximum_benefit[spousal_income] - countable_income
     return jnp.where(is_ssi_eligible, jnp.maximum(0.0, benefit), 0.0)

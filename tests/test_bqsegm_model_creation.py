@@ -17,6 +17,7 @@ from lcm.solvers import BQSEGM, GridSearch
 
 from aca_model.agent import assets_and_income
 from aca_model.agent.preferences import BenchmarkPrefType
+from aca_model.baseline import health_insurance
 from aca_model.baseline.model import create_model
 from aca_model.baseline.regimes import (
     REGIME_SPECS,
@@ -176,3 +177,27 @@ def test_resources_declares_the_consumption_floor_kink() -> None:
     assert floor_breakpoint.threshold == "consumption_floor_schedule"
     assert floor_breakpoint.kind == "continuous_kink"
     assert floor_breakpoint.indexed_by == "spousal_income"
+
+
+def test_is_ssi_eligible_declares_the_asset_test_jump() -> None:
+    """The SSI asset test is a declared jump on `assets`: cash-on-hand drops by
+    the SSI benefit where eligibility ends, so BQSEGM's partition must split
+    there instead of extrapolating one affine budget across the cliff."""
+    meta = health_insurance.is_ssi_eligible.__lcm_piecewise_affine__  # ty: ignore[unresolved-attribute]
+    assert meta.variable == "assets"
+    (asset_test,) = meta.breakpoints
+    assert asset_test.threshold == "ssi_assets_test"
+    assert asset_test.kind == "jump"
+    assert asset_test.indexed_by == "spousal_income"
+
+
+def test_ssi_benefit_declares_the_income_test_kink() -> None:
+    """The SSI income test is a declared continuous kink on `countable_income`:
+    the benefit reaches zero exactly at the test, so the budget's slope changes
+    (capital income stops being offset) without a jump."""
+    meta = health_insurance.ssi_benefit.__lcm_piecewise_affine__  # ty: ignore[unresolved-attribute]
+    assert meta.variable == "countable_income"
+    (income_test,) = meta.breakpoints
+    assert income_test.threshold == "ssi_maximum_benefit"
+    assert income_test.kind == "continuous_kink"
+    assert income_test.indexed_by == "spousal_income"
