@@ -162,3 +162,17 @@ def test_bqsegm_brute_regimes_keep_the_borrowing_constraint() -> None:
     model = _build_model("bqsegm")
     assert "borrowing_constraint" not in model.user_regimes[_M1_REGIME].constraints
     assert "borrowing_constraint" in model.user_regimes[_BRUTE_REGIME].constraints
+
+
+def test_resources_declares_the_consumption_floor_kink() -> None:
+    """`resources = max(cash_on_hand, floor)` is a declared piecewise-affine
+    schedule on `cash_on_hand`, so BQSEGM's partition splits each cell at the
+    household's floor and the flat sub-interval is solved as such rather than
+    extrapolated."""
+    meta = assets_and_income.resources.__lcm_piecewise_affine__  # ty: ignore[unresolved-attribute]
+    assert meta.output == "resources"
+    assert meta.variable == "cash_on_hand"
+    (floor_breakpoint,) = meta.breakpoints
+    assert floor_breakpoint.threshold == "consumption_floor_schedule"
+    assert floor_breakpoint.kind == "continuous_kink"
+    assert floor_breakpoint.indexed_by == "spousal_income"

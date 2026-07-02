@@ -4,10 +4,12 @@ Ported from struct-ret/src/model/compute_within_period_quantities.py.
 """
 
 import jax.numpy as jnp
+import lcm
 from lcm.typing import (
     BoolND,
     ContinuousAction,
     ContinuousState,
+    DiscreteState,
     FloatND,
     ScalarFloat,
 )
@@ -123,9 +125,21 @@ def next_assets_when_dead(
     return cash_on_hand + transfers - consumption_dollars - oop_costs
 
 
+@lcm.piecewise_affine(
+    "resources",
+    variable="cash_on_hand",
+    breakpoints=(
+        lcm.affine_breakpoint(
+            "consumption_floor_schedule",
+            kind="continuous_kink",
+            indexed_by="spousal_income",
+        ),
+    ),
+)
 def resources(
     cash_on_hand: FloatND,
-    consumption_dollars_floor: FloatND,
+    spousal_income: DiscreteState,
+    consumption_floor_schedule: FloatND,
 ) -> FloatND:
     """Post-transfer resources out of which consumption is paid (DC-EGM `R`).
 
@@ -133,8 +147,14 @@ def resources(
     because the additive form rounds to `floor + ε` at extreme cash (see
     `borrowing_constraint`). Non-decreasing in `assets` (flat where the
     floor binds), as the DC-EGM contract requires.
+
+    The floor comes from `consumption_floor_schedule` — the per-household
+    $-floor table indexed by `spousal_income`, equal by construction to
+    `consumption_dollars_floor` — so the kink where the floor stops binding
+    is a declared breakpoint: BQSEGM's partition splits each cell at the
+    household's floor instead of extrapolating one affine budget across it.
     """
-    return jnp.maximum(cash_on_hand, consumption_dollars_floor)
+    return jnp.maximum(cash_on_hand, consumption_floor_schedule[spousal_income])
 
 
 def savings(
