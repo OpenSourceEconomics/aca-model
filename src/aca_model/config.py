@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 SRC = Path(__file__).parent.resolve()
 ROOT = SRC.parents[1]
@@ -104,6 +105,15 @@ class GridConfig:
     # mesh sizes. `0` keeps the whole-mesh vmap; the result is identical either
     # way. Only consulted under `solver="bqsegm"`.
     n_bqsegm_cell_block_size: int = 0
+    # How BQSEGM parents read the child value's institutional cliffs:
+    # - "one_sided" (default) — carry rows hold each cliff preimage as a duplicated
+    #   abscissa with exact one-sided limits; reads never average across a cliff,
+    #   but publishing the topology gates the stochastic-dim fold off (slower).
+    # - "bridged" — plain carry rows; interpolation may bridge a cliff like any
+    #   finite-grid solver, and the fold stays available. The fast setting for
+    #   inner estimation loops, polished afterwards under "one_sided".
+    # Only consulted under `solver="bqsegm"`.
+    bqsegm_jump_read: Literal["one_sided", "bridged"] = "one_sided"
 
 
 MODEL_CONFIG = ModelConfig()

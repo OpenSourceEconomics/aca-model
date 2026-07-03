@@ -8,6 +8,7 @@ with DC-EGM (BQSEGM's budget node is `resources`, the post-decision function is
 `savings`).
 """
 
+import dataclasses
 from collections.abc import Mapping
 from typing import cast
 
@@ -91,6 +92,23 @@ def test_build_bqsegm_solver_names_assets_as_the_euler_axis() -> None:
     ride along, so the solver names the Euler axis explicitly."""
     solver = build_bqsegm_solver(_grids())
     assert solver.continuous_state == "assets"
+
+
+def test_build_bqsegm_solver_forwards_the_jump_read_mode() -> None:
+    """`GridConfig.bqsegm_jump_read` selects the solver's cliff-read mode.
+
+    `"bridged"` is the fast estimation setting (plain carry rows, fold kept);
+    `"one_sided"` (the default) publishes exact one-sided cliff limits.
+    """
+    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, bqsegm_jump_read="bridged")
+    grids = build_grids(
+        grid_config=grid_config,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
+    solver = build_bqsegm_solver(grids)
+    assert solver.jump_read == "bridged"
 
 
 def test_bqsegm_m1_regime_fixes_buy_private() -> None:

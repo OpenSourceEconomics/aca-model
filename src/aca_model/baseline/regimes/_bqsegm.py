@@ -52,6 +52,9 @@ def build_bqsegm_solver(grids: Grids) -> BQSEGM:
         # Stream both ride-along cores over ride-cell blocks per the grid config;
         # `0` vmaps the whole flattened mesh at once.
         cell_block_size=grids.grid_config.n_bqsegm_cell_block_size,
+        # Cliff-read mode: exact one-sided limits (default) or the fast bridged
+        # read for inner estimation loops (see `GridConfig.bqsegm_jump_read`).
+        jump_read=grids.grid_config.bqsegm_jump_read,
     )
 
 
