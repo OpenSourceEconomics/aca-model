@@ -105,13 +105,14 @@ class GridConfig:
     # mesh sizes. `0` keeps the whole-mesh vmap; the result is identical either
     # way. Only consulted under `solver="bqsegm"`.
     #
-    # Backend-dependent tuning under `bqsegm_jump_read="one_sided"`: on GPU the
-    # per-dim stochastic fold keeps the whole-mesh one-sided solve within a few
-    # GiB, so `0` is fine. The CPU XLA backend does not fuse that fan-out and
-    # materialises the whole flattened mesh at once — a production-grid one-sided
-    # solve then needs hundreds of GiB. Set this to a positive block (e.g. 64) for
-    # a CPU one-sided solve; it bounds the peak to the GPU's few-GiB footprint at
-    # the cost of serialising the mesh into a `lax.map` scan.
+    # Backend-dependent tuning at production ride-mesh sizes (under both cliff-read
+    # modes). On GPU the whole-mesh vmap stays within a few GiB, so `0` is fine. The
+    # CPU XLA backend does not fuse the fan-out and materialises the whole flattened
+    # ride mesh at once — a production-grid solve then needs hundreds of GiB even at
+    # a small asset grid (the blow-up rides the aime/shock/health mesh, not assets).
+    # Set this to a positive block (e.g. 64) for a CPU solve; it bounds the peak to
+    # the GPU's few-GiB footprint at the cost of serialising the mesh into a
+    # `lax.map` scan.
     n_bqsegm_cell_block_size: int = 0
     # How BQSEGM parents read the child value's institutional cliffs:
     # - "one_sided" (default) — carry rows hold each cliff preimage as a duplicated
