@@ -551,7 +551,7 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
         for name in build_model_functions(solver=solver)
         if name not in _DEAD_KEEPS
     }
-    constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
+    constraint_masks = dict.fromkeys(build_model_constraints())
     return Regime(
         transition=None,
         functions={"utility": preferences.bequest, **function_masks},
@@ -667,17 +667,15 @@ def build_bqsegm_functions() -> dict:
     }
 
 
-def build_model_constraints(*, solver: SolverName = "brute_force") -> dict:
+def build_model_constraints() -> dict:
     """Build the model-level constraints broadcast into every regime.
 
     `dead` masks the borrowing constraint — it has no consumption action.
-    Under DC-EGM there is no explicit borrowing constraint: the savings
-    grid's lower bound enforces it. BQSEGM enforces it the same way, but only
-    in the M1 regime it solves, so the constraint stays broadcast for the brute
-    regimes and the M1 regime masks it (see `_nongroup.build_regime`).
+    The constraint is broadcast under every solver: an EGM solve (DC-EGM or
+    BQSEGM) enforces the borrowing limit through the savings grid's lower
+    bound, but forward simulation re-decides consumption by an argmax over
+    the consumption grid and needs the explicit feasibility mask.
     """
-    if solver == "dcegm":
-        return {}
     return {"borrowing_constraint": assets_and_income.borrowing_constraint}
 
 

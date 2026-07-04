@@ -84,10 +84,12 @@ def test_dcegm_assets_laws_take_the_savings_form() -> None:
             assert law is expected, (name, target_name)
 
 
-def test_dcegm_model_slots_swap_constraint_for_contract_functions() -> None:
+def test_dcegm_model_slots_broadcast_contract_functions_and_constraint() -> None:
     """The DC-EGM slots broadcast `resources`/`savings`/
-    `inverse_marginal_utility` and declare no borrowing constraint; the
-    savings grid's lower bound is the zero borrowing limit."""
+    `inverse_marginal_utility` and keep the borrowing constraint: the EGM
+    solve enforces the limit through the savings grid's lower bound, but
+    forward simulation re-decides consumption by an argmax over the
+    consumption grid and needs the explicit feasibility mask."""
     slots = build_model_slots(
         grid_config=BENCHMARK_GRID_CONFIG,
         fixed_params=_FIXED_PARAMS,
@@ -95,7 +97,7 @@ def test_dcegm_model_slots_swap_constraint_for_contract_functions() -> None:
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver="dcegm",
     )
-    assert slots["constraints"] == {}
+    assert "borrowing_constraint" in slots["constraints"]
     for name in ("resources", "savings", "inverse_marginal_utility"):
         assert name in slots["functions"]
     solver = _build_regimes("dcegm")["retiree_nomc_inelig_canwork"].solver
