@@ -175,11 +175,17 @@ def test_bqsegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
     assert "inverse_marginal_utility" not in model.user_regimes[_M1_REGIME].functions
 
 
-def test_bqsegm_brute_regimes_keep_the_borrowing_constraint() -> None:
-    """BQSEGM enforces the borrowing limit through its savings grid's lower bound,
-    so the M1 regime drops the explicit constraint; every brute regime keeps it."""
+def test_bqsegm_m1_regime_keeps_the_borrowing_constraint() -> None:
+    """The M1 regime declares the borrowing constraint like every brute regime.
+
+    The EGM solve enforces the borrowing limit through the savings grid's lower
+    bound, but forward simulation re-decides consumption by an argmax over the
+    consumption grid — without the explicit `consumption <= resources`
+    feasibility mask, floor-region subjects (negative cash-on-hand rescued by
+    the consumption floor) would pick the consumption grid's top value.
+    """
     model = _build_model("bqsegm")
-    assert "borrowing_constraint" not in model.user_regimes[_M1_REGIME].constraints
+    assert "borrowing_constraint" in model.user_regimes[_M1_REGIME].constraints
     assert "borrowing_constraint" in model.user_regimes[_BRUTE_REGIME].constraints
 
 

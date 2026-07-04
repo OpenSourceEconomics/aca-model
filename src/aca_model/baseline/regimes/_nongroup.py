@@ -165,11 +165,12 @@ def build_regime(
     constraints: dict = {}
     if fix_for_bqsegm:
         # BQSEGM solves only this regime, so its solver-contract functions are
-        # regime-level here rather than broadcast model-wide, and the model-level
-        # borrowing constraint is masked — BQSEGM enforces it through the savings
-        # grid's lower bound.
+        # regime-level here rather than broadcast model-wide. The broadcast
+        # borrowing constraint stays: the EGM solve enforces the limit through
+        # the savings grid's lower bound, but forward simulation re-decides
+        # consumption by an argmax over the consumption grid and needs the
+        # explicit feasibility mask.
         functions = {**functions, **build_bqsegm_functions()}
-        constraints = {"borrowing_constraint": None}
     return Regime(
         transition=build_granular_regime_transition(
             transition_func=transition_func, target_ids=own.values()
