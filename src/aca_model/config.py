@@ -123,6 +123,12 @@ class GridConfig:
     #   inner estimation loops, polished afterwards under "one_sided".
     # Only consulted under `solver="bqsegm"`.
     bqsegm_jump_read: Literal["one_sided", "bridged"] = "one_sided"
+    # Keep `labor_supply` a live discrete action on the M1 regime under BQSEGM (the
+    # branch compiler solves each labor level against its own continuation, utility,
+    # and breakpoint partition); `buy_private` stays fixed. `False` fixes both actions
+    # to a single level so the only choice is continuous consumption. Only consulted
+    # under `solver="bqsegm"`.
+    bqsegm_live_labor_supply: bool = False
 
 
 MODEL_CONFIG = ModelConfig()

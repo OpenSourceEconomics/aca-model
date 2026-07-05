@@ -225,3 +225,31 @@ def test_ssi_benefit_declares_the_income_test_kink() -> None:
     assert income_test.threshold == "ssi_maximum_benefit"
     assert income_test.kind == "continuous_kink"
     assert income_test.indexed_by == "spousal_income"
+
+
+def test_bqsegm_keeps_labor_supply_live_when_configured() -> None:
+    """With `bqsegm_live_labor_supply=True`, the M1 regime carries `labor_supply`
+    as a genuine discrete action under BQSEGM while `buy_private` stays fixed, so
+    the branch compiler solves the labor choice against the cliffed budget."""
+    grid_config = dataclasses.replace(
+        BENCHMARK_GRID_CONFIG, bqsegm_live_labor_supply=True
+    )
+    regimes = build_all_regimes(
+        grid_config=grid_config,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver="bqsegm",
+    )
+    actions = regimes[_M1_REGIME].actions
+    assert "labor_supply" in actions
+    assert "buy_private" not in actions
+
+
+def test_bqsegm_fixes_labor_supply_by_default() -> None:
+    """By default BQSEGM fixes both discrete actions on the M1 regime, so the
+    only remaining choice is continuous consumption against the cliffed budget."""
+    regimes = _build_regimes("bqsegm")
+    actions = regimes[_M1_REGIME].actions
+    assert "labor_supply" not in actions
+    assert "buy_private" not in actions

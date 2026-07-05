@@ -156,11 +156,15 @@ def build_regime(
         if egm_solver is None
         else ("bqsegm" if bqsegm_solver is not None else "dcegm")
     )
-    # The BQSEGM M1 slice fixes the discrete actions to a single level so the
-    # only choice is continuous consumption against the cliffed budget.
+    # Under BQSEGM the M1 slice fixes `buy_private` (a second discrete action the
+    # branch compiler does not yet solve) to a single level. `labor_supply` is fixed
+    # too by default, leaving only continuous consumption; with
+    # `bqsegm_live_labor_supply` it stays a live action and the branch compiler solves
+    # each labor level against the cliffed budget.
     fix_for_bqsegm = bqsegm_solver is not None
+    fix_labor = fix_for_bqsegm and not grids.grid_config.bqsegm_live_labor_supply
     functions = _build_functions(
-        spec, fix_buy_private=fix_for_bqsegm, fix_labor_supply=fix_for_bqsegm
+        spec, fix_buy_private=fix_for_bqsegm, fix_labor_supply=fix_labor
     )
     constraints: dict = {}
     if fix_for_bqsegm:
@@ -182,7 +186,7 @@ def build_regime(
             spec,
             grids,
             drop_buy_private=fix_for_bqsegm,
-            drop_labor_supply=fix_for_bqsegm,
+            drop_labor_supply=fix_labor,
         ),
         functions=functions,
         constraints=constraints,
