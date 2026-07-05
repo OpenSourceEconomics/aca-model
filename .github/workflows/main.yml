@@ -30,10 +30,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pylcm from main
+      - name: Install pylcm from feat/bqsegm
+        # This slice depends on the BQSEGM solver, which lives on pylcm's
+        # feat/bqsegm branch; revert to @main once that branch merges.
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@main"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@feat/bqsegm"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest
