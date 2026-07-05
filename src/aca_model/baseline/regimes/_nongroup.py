@@ -8,7 +8,7 @@ import functools
 from collections.abc import Callable
 
 from lcm import Regime
-from lcm.solvers import BQSEGM, DCEGM
+from lcm.solvers import DCEGM, NBEGM
 from lcm.typing import Age, DiscreteAction, FloatND, Period
 
 from aca_model.agent.labor_market import LaborSupply
@@ -19,9 +19,9 @@ from aca_model.baseline.regimes._common import (
     Grids,
     RegimeSpec,
     build_actions,
-    build_bqsegm_functions,
     build_common_functions,
     build_granular_regime_transition,
+    build_nbegm_functions,
     build_pension_functions,
     build_regime_probs,
     build_state_transitions,
@@ -79,7 +79,7 @@ def _make_transition_forcedout(
 
 
 def _fixed_full_time_labor_supply() -> DiscreteAction:
-    """Labor supply fixed to full-time work for the BQSEGM M1 slice."""
+    """Labor supply fixed to full-time work for the NBEGM M1 slice."""
     return LaborSupply.h2000
 
 
@@ -88,7 +88,7 @@ def _build_functions(
 ) -> dict:
     """Build functions dict for a nongroup regime.
 
-    The BQSEGM M1 slice fixes both discrete actions to a single level so the
+    The NBEGM M1 slice fixes both discrete actions to a single level so the
     only choice is continuous consumption:
 
     - `fix_buy_private` binds `buy_private` to `BuyPrivate.yes` in its consumers
@@ -135,7 +135,7 @@ def build_regime(
     grids: Grids,
     *,
     dcegm_solver: DCEGM | None = None,
-    bqsegm_solver: BQSEGM | None = None,
+    nbegm_solver: NBEGM | None = None,
 ) -> Regime:
     """Build a nongroup regime."""
     spec = REGIME_SPECS[name]
@@ -149,32 +149,32 @@ def build_regime(
 
     states = build_states(spec, grids)
 
-    egm_solver = dcegm_solver if dcegm_solver is not None else bqsegm_solver
+    egm_solver = dcegm_solver if dcegm_solver is not None else nbegm_solver
     solver_kwargs: dict = {} if egm_solver is None else {"solver": egm_solver}
     state_solver = (
         "brute_force"
         if egm_solver is None
-        else ("bqsegm" if bqsegm_solver is not None else "dcegm")
+        else ("nbegm" if nbegm_solver is not None else "dcegm")
     )
-    # Under BQSEGM the M1 slice fixes `buy_private` (a second discrete action the
+    # Under NBEGM the M1 slice fixes `buy_private` (a second discrete action the
     # branch compiler does not yet solve) to a single level. `labor_supply` is fixed
     # too by default, leaving only continuous consumption; with
-    # `bqsegm_live_labor_supply` it stays a live action and the branch compiler solves
+    # `nbegm_live_labor_supply` it stays a live action and the branch compiler solves
     # each labor level against the cliffed budget.
-    fix_for_bqsegm = bqsegm_solver is not None
-    fix_labor = fix_for_bqsegm and not grids.grid_config.bqsegm_live_labor_supply
+    fix_for_nbegm = nbegm_solver is not None
+    fix_labor = fix_for_nbegm and not grids.grid_config.nbegm_live_labor_supply
     functions = _build_functions(
-        spec, fix_buy_private=fix_for_bqsegm, fix_labor_supply=fix_labor
+        spec, fix_buy_private=fix_for_nbegm, fix_labor_supply=fix_labor
     )
     constraints: dict = {}
-    if fix_for_bqsegm:
-        # BQSEGM solves only this regime, so its solver-contract functions are
+    if fix_for_nbegm:
+        # NBEGM solves only this regime, so its solver-contract functions are
         # regime-level here rather than broadcast model-wide. The broadcast
         # borrowing constraint stays: the EGM solve enforces the limit through
         # the savings grid's lower bound, but forward simulation re-decides
         # consumption by an argmax over the consumption grid and needs the
         # explicit feasibility mask.
-        functions = {**functions, **build_bqsegm_functions()}
+        functions = {**functions, **build_nbegm_functions()}
     return Regime(
         transition=build_granular_regime_transition(
             transition_func=transition_func, target_ids=own.values()
@@ -185,7 +185,7 @@ def build_regime(
         actions=build_actions(
             spec,
             grids,
-            drop_buy_private=fix_for_bqsegm,
+            drop_buy_private=fix_for_nbegm,
             drop_labor_supply=fix_labor,
         ),
         functions=functions,

@@ -14,13 +14,12 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import DiscreteGrid, Regime
-from lcm.solvers import BQSEGM, DCEGM
+from lcm.solvers import DCEGM, NBEGM
 from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import _nongroup as nongroup
 from aca_model.baseline.regimes import _retiree as retiree
 from aca_model.baseline.regimes import _tied as tied
-from aca_model.baseline.regimes._bqsegm import build_bqsegm_solver
 from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
     Grids,
@@ -34,12 +33,13 @@ from aca_model.baseline.regimes._common import (
     build_model_states,
 )
 from aca_model.baseline.regimes._dcegm import build_dcegm_solver
+from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.config import GridConfig
 
-# BQSEGM is a per-regime (not global) solver: it solves one 1-D
+# NBEGM is a per-regime (not global) solver: it solves one 1-D
 # consumption/savings regime with at most one discrete action, so it attaches
 # only to the M1 vertical-slice regime.
-_BQSEGM_REGIME = "nongroup_nomc_inelig_canwork"
+_NBEGM_REGIME = "nongroup_nomc_inelig_canwork"
 
 __all__ = [
     "REGIME_SPECS",
@@ -64,7 +64,7 @@ def build_regime(
     grids: Grids,
     *,
     dcegm_solver: DCEGM | None = None,
-    bqsegm_solver: BQSEGM | None = None,
+    nbegm_solver: NBEGM | None = None,
 ) -> Regime:
     """Build a single baseline Regime object for the given regime name."""
     if name == "dead":
@@ -77,7 +77,7 @@ def build_regime(
     if builder is None:
         msg = f"Unknown HIS type: {spec['his']}"
         raise ValueError(msg)
-    return builder(name, grids, dcegm_solver=dcegm_solver, bqsegm_solver=bqsegm_solver)
+    return builder(name, grids, dcegm_solver=dcegm_solver, nbegm_solver=nbegm_solver)
 
 
 def build_all_regimes(
@@ -108,14 +108,14 @@ def build_all_regimes(
         consumption_dollars_points=consumption_dollars_points,
     )
     dcegm_solver = build_dcegm_solver(grids) if solver == "dcegm" else None
-    bqsegm_solver = build_bqsegm_solver(grids) if solver == "bqsegm" else None
+    nbegm_solver = build_nbegm_solver(grids) if solver == "nbegm" else None
     regimes = {}
     for name in REGIME_SPECS:
         regimes[name] = build_regime(
             name,
             grids,
             dcegm_solver=dcegm_solver,
-            bqsegm_solver=bqsegm_solver if name == _BQSEGM_REGIME else None,
+            nbegm_solver=nbegm_solver if name == _NBEGM_REGIME else None,
         )
     regimes["dead"] = build_dead_regime(solver=solver)
     return regimes

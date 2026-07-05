@@ -1,14 +1,14 @@
-"""BQSEGM solves the M1 regime with a live labor-supply choice, matching brute.
+"""NBEGM solves the M1 regime with a live labor-supply choice, matching brute.
 
 The M1 regime `nongroup_nomc_inelig_canwork` carries `labor_supply` (5 levels) as a
 genuine discrete action while `buy_private` is fixed. Labor supply feeds the `aime`
 co-state (earnings accrual), the `lagged_labor_supply` co-state, and the leisure term
-in period utility — every branch-dependent channel at once. BQSEGM's ride-along
+in period utility — every branch-dependent channel at once. NBEGM's ride-along
 discrete envelope solves each labor branch against its own continuation and utility;
 the value function must match a brute-force solve on the same state-action space.
 
 Both solvers run the full 18-regime model at the benchmark grid with `buy_private`
-fixed and `labor_supply` live, in BQSEGM's `"bridged"` cliff-read mode so the
+fixed and `labor_supply` live, in NBEGM's `"bridged"` cliff-read mode so the
 comparison isolates the solver machinery from the asset-grid read convention.
 """
 
@@ -38,7 +38,7 @@ def _is_m1(spec: RegimeSpec) -> bool:
 def m1_labor_live(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep `labor_supply` live and fix only `buy_private` on M1, under every solver.
 
-    The BQSEGM wiring fixes both discrete actions on its own; this override keeps
+    The NBEGM wiring fixes both discrete actions on its own; this override keeps
     labor supply as a genuine action (so the branch compiler solves it) and fixes
     `buy_private`, applying the same choice to the brute build so both solvers share
     one state-action space.
@@ -69,14 +69,14 @@ def m1_labor_live(monkeypatch: pytest.MonkeyPatch) -> None:
 def _solve_m1(solver: SolverName) -> dict[int, np.ndarray]:
     # The CPU XLA backend does not fuse the ride-cell fan-out and materialises the
     # whole flattened ride mesh at once, so a full-model solve needs hundreds of GiB on
-    # host even at a tiny asset grid. `n_bqsegm_cell_block_size` streams the mesh in
+    # host even at a tiny asset grid. `n_nbegm_cell_block_size` streams the mesh in
     # blocks (identical result) to bound the peak to the GPU's few-GiB footprint; the
     # live-labor branch axis makes this essential on CPU. A coarser savings grid keeps
     # the check quick. On GPU the whole-mesh vmap stays small, so production sets 0.
     grid_config = dataclasses.replace(
         BENCHMARK_GRID_CONFIG,
-        bqsegm_jump_read="bridged",
-        n_bqsegm_cell_block_size=32,
+        nbegm_jump_read="bridged",
+        n_nbegm_cell_block_size=32,
         n_savings_gridpoints=50,
     )
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
@@ -100,7 +100,7 @@ def _solve_m1(solver: SolverName) -> dict[int, np.ndarray]:
 
 @pytest.mark.long_running
 @pytest.mark.usefixtures("m1_labor_live")
-def test_bqsegm_m1_labor_live_agrees_with_brute_in_the_bulk() -> None:
+def test_nbegm_m1_labor_live_agrees_with_brute_in_the_bulk() -> None:
     """The M1 value functions agree cell-wise away from the cliff tail with labor live.
 
     Finite masks must be identical and the median relative difference must sit at
@@ -108,7 +108,7 @@ def test_bqsegm_m1_labor_live_agrees_with_brute_in_the_bulk() -> None:
     utility, or envelope over the 5 labor levels) moves the bulk by orders of magnitude.
     The tail gets only a sanity ceiling at this coarse grid.
     """
-    bq = _solve_m1("bqsegm")
+    bq = _solve_m1("nbegm")
     brute = _solve_m1("brute_force")
 
     assert bq.keys() == brute.keys()

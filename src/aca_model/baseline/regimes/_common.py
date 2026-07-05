@@ -42,7 +42,7 @@ from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment import pensions, social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
-SolverName = Literal["brute_force", "dcegm", "bqsegm"]
+SolverName = Literal["brute_force", "dcegm", "nbegm"]
 
 
 @categorical(ordered=False)
@@ -463,7 +463,7 @@ def build_actions(
 ) -> dict:
     """Build the action dict for a non-dead regime.
 
-    The `drop_*` flags fix a discrete action to a single level for the BQSEGM
+    The `drop_*` flags fix a discrete action to a single level for the NBEGM
     M1 vertical slice (its case-piece envelope handles at most one discrete
     action). The dropped action's former consumers are rebound to the fixed
     level at the regime builder, so removing it here is the action side of the
@@ -597,7 +597,7 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     functions: dict = {}
     if solver == "dcegm":
         # DC-EGM solves every living regime, so the solver-contract functions are
-        # broadcast model-wide. BQSEGM solves only the M1 regime, which carries
+        # broadcast model-wide. NBEGM solves only the M1 regime, which carries
         # them at regime level (see `_nongroup.build_regime`); broadcasting them
         # would force every brute regime to supply the solver's
         # `marginal_continuation`.
@@ -653,10 +653,10 @@ def build_dcegm_functions() -> dict:
     }
 
 
-def build_bqsegm_functions() -> dict:
-    """Build the regime functions the BQSEGM solver-contract requires.
+def build_nbegm_functions() -> dict:
+    """Build the regime functions the NBEGM solver-contract requires.
 
-    BQSEGM inverts the Euler equation internally (CRRA from the utility
+    NBEGM inverts the Euler equation internally (CRRA from the utility
     parameters), so unlike DC-EGM it needs only the savings-form budget
     (`resources`) and the post-decision savings node — not
     `inverse_marginal_utility`.
@@ -672,7 +672,7 @@ def build_model_constraints() -> dict:
 
     `dead` masks the borrowing constraint — it has no consumption action.
     The constraint is broadcast under every solver: an EGM solve (DC-EGM or
-    BQSEGM) enforces the borrowing limit through the savings grid's lower
+    NBEGM) enforces the borrowing limit through the savings grid's lower
     bound, but forward simulation re-decides consumption by an argmax over
     the consumption grid and needs the explicit feasibility mask.
     """
@@ -1005,7 +1005,7 @@ def _build_per_target_regime_assets(
     targets use the full `next_assets` with the pension correction.
     Under DC-EGM both laws take their post-decision (savings) form.
     """
-    if solver in ("dcegm", "bqsegm"):
+    if solver in ("dcegm", "nbegm"):
         living_law = assets_and_income.next_assets_from_savings
         dead_law = assets_and_income.next_assets_when_dead_from_savings
     else:

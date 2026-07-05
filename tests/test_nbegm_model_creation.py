@@ -1,10 +1,10 @@
-"""BQSEGM solver wiring: `solver="bqsegm"` is a per-regime option.
+"""NBEGM solver wiring: `solver="nbegm"` is a per-regime option.
 
-Unlike DC-EGM (a global Euler solver on every living regime), BQSEGM solves a
+Unlike DC-EGM (a global Euler solver on every living regime), NBEGM solves a
 single 1-D consumption/savings regime with at most one discrete action, so it
 attaches only to the M1 vertical-slice regime `nongroup_nomc_inelig_canwork`;
 every other living regime keeps brute force. The savings-form spec is shared
-with DC-EGM (BQSEGM's budget node is `resources`, the post-decision function is
+with DC-EGM (NBEGM's budget node is `resources`, the post-decision function is
 `savings`).
 """
 
@@ -14,7 +14,7 @@ from typing import cast
 
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
 from lcm import DiscreteGrid, Model, Regime
-from lcm.solvers import BQSEGM, GridSearch
+from lcm.solvers import NBEGM, GridSearch
 
 from aca_model.agent import assets_and_income
 from aca_model.agent.preferences import BenchmarkPrefType
@@ -25,8 +25,8 @@ from aca_model.baseline.regimes import (
     SolverName,
     build_all_regimes,
 )
-from aca_model.baseline.regimes._bqsegm import build_bqsegm_solver
 from aca_model.baseline.regimes._common import Grids, build_grids
+from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
@@ -67,82 +67,80 @@ def _grids() -> Grids:
     )
 
 
-def test_bqsegm_attaches_only_to_the_m1_regime() -> None:
-    """`solver="bqsegm"` gives the M1 slice regime a `BQSEGM` config and leaves
+def test_nbegm_attaches_only_to_the_m1_regime() -> None:
+    """`solver="nbegm"` gives the M1 slice regime a `NBEGM` config and leaves
     every other living regime on brute force."""
-    regimes = _build_regimes("bqsegm")
-    assert isinstance(regimes[_M1_REGIME].solver, BQSEGM)
+    regimes = _build_regimes("nbegm")
+    assert isinstance(regimes[_M1_REGIME].solver, NBEGM)
     for name in REGIME_SPECS:
         if name == _M1_REGIME:
             continue
         assert isinstance(regimes[name].solver, GridSearch), name
 
 
-def test_build_bqsegm_solver_uses_the_savings_form_resources_budget() -> None:
-    """The BQSEGM config inverts against `resources` in post-decision savings
+def test_build_nbegm_solver_uses_the_savings_form_resources_budget() -> None:
+    """The NBEGM config inverts against `resources` in post-decision savings
     form, matching the DC-EGM contract the regime is rewired into."""
-    solver = build_bqsegm_solver(_grids())
-    assert isinstance(solver, BQSEGM)
+    solver = build_nbegm_solver(_grids())
+    assert isinstance(solver, NBEGM)
     assert solver.budget_target == "resources"
     assert solver.post_decision_function == "savings"
 
 
-def test_build_bqsegm_solver_names_assets_as_the_euler_axis() -> None:
+def test_build_nbegm_solver_names_assets_as_the_euler_axis() -> None:
     """`assets` is the liquid (Euler) axis; `aime` and the stochastic shock grids
     ride along, so the solver names the Euler axis explicitly."""
-    solver = build_bqsegm_solver(_grids())
+    solver = build_nbegm_solver(_grids())
     assert solver.continuous_state == "assets"
 
 
-def test_build_bqsegm_solver_forwards_the_jump_read_mode() -> None:
-    """`GridConfig.bqsegm_jump_read` selects the solver's cliff-read mode.
+def test_build_nbegm_solver_forwards_the_jump_read_mode() -> None:
+    """`GridConfig.nbegm_jump_read` selects the solver's cliff-read mode.
 
     `"bridged"` is the fast estimation setting (plain carry rows, fold kept);
     `"one_sided"` (the default) publishes exact one-sided cliff limits.
     """
-    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, bqsegm_jump_read="bridged")
+    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, nbegm_jump_read="bridged")
     grids = build_grids(
         grid_config=grid_config,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
-    solver = build_bqsegm_solver(grids)
+    solver = build_nbegm_solver(grids)
     assert solver.jump_read == "bridged"
 
 
-def test_bqsegm_m1_regime_fixes_buy_private() -> None:
-    """The BQSEGM M1 slice drops `buy_private` as an action (fixed to purchase),
+def test_nbegm_m1_regime_fixes_buy_private() -> None:
+    """The NBEGM M1 slice drops `buy_private` as an action (fixed to purchase),
     so the only choice is continuous consumption; the brute M1 regime keeps it."""
-    bqsegm_m1 = _build_regimes("bqsegm")[_M1_REGIME]
+    nbegm_m1 = _build_regimes("nbegm")[_M1_REGIME]
     brute_m1 = _build_regimes("brute_force")[_M1_REGIME]
-    assert "buy_private" not in bqsegm_m1.actions
+    assert "buy_private" not in nbegm_m1.actions
     assert "buy_private" in brute_m1.actions
 
 
-def test_bqsegm_m1_regime_fixes_labor_supply() -> None:
-    """The BQSEGM M1 slice drops `labor_supply` as an action (fixed to full-time
+def test_nbegm_m1_regime_fixes_labor_supply() -> None:
+    """The NBEGM M1 slice drops `labor_supply` as an action (fixed to full-time
     work), so no discrete action remains and the only choice is continuous
     consumption; the brute M1 regime keeps `labor_supply`."""
-    bqsegm_m1 = _build_regimes("bqsegm")[_M1_REGIME]
+    nbegm_m1 = _build_regimes("nbegm")[_M1_REGIME]
     brute_m1 = _build_regimes("brute_force")[_M1_REGIME]
-    assert "labor_supply" not in bqsegm_m1.actions
+    assert "labor_supply" not in nbegm_m1.actions
     assert "labor_supply" in brute_m1.actions
 
 
-def test_bqsegm_m1_regime_has_no_discrete_action() -> None:
-    """With both discrete actions fixed, the BQSEGM M1 slice leaves only the
+def test_nbegm_m1_regime_has_no_discrete_action() -> None:
+    """With both discrete actions fixed, the NBEGM M1 slice leaves only the
     continuous consumption choice — no `DiscreteGrid` action remains."""
-    bqsegm_m1 = _build_regimes("bqsegm")[_M1_REGIME]
-    assert not any(
-        isinstance(grid, DiscreteGrid) for grid in bqsegm_m1.actions.values()
-    )
+    nbegm_m1 = _build_regimes("nbegm")[_M1_REGIME]
+    assert not any(isinstance(grid, DiscreteGrid) for grid in nbegm_m1.actions.values())
 
 
-def test_bqsegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
-    """The M1 regime under BQSEGM consumes the post-decision assets laws, like
+def test_nbegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
+    """The M1 regime under NBEGM consumes the post-decision assets laws, like
     DC-EGM; the other (brute) regimes keep the cash-on-hand form."""
-    regimes = _build_regimes("bqsegm")
+    regimes = _build_regimes("nbegm")
     assets_laws = cast(
         "Mapping[str, object]", regimes[_M1_REGIME].state_transitions["assets"]
     )
@@ -155,27 +153,27 @@ def test_bqsegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
         assert law is expected, target_name
 
 
-def test_bqsegm_savings_form_functions_are_scoped_to_the_m1_regime() -> None:
-    """Under BQSEGM only the M1 regime carries the savings-form budget functions
+def test_nbegm_savings_form_functions_are_scoped_to_the_m1_regime() -> None:
+    """Under NBEGM only the M1 regime carries the savings-form budget functions
     (`resources`, `savings`); brute regimes keep the cash-on-hand form and carry
     neither."""
-    model = _build_model("bqsegm")
+    model = _build_model("nbegm")
     m1_functions = model.user_regimes[_M1_REGIME].functions
     assert "resources" in m1_functions
     assert "savings" in m1_functions
     assert "resources" not in model.user_regimes[_BRUTE_REGIME].functions
 
 
-def test_bqsegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
-    """BQSEGM inverts the Euler equation internally, so the M1 regime never
+def test_nbegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
+    """NBEGM inverts the Euler equation internally, so the M1 regime never
     carries the DC-EGM `inverse_marginal_utility` function (whose
     solver-supplied `marginal_continuation` would otherwise be a required
     parameter)."""
-    model = _build_model("bqsegm")
+    model = _build_model("nbegm")
     assert "inverse_marginal_utility" not in model.user_regimes[_M1_REGIME].functions
 
 
-def test_bqsegm_m1_regime_keeps_the_borrowing_constraint() -> None:
+def test_nbegm_m1_regime_keeps_the_borrowing_constraint() -> None:
     """The M1 regime declares the borrowing constraint like every brute regime.
 
     The EGM solve enforces the borrowing limit through the savings grid's lower
@@ -184,14 +182,14 @@ def test_bqsegm_m1_regime_keeps_the_borrowing_constraint() -> None:
     feasibility mask, floor-region subjects (negative cash-on-hand rescued by
     the consumption floor) would pick the consumption grid's top value.
     """
-    model = _build_model("bqsegm")
+    model = _build_model("nbegm")
     assert "borrowing_constraint" in model.user_regimes[_M1_REGIME].constraints
     assert "borrowing_constraint" in model.user_regimes[_BRUTE_REGIME].constraints
 
 
 def test_resources_declares_the_consumption_floor_kink() -> None:
     """`resources = max(cash_on_hand, floor)` is a declared piecewise-affine
-    schedule on `cash_on_hand`, so BQSEGM's partition splits each cell at the
+    schedule on `cash_on_hand`, so NBEGM's partition splits each cell at the
     household's floor and the flat sub-interval is solved as such rather than
     extrapolated."""
     meta = assets_and_income.resources.__lcm_piecewise_affine__  # ty: ignore[unresolved-attribute]
@@ -205,7 +203,7 @@ def test_resources_declares_the_consumption_floor_kink() -> None:
 
 def test_is_ssi_eligible_declares_the_asset_test_jump() -> None:
     """The SSI asset test is a declared jump on `assets`: cash-on-hand drops by
-    the SSI benefit where eligibility ends, so BQSEGM's partition must split
+    the SSI benefit where eligibility ends, so NBEGM's partition must split
     there instead of extrapolating one affine budget across the cliff."""
     meta = health_insurance.is_ssi_eligible.__lcm_piecewise_affine__  # ty: ignore[unresolved-attribute]
     assert meta.variable == "assets"
@@ -227,29 +225,29 @@ def test_ssi_benefit_declares_the_income_test_kink() -> None:
     assert income_test.indexed_by == "spousal_income"
 
 
-def test_bqsegm_keeps_labor_supply_live_when_configured() -> None:
-    """With `bqsegm_live_labor_supply=True`, the M1 regime carries `labor_supply`
-    as a genuine discrete action under BQSEGM while `buy_private` stays fixed, so
+def test_nbegm_keeps_labor_supply_live_when_configured() -> None:
+    """With `nbegm_live_labor_supply=True`, the M1 regime carries `labor_supply`
+    as a genuine discrete action under NBEGM while `buy_private` stays fixed, so
     the branch compiler solves the labor choice against the cliffed budget."""
     grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG, bqsegm_live_labor_supply=True
+        BENCHMARK_GRID_CONFIG, nbegm_live_labor_supply=True
     )
     regimes = build_all_regimes(
         grid_config=grid_config,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver="bqsegm",
+        solver="nbegm",
     )
     actions = regimes[_M1_REGIME].actions
     assert "labor_supply" in actions
     assert "buy_private" not in actions
 
 
-def test_bqsegm_fixes_labor_supply_by_default() -> None:
-    """By default BQSEGM fixes both discrete actions on the M1 regime, so the
+def test_nbegm_fixes_labor_supply_by_default() -> None:
+    """By default NBEGM fixes both discrete actions on the M1 regime, so the
     only remaining choice is continuous consumption against the cliffed budget."""
-    regimes = _build_regimes("bqsegm")
+    regimes = _build_regimes("nbegm")
     actions = regimes[_M1_REGIME].actions
     assert "labor_supply" not in actions
     assert "buy_private" not in actions

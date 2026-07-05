@@ -151,7 +151,7 @@ def resources(
     The floor comes from `consumption_floor_schedule` — the per-household
     $-floor table indexed by `spousal_income`, equal by construction to
     `consumption_dollars_floor` — so the kink where the floor stops binding
-    is a declared breakpoint: BQSEGM's partition splits each cell at the
+    is a declared breakpoint: NBEGM's partition splits each cell at the
     household's floor instead of extrapolating one affine budget across it.
     """
     return jnp.maximum(cash_on_hand, consumption_floor_schedule[spousal_income])

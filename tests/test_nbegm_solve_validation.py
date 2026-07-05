@@ -1,11 +1,11 @@
-"""BQSEGM vs brute-force agreement on the M1 slice value function.
+"""NBEGM vs brute-force agreement on the M1 slice value function.
 
 Both solvers run the full 18-regime model at the benchmark grid with the M1
 regime's discrete actions fixed (labor supply to full-time, `buy_private` to
 purchase) so the value functions are defined on identical state spaces and
 differ only through the continuous-consumption solver.
 
-BQSEGM runs its `"bridged"` cliff-read mode so both solvers share the same
+NBEGM runs its `"bridged"` cliff-read mode so both solvers share the same
 read convention (a finite brute reads child values by linear interpolation
 across value cliffs on its asset grid): the comparison then isolates the
 solver machinery — EGM inversion, candidate set, envelope — rather than the
@@ -37,7 +37,7 @@ _M1_REGIME = "nongroup_nomc_inelig_canwork"
 def m1_actions_fixed_for_brute(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fix the M1 regime's discrete actions under every solver.
 
-    The BQSEGM wiring fixes `labor_supply` and `buy_private` on its own; this
+    The NBEGM wiring fixes `labor_supply` and `buy_private` on its own; this
     fixture applies the same fixing to the brute build so both solvers produce
     an M1 value function on the same state-action space.
     """
@@ -66,7 +66,7 @@ def m1_actions_fixed_for_brute(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _solve_m1(solver: SolverName) -> dict[int, np.ndarray]:
-    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, bqsegm_jump_read="bridged")
+    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, nbegm_jump_read="bridged")
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     model = create_model(
         n_subjects=1,
@@ -88,7 +88,7 @@ def _solve_m1(solver: SolverName) -> dict[int, np.ndarray]:
 
 @pytest.mark.long_running
 @pytest.mark.usefixtures("m1_actions_fixed_for_brute")
-def test_bqsegm_m1_value_function_agrees_with_brute_in_the_bulk() -> None:
+def test_nbegm_m1_value_function_agrees_with_brute_in_the_bulk() -> None:
     """The M1 value functions agree cell-wise away from the cliff tail.
 
     Finite masks must be identical and the median relative difference must sit
@@ -99,7 +99,7 @@ def test_bqsegm_m1_value_function_agrees_with_brute_in_the_bulk() -> None:
     read convention, so tight tail agreement is certified at production grids
     on GPU, not here.
     """
-    bq = _solve_m1("bqsegm")
+    bq = _solve_m1("nbegm")
     brute = _solve_m1("brute_force")
 
     assert bq.keys() == brute.keys()

@@ -14,7 +14,7 @@ import lcm
 from lcm.params import MappingLeaf
 from lcm.typing import DiscreteState, FloatND, IntND
 
-# Federal income tax bracket edges declared for the BQSEGM M1 slice. The
+# Federal income tax bracket edges declared for the NBEGM M1 slice. The
 # progressive tax is continuous and piecewise-affine in `gross_income`, kinking
 # at each finite bracket edge `income_tax_schedule.brackets_upper[spousal_income,
 # k]`; the final edge is the +inf top-bracket sentinel and is not a kink. The

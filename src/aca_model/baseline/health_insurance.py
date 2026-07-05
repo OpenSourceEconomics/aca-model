@@ -100,7 +100,7 @@ def is_ssi_eligible(
 
     The asset test is a declared jump breakpoint: where eligibility ends,
     the SSI benefit leaves cash-on-hand discontinuously and Medicaid OOP
-    switching moves next-period assets, so BQSEGM's partition splits at
+    switching moves next-period assets, so NBEGM's partition splits at
     the per-household `ssi_assets_test` instead of extrapolating one
     affine budget across the cliff.
     """
@@ -175,7 +175,7 @@ def ssi_benefit(
     The income test is a declared continuous-kink breakpoint: the benefit
     reaches zero exactly at `countable_income == ssi_maximum_benefit`, so
     cash-on-hand is continuous there but its asset slope changes (the
-    benefit stops offsetting capital income). BQSEGM maps the threshold to
+    benefit stops offsetting capital income). NBEGM maps the threshold to
     its per-cell asset preimage and splits the partition there.
     """
     benefit = ssi_maximum_benefit[spousal_income] - countable_income
