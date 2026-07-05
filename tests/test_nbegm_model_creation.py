@@ -12,10 +12,14 @@ import dataclasses
 from collections.abc import Mapping
 from typing import cast
 
+import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
 from lcm import DiscreteGrid, Model, Regime
 from lcm.solvers import NBEGM, GridSearch
 
+from aca_model.aca import PolicyVariant
+from aca_model.aca.model import create_model as create_aca_model
+from aca_model.aca.regimes import build_all_regimes as build_all_aca_regimes
 from aca_model.agent import assets_and_income
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline import health_insurance
@@ -251,3 +255,34 @@ def test_nbegm_fixes_labor_supply_by_default() -> None:
     actions = regimes[_M1_REGIME].actions
     assert "labor_supply" not in actions
     assert "buy_private" not in actions
+
+
+@pytest.mark.parametrize("policy", list(PolicyVariant))
+def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
+    """Every ACA policy variant builds a model under NBEGM with the M1 regime on
+    the solver and labor live — the overlay's function swaps compose with the
+    branch compiler's per-regime wiring."""
+    grid_config = dataclasses.replace(
+        BENCHMARK_GRID_CONFIG, nbegm_live_labor_supply=True
+    )
+    model = create_aca_model(
+        n_subjects=1,
+        policy=policy,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        derived_categoricals=_DERIVED_CATEGORICALS,
+        grid_config=grid_config,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver="nbegm",
+    )
+    assert isinstance(model, Model)
+    regimes = build_all_aca_regimes(
+        policy=policy,
+        grid_config=grid_config,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver="nbegm",
+    )
+    assert isinstance(regimes[_M1_REGIME].solver, NBEGM)
+    assert "labor_supply" in regimes[_M1_REGIME].actions
