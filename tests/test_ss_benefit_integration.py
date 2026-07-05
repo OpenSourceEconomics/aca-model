@@ -20,6 +20,10 @@ PIA_CONV_0 = 0.9
 PIA_CONV_1 = 0.32
 PIA_CONV_2 = 0.15
 MAX_AIME = 50000.0
+# Age-70 delayed-retirement credit — the top SSA actuarial factor. It sets the
+# PIA table's fifth grid point above the taxable max; the earnings-test cases
+# here stay in the normal AIME range, so its exact value does not move them.
+MAX_DELAYED_FACTOR = 1.32
 
 _pia_grid_np, _pia_table_np = compute_pia_table(
     AIME_KINK_0,
@@ -28,6 +32,7 @@ _pia_grid_np, _pia_table_np = compute_pia_table(
     PIA_CONV_1,
     PIA_CONV_2,
     MAX_AIME,
+    MAX_DELAYED_FACTOR,
 )
 PIA_AIME_GRID = jnp.asarray(_pia_grid_np)
 PIA_TABLE = jnp.asarray(_pia_table_np)
