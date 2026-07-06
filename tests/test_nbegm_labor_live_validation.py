@@ -102,18 +102,24 @@ def _solve_m1(solver: SolverName) -> tuple[dict[int, np.ndarray], int]:
 
 
 def _cliff_band_mask(reference: np.ndarray, assets_axis: int) -> np.ndarray:
-    """Cells adjacent to a value cliff in the reference solve, along assets.
+    """Cells adjacent to a value discontinuity in the reference solve, along assets.
 
-    A cliff shows up in the brute reference as a large relative jump between
-    neighboring asset cells; both neighbors of every such jump belong to the
-    band. NaN/inf cells never enter the comparison, so they are excluded here.
+    A cliff is an increment between neighboring asset cells that dwarfs the
+    row's typical smooth increment: a gap counts when it exceeds ten times the
+    row's median finite gap (plus an absolute floor against all-flat rows).
+    Both neighbors of every such gap belong to the band. Scaling by the row's
+    own increments keeps the detector scale-free — value levels near zero do
+    not inflate it the way a relative-jump criterion would. NaN/inf cells never
+    enter the comparison, so they are excluded here.
     """
     moved = np.moveaxis(reference, assets_axis, -1)
     finite = np.isfinite(moved)
-    jump = np.abs(np.diff(moved, axis=-1)) / np.maximum(
-        np.minimum(np.abs(moved[..., :-1]), np.abs(moved[..., 1:])), 1.0
+    gaps = np.abs(np.diff(moved, axis=-1))
+    typical = np.nanmedian(
+        np.where(np.isfinite(gaps), gaps, np.nan), axis=-1, keepdims=True
     )
-    is_cliff_gap = np.nan_to_num(jump, nan=0.0, posinf=0.0) > 0.5
+    threshold = 10.0 * np.nan_to_num(typical, nan=np.inf) + 1e-8
+    is_cliff_gap = np.nan_to_num(gaps, nan=0.0, posinf=np.inf) > threshold
     band = np.zeros(moved.shape, dtype=bool)
     band[..., :-1] |= is_cliff_gap
     band[..., 1:] |= is_cliff_gap
@@ -156,9 +162,20 @@ def test_nbegm_m1_labor_live_agrees_with_brute_split_by_cliff_band() -> None:
     bulk = np.concatenate(bulk_diffs)
     band = np.concatenate(band_diffs) if band_cells else np.zeros(1)
 
-    assert np.quantile(bulk, 0.5) < 1e-3, np.quantile(bulk, [0.5, 0.99, 1.0])
-    assert np.quantile(bulk, 0.99) < 5e-2, np.quantile(bulk, [0.5, 0.99, 1.0])
-    assert np.max(bulk) < 0.5, np.max(bulk)
+    stats = {
+        "bulk_median": float(np.quantile(bulk, 0.5)),
+        "bulk_p99": float(np.quantile(bulk, 0.99)),
+        "bulk_max": float(np.max(bulk)),
+        "band_share": band_cells / finite_cells,
+        "band_median": float(np.quantile(band, 0.5)),
+        "band_p99": float(np.quantile(band, 0.99)),
+        "band_max": float(np.max(band)),
+    }
+    print(f"split-gate stats: {stats}")  # noqa: T201  (calibration record in -s runs)
+
+    assert stats["bulk_median"] < 1e-3, stats
+    assert stats["bulk_p99"] < 5e-2, stats
+    assert stats["bulk_max"] < 0.5, stats
     # The band is a thin set of cliff-adjacent cells, not a broad region.
-    assert band_cells < 0.2 * finite_cells, (band_cells, finite_cells)
-    assert np.max(band) < 2.0, np.max(band)
+    assert stats["band_share"] < 0.2, stats
+    assert stats["band_max"] < 2.0, stats
