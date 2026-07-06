@@ -286,3 +286,35 @@ def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     )
     assert isinstance(regimes[_M1_REGIME].solver, NBEGM)
     assert "labor_supply" in regimes[_M1_REGIME].actions
+
+
+@pytest.mark.parametrize("policy", list(PolicyVariant))
+def test_nbegm_aca_variants_leave_no_free_buy_private_params(
+    policy: PolicyVariant,
+) -> None:
+    """With `buy_private` fixed under the NBEGM M1 slice, no ACA-swapped
+    function may leave `buy_private` as a free parameter — the params template
+    holds no `buy_private` leaves, so solve/simulate never demand a
+    `*__buy_private` entry the pipeline cannot supply."""
+    grid_config = dataclasses.replace(
+        BENCHMARK_GRID_CONFIG, nbegm_live_labor_supply=True
+    )
+    model = create_aca_model(
+        n_subjects=1,
+        policy=policy,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        derived_categoricals=_DERIVED_CATEGORICALS,
+        grid_config=grid_config,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver="nbegm",
+    )
+    template = model.get_params_template()
+    offenders = [
+        (regime_name, function_name)
+        for regime_name, functions in template.items()
+        if isinstance(functions, dict)
+        for function_name, params in functions.items()
+        if isinstance(params, dict) and "buy_private" in params
+    ]
+    assert offenders == [], offenders
