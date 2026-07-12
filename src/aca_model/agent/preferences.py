@@ -303,14 +303,20 @@ def bequest(
     """Bequest function for terminal/dead states.
 
     bequest = scale * bwt *
-        (assets + shifter)^(consumption_weight*(1 - coefficient_rra))
+        max(assets + shifter, 1)^(consumption_weight*(1 - coefficient_rra))
         / (1 - coefficient_rra)
 
-    Assets enter unclamped, matching the paper's `b(A) = θ_B · (A + κ)^(…)`.
-    The asset-grid floor plus `bequest_shifter` (κ) stay strictly positive
-    everywhere reachable, so the estate base never turns non-positive.
+    Signed assets enter the estate base `A + κ`, matching the paper's
+    `b(A) = θ_B · (A + κ)^(…)`, so an indebted decedent bequeaths strictly less
+    than a solvent one. A death-time transfer floors that base at a nominal `1.0`:
+    an estate cannot be bequeathed as debt beyond the curvature shifter `κ`, and
+    the CRRA/EZ bequest curve is defined only for a strictly positive base. This
+    is the bequest analogue of the within-life consumption floor, at a nominal
+    level rather than the consumption-floor dollar amount — it binds only on the
+    deeply-indebted grid tail (below `−κ`), which the simulated panel never
+    reaches, so it leaves every reachable estate unchanged.
     """
-    assets_shifted = assets + bequest_shifter
+    assets_shifted = jnp.maximum(assets + bequest_shifter, 1.0)
 
     one_minus_rra = jnp.where(
         jnp.isclose(coefficient_rra, 1.0), 1.0, 1.0 - coefficient_rra
