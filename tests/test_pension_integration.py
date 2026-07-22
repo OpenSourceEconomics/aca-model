@@ -6,6 +6,7 @@ wealth (liquid assets + pension wealth) when HIS changes.
 """
 
 import jax.numpy as jnp
+import pytest
 from dags import concatenate_functions
 
 from aca_model.agent import assets_and_income
@@ -244,51 +245,67 @@ def _solve_phase_adjustment_across_his_change() -> jnp.ndarray:
     )
 
 
-def test_simulate_pension_adjustment_leaves_next_assets_at_no_adjustment_carry() -> (
-    None
-):
-    """Simulate carries the true pension balance, so `next_assets` gets no
+# Both assets laws that carry `pension_assets_adjustment`, with inputs chosen so
+# the no-adjustment baseline is 18000 either way (savings = cash + transfers −
+# consumption = 20000; 20000 − 2000 oop = 18000). `next_assets` is the brute-force
+# law; `next_assets_from_savings` is the post-decision (DC-EGM / NBEGM) form.
+_ADJUSTED_ASSETS_LAWS = {
+    "brute": (
+        assets_and_income.next_assets,
+        {
+            "cash_on_hand": jnp.array(100_000.0),
+            "transfers": jnp.array(0.0),
+            "consumption_dollars": jnp.array(80_000.0),
+            "oop_costs": jnp.array(2_000.0),
+        },
+    ),
+    "savings": (
+        assets_and_income.next_assets_from_savings,
+        {
+            "savings": jnp.array(20_000.0),
+            "oop_costs": jnp.array(2_000.0),
+        },
+    ),
+}
+
+
+@pytest.mark.parametrize("law_key", ["brute", "savings"])
+def test_simulate_pension_adjustment_leaves_next_assets_at_no_adjustment_carry(
+    law_key: str,
+) -> None:
+    """Simulate carries the true pension balance, so the assets law gets no
     pension adjustment even when a real imputation gap exists.
 
     The agent holds `assets = 18000` after consumption and OOP; the
     simulate-phase `pension_assets_adjustment` contributes exactly zero, so
     the pension balance is carried as a state rather than reconciled twice.
+    Holds for both the brute-force and the DC-EGM/NBEGM (savings) assets law.
     """
+    law, kwargs = _ADJUSTED_ASSETS_LAWS[law_key]
     functions = build_pension_functions(REGIME_SPECS["tied_nomc_choose_canwork"])
     simulate_adjustment = functions["pension_assets_adjustment"].simulate()
 
-    combined = concatenate_functions(
-        {"next_assets": assets_and_income.next_assets}, targets="next_assets"
-    )
-    next_assets = combined(
-        cash_on_hand=jnp.array(100_000.0),
-        transfers=jnp.array(0.0),
-        pension_assets_adjustment=simulate_adjustment,
-        consumption_dollars=jnp.array(80_000.0),
-        oop_costs=jnp.array(2_000.0),
-    )
+    combined = concatenate_functions({"next_assets": law}, targets="next_assets")
+    next_assets = combined(pension_assets_adjustment=simulate_adjustment, **kwargs)
     assert jnp.isclose(next_assets, 18_000.0, atol=ATOL)
 
 
-def test_reenabling_pension_adjustment_in_simulate_inflates_next_assets() -> None:
+@pytest.mark.parametrize("law_key", ["brute", "savings"])
+def test_reenabling_pension_adjustment_in_simulate_inflates_next_assets(
+    law_key: str,
+) -> None:
     """Re-adding the solve-phase adjustment to simulate double-counts pension
-    wealth: `next_assets` inflates by the (nonzero) reconciliation credit.
+    wealth: the assets law inflates by the (nonzero) reconciliation credit.
 
     This is the failure the `simulate=zero` wiring prevents. The solve-phase
-    adjustment is what re-enabling would inject; feeding it into `next_assets`
-    shifts assets away from the true-balance carry by exactly that credit.
+    adjustment is what re-enabling would inject; feeding it into the assets
+    law shifts assets away from the true-balance carry by exactly that credit.
+    Holds for both the brute-force and the DC-EGM/NBEGM (savings) assets law.
     """
+    law, kwargs = _ADJUSTED_ASSETS_LAWS[law_key]
     solve_adjustment = _solve_phase_adjustment_across_his_change()
 
-    combined = concatenate_functions(
-        {"next_assets": assets_and_income.next_assets}, targets="next_assets"
-    )
-    inflated = combined(
-        cash_on_hand=jnp.array(100_000.0),
-        transfers=jnp.array(0.0),
-        pension_assets_adjustment=solve_adjustment,
-        consumption_dollars=jnp.array(80_000.0),
-        oop_costs=jnp.array(2_000.0),
-    )
+    combined = concatenate_functions({"next_assets": law}, targets="next_assets")
+    inflated = combined(pension_assets_adjustment=solve_adjustment, **kwargs)
     assert jnp.isclose(inflated, 18_000.0 + solve_adjustment, atol=ATOL)
     assert jnp.abs(solve_adjustment) > 100.0
