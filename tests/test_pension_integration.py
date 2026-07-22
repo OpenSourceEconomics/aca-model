@@ -9,6 +9,7 @@ import jax.numpy as jnp
 from dags import concatenate_functions
 
 from aca_model.agent import assets_and_income
+from aca_model.baseline.regimes._common import REGIME_SPECS, build_pension_functions
 from aca_model.environment import pensions
 
 ATOL = 0.01
@@ -199,3 +200,95 @@ def test_rebalancing_preserves_total_wealth_across_his_change() -> None:
 
     residual = (1.0 - SURVIVAL[PERIOD]) * jnp.abs(next_imputed - next_exact)
     assert jnp.abs(total_with_adjustment - total_without_change) <= residual + ATOL
+
+
+def _solve_phase_adjustment_across_his_change() -> jnp.ndarray:
+    """Solve-phase pension assets adjustment for a HIS 0 → 1 transition.
+
+    A HIS change makes next period's AIME imputation diverge from the
+    accrual-evolved pension wealth, so the reconciliation the solve phase
+    applies is nonzero — the correction the simulate phase must suppress.
+    """
+    old_his = jnp.int32(0)
+    new_his = jnp.int32(1)
+    pia = jnp.array(8000.0)
+    labor_income = jnp.array(30_000.0)
+    mtr = jnp.array(0.0)
+
+    pw_old = _impute_pension_wealth(pia=pia, period=PERIOD, his=old_his)
+    benefit_old = pensions.benefit(
+        pension_wealth=pw_old,
+        imp_fraction_receiving=FRACTION_RECEIVING,
+        epdv_constant_pension=EPDV,
+        period=PERIOD,
+    )
+    accrual_val = pensions.accrual(
+        labor_income=labor_income, period=PERIOD, his=old_his, **ACCRUAL_KWARGS
+    )
+    next_exact = pensions.wealth_next_before_adjustment(
+        pension_wealth=pw_old,
+        pension_benefit=benefit_old,
+        pension_accrual=accrual_val,
+        rate_of_return=RATE_OF_RETURN,
+        unconditional_survival_prob=SURVIVAL,
+        period=PERIOD,
+    )
+    next_imputed = _impute_pension_wealth(pia=pia, period=PERIOD + 1, his=new_his)
+
+    return pensions.assets_adjustment(
+        pension_wealth_next_before_adjustment=next_exact,
+        imputed_pension_wealth_next_period=next_imputed,
+        marginal_tax_rate=mtr,
+        unconditional_survival_prob=SURVIVAL,
+        period=PERIOD,
+    )
+
+
+def test_simulate_pension_adjustment_leaves_next_assets_at_no_adjustment_carry() -> (
+    None
+):
+    """Simulate carries the true pension balance, so `next_assets` gets no
+    pension adjustment even when a real imputation gap exists.
+
+    The agent holds `assets = 18000` after consumption and OOP; the
+    simulate-phase `pension_assets_adjustment` contributes exactly zero, so
+    the pension balance is carried as a state rather than reconciled twice.
+    """
+    functions = build_pension_functions(REGIME_SPECS["tied_nomc_choose_canwork"])
+    simulate_adjustment = functions["pension_assets_adjustment"].simulate()
+
+    combined = concatenate_functions(
+        {"next_assets": assets_and_income.next_assets}, targets="next_assets"
+    )
+    next_assets = combined(
+        cash_on_hand=jnp.array(100_000.0),
+        transfers=jnp.array(0.0),
+        pension_assets_adjustment=simulate_adjustment,
+        consumption_dollars=jnp.array(80_000.0),
+        oop_costs=jnp.array(2_000.0),
+    )
+    assert jnp.isclose(next_assets, 18_000.0, atol=ATOL)
+
+
+def test_reenabling_pension_adjustment_in_simulate_inflates_next_assets() -> None:
+    """Re-adding the solve-phase adjustment to simulate double-counts pension
+    wealth: `next_assets` inflates by the (nonzero) reconciliation credit.
+
+    This is the failure the `simulate=zero` wiring prevents. The solve-phase
+    adjustment is what re-enabling would inject; feeding it into `next_assets`
+    shifts assets away from the true-balance carry by exactly that credit.
+    """
+    solve_adjustment = _solve_phase_adjustment_across_his_change()
+
+    combined = concatenate_functions(
+        {"next_assets": assets_and_income.next_assets}, targets="next_assets"
+    )
+    inflated = combined(
+        cash_on_hand=jnp.array(100_000.0),
+        transfers=jnp.array(0.0),
+        pension_assets_adjustment=solve_adjustment,
+        consumption_dollars=jnp.array(80_000.0),
+        oop_costs=jnp.array(2_000.0),
+    )
+    assert jnp.isclose(inflated, 18_000.0 + solve_adjustment, atol=ATOL)
+    assert jnp.abs(solve_adjustment) > 100.0
