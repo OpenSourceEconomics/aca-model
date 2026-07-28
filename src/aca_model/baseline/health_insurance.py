@@ -72,11 +72,11 @@ def countable_income(
 
 
 @lcm.piecewise_affine(
-    "is_ssi_eligible",
+    output="is_ssi_eligible",
     variable="assets",
     breakpoints=(
         lcm.affine_breakpoint(
-            "ssi_assets_test", kind="jump", indexed_by="spousal_income"
+            threshold="ssi_assets_test", kind="jump", indexed_by="spousal_income"
         ),
     ),
 )
@@ -152,11 +152,11 @@ def aca_magi(
 
 
 @lcm.piecewise_affine(
-    "ssi_benefit",
+    output="ssi_benefit",
     variable="countable_income",
     breakpoints=(
         lcm.affine_breakpoint(
-            "ssi_maximum_benefit",
+            threshold="ssi_maximum_benefit",
             kind="continuous_kink",
             indexed_by="spousal_income",
         ),

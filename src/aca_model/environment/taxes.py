@@ -94,11 +94,11 @@ def taxable_ss_benefit(
 
 
 @lcm.piecewise_affine(
-    "after_tax_income",
+    output="after_tax_income",
     variable="gross_income",
     breakpoints=tuple(
         lcm.affine_breakpoint(
-            "income_tax_schedule.brackets_upper",
+            threshold="income_tax_schedule.brackets_upper",
             kind="continuous_kink",
             indexed_by="spousal_income",
             static_index=k,

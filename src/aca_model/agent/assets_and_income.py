@@ -126,11 +126,11 @@ def next_assets_when_dead(
 
 
 @lcm.piecewise_affine(
-    "resources",
+    output="resources",
     variable="cash_on_hand",
     breakpoints=(
         lcm.affine_breakpoint(
-            "consumption_floor_schedule",
+            threshold="consumption_floor_schedule",
             kind="continuous_kink",
             indexed_by="spousal_income",
         ),
