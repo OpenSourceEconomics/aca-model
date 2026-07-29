@@ -142,6 +142,12 @@ class GridConfig:
     # and breakpoint partition); `buy_private` stays fixed. `False` fixes both actions
     # to a single level so the only choice is continuous consumption. Only consulted
     # under `solver="nbegm"`.
+    #
+    # Requires `nbegm_jump_read="bridged"`. `labor_supply` enters `countable_income`,
+    # which carries the SSI income test, so each labor level puts that breakpoint at a
+    # different liquid level; the one-sided read publishes its cliff limits on a single
+    # query grid shared across branches, which the two cannot both satisfy. Building a
+    # model with live labor under `"one_sided"` raises `RegimeInitializationError`.
     nbegm_live_labor_supply: bool = False
 
 

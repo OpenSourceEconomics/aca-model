@@ -22,7 +22,6 @@ from their grid ranges, discrete states from their categories, regimes
 sampled from the five regimes active at `start_age=51`.
 """
 
-from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
@@ -48,7 +47,7 @@ _PARAMS_FILE = (
     Path(__file__).resolve().parent / "_benchmark_data" / "benchmark_params.pkl"
 )
 
-_N_BENCHMARK_PREF_TYPES = len(fields(BenchmarkPrefType))
+_N_BENCHMARK_PREF_TYPES = len(DiscreteGrid(BenchmarkPrefType).categories)
 
 _DERIVED_CATEGORICALS = {
     "good_health": DiscreteGrid(GoodHealth),

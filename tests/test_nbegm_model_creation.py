@@ -15,6 +15,7 @@ from typing import cast
 import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
 from lcm import DiscreteGrid, Model, Regime
+from lcm.exceptions import RegimeInitializationError
 from lcm.solvers import NBEGM, GridSearch
 
 from aca_model.aca import PolicyVariant
@@ -32,7 +33,7 @@ from aca_model.baseline.regimes import (
 from aca_model.baseline.regimes._common import Grids, build_grids
 from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.benchmark import get_benchmark_params
-from aca_model.config import BENCHMARK_GRID_CONFIG
+from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
 
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
@@ -50,16 +51,20 @@ def _build_regimes(solver: SolverName) -> dict[str, Regime]:
     )
 
 
-def _build_model(solver: SolverName) -> Model:
+def _build_model_with(solver: SolverName, grid_config: GridConfig) -> Model:
     return create_model(
         n_subjects=1,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=grid_config,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver=solver,
     )
+
+
+def _build_model(solver: SolverName) -> Model:
+    return _build_model_with(solver, BENCHMARK_GRID_CONFIG)
 
 
 def _grids() -> Grids:
@@ -248,6 +253,26 @@ def test_nbegm_keeps_labor_supply_live_when_configured() -> None:
     assert "buy_private" not in actions
 
 
+def test_nbegm_live_labor_supply_requires_the_bridged_cliff_read() -> None:
+    """A live `labor_supply` action builds only under `nbegm_jump_read="bridged"`.
+
+    `labor_supply` enters `countable_income`, which carries the SSI income test,
+    so each labor level puts that breakpoint at a different liquid level. The
+    one-sided read publishes its cliff limits on one query grid shared across
+    branches, so the two cannot both hold and the build is refused.
+    """
+    live_labor = dataclasses.replace(
+        BENCHMARK_GRID_CONFIG, nbegm_live_labor_supply=True
+    )
+    with pytest.raises(RegimeInitializationError, match="must not enter any schedule"):
+        _build_model_with(
+            "nbegm", dataclasses.replace(live_labor, nbegm_jump_read="one_sided")
+        )
+
+    bridged = dataclasses.replace(live_labor, nbegm_jump_read="bridged")
+    assert isinstance(_build_model_with("nbegm", bridged), Model)
+
+
 def test_nbegm_fixes_labor_supply_by_default() -> None:
     """By default NBEGM fixes both discrete actions on the M1 regime, so the
     only remaining choice is continuous consumption against the cliffed budget."""
@@ -262,8 +287,12 @@ def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     """Every ACA policy variant builds a model under NBEGM with the M1 regime on
     the solver and labor live — the overlay's function swaps compose with the
     branch compiler's per-regime wiring."""
+    # Live labor requires the bridged cliff read — see
+    # `test_nbegm_live_labor_supply_requires_the_bridged_cliff_read`.
     grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG, nbegm_live_labor_supply=True
+        BENCHMARK_GRID_CONFIG,
+        nbegm_live_labor_supply=True,
+        nbegm_jump_read="bridged",
     )
     model = create_aca_model(
         n_subjects=1,
@@ -296,8 +325,12 @@ def test_nbegm_aca_variants_leave_no_free_buy_private_params(
     function may leave `buy_private` as a free parameter — the params template
     holds no `buy_private` leaves, so solve/simulate never demand a
     `*__buy_private` entry the pipeline cannot supply."""
+    # Live labor requires the bridged cliff read — see
+    # `test_nbegm_live_labor_supply_requires_the_bridged_cliff_read`.
     grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG, nbegm_live_labor_supply=True
+        BENCHMARK_GRID_CONFIG,
+        nbegm_live_labor_supply=True,
+        nbegm_jump_read="bridged",
     )
     model = create_aca_model(
         n_subjects=1,
