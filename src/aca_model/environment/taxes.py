@@ -10,8 +10,16 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 import jax.numpy as jnp
+import lcm
 from lcm.params import MappingLeaf
 from lcm.typing import DiscreteState, FloatND, IntND
+
+# Federal income tax bracket edges declared for the NBEGM M1 slice. The
+# progressive tax is continuous and piecewise-affine in `gross_income`, kinking
+# at each finite bracket edge `income_tax_schedule.brackets_upper[spousal_income,
+# k]`; the final edge is the +inf top-bracket sentinel and is not a kink. The
+# decorator is metadata-only — brute and DC-EGM solve identically.
+_N_INCOME_TAX_KINKS = 7
 
 
 def gross_income(
@@ -85,6 +93,19 @@ def taxable_ss_benefit(
     )
 
 
+@lcm.piecewise_affine(
+    output="after_tax_income",
+    variable="gross_income",
+    breakpoints=tuple(
+        lcm.affine_breakpoint(
+            threshold="income_tax_schedule.brackets_upper",
+            kind="continuous_kink",
+            indexed_by="spousal_income",
+            static_index=k,
+        )
+        for k in range(_N_INCOME_TAX_KINKS)
+    ),
+)
 def after_tax_income(
     gross_income: FloatND,
     ss_benefit: FloatND,

@@ -256,3 +256,43 @@ def test_bequest_uses_signed_assets_for_indebted_decedent() -> None:
         scale * bwt * estate ** (consumption_weight * (1.0 - coefficient_rra)) / -4.0
     )
     np.testing.assert_allclose(result, expected, atol=1e-9)
+
+
+def test_bequest_floors_estate_base_when_debt_exceeds_the_shifter() -> None:
+    """A death-time transfer floors the estate base at a nominal `1.0`.
+
+    When debt runs deeper than the curvature shifter `κ` — so `assets + κ` would
+    turn non-positive — the estate base is floored at `1.0` rather than entering a
+    fractional power as a negative number (which is undefined). The bequest is then
+    finite and equals `scale · bwt · 1^(…) / (1 − rra) = scale · bwt / (1 − rra)`.
+    """
+    assets = jnp.asarray(-(float(BEQUEST_SHIFTER) + 100_000.0))
+    consumption_weight = jnp.asarray(0.6)
+    coefficient_rra = jnp.asarray(5.0)
+    scale = preferences.utility_scale_factor(
+        average_consumption_equiv=AVERAGE_CONSUMPTION,
+        consumption_weight=consumption_weight,
+        coefficient_rra=coefficient_rra,
+        time_endowment=TIME_ENDOWMENT,
+        fixed_cost_of_work_intercept=FIXED_COST_INTERCEPT,
+        reference_hours=REFERENCE_HOURS,
+    )
+    bwt = preferences.scaled_bequest_weight(
+        bequest_weight=BEQUEST_WEIGHT,
+        consumption_weight=consumption_weight,
+        coefficient_rra=coefficient_rra,
+        time_endowment=TIME_ENDOWMENT,
+        time_discount_factor=TIME_DISCOUNT_FACTOR,
+        rate_of_return=RATE_OF_RETURN,
+    )
+    result = preferences.bequest(
+        assets=assets,
+        bequest_shifter=BEQUEST_SHIFTER,
+        scaled_bequest_weight=bwt,
+        consumption_weight=consumption_weight,
+        coefficient_rra=coefficient_rra,
+        utility_scale_factor=scale,
+    )
+
+    expected = scale * bwt * 1.0 / (1.0 - coefficient_rra)
+    np.testing.assert_allclose(result, expected, atol=1e-9)

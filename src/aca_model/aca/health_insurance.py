@@ -22,11 +22,7 @@ from lcm.typing import (
     ScalarFloat,
 )
 
-from aca_model.baseline.health_insurance import (
-    BuyPrivate,
-    oop_costs,
-    share_below_threshold,
-)
+from aca_model.baseline.health_insurance import BuyPrivate, oop_costs
 
 
 class PolicyVariant(Enum):
@@ -43,15 +39,14 @@ def mandate_penalty(
     gross_income: FloatND,
     spousal_income: DiscreteState,
     buy_private: DiscreteAction,
-    medicaid_eligibility_share: FloatND,
+    is_medicaid_eligible: BoolND,
     mandate_schedule: MappingLeaf,
 ) -> FloatND:
     """Compute individual mandate penalty for the uninsured.
 
     Penalty = clip(income * income_fraction, min, max) if uninsured and
     income above exemption threshold; 0 otherwise. Medicaid is
-    minimum-essential coverage, so the penalty is scaled down by the
-    Medicaid-eligibility share — the Medicaid-eligible owe no penalty.
+    minimum-essential coverage, so the Medicaid-eligible owe no penalty.
     """
     sched = cast("Mapping[str, Any]", mandate_schedule.data)
     is_uninsured = buy_private == BuyPrivate.no
@@ -61,8 +56,7 @@ def mandate_penalty(
         sched["min"],
         sched["max"],
     )
-    penalty = jnp.where(is_uninsured & ~exempt, raw, 0.0)
-    return penalty * (1.0 - medicaid_eligibility_share)
+    return jnp.where(is_uninsured & ~exempt & ~is_medicaid_eligible, raw, 0.0)
 
 
 def premium_subsidy(
@@ -70,16 +64,16 @@ def premium_subsidy(
     gross_income: FloatND,
     spousal_income: DiscreteState,
     buy_private: DiscreteAction,
-    medicaid_eligibility_share: FloatND,
+    is_medicaid_eligible: BoolND,
     premium_credit_schedule: MappingLeaf,
 ) -> FloatND:
     """Compute ACA premium tax credit (advance premium subsidy).
 
     Piecewise-linear interpolation of applicable income percentage on
     FPL kink points, subsidy = max(0, premium - income * applicable_rate).
-    Return 0 when buy_private==no or when income is outside the 100-400% FPL
-    range. The subsidy is scaled down by the Medicaid-eligibility share
-    (Medicaid is minimum-essential coverage, so no exchange subsidy applies).
+    Return 0 when buy_private==no, when income is outside the 100-400% FPL
+    range, or when Medicaid-eligible (Medicaid is minimum-essential coverage,
+    so no exchange subsidy applies).
     """
     sched = cast("Mapping[str, Any]", premium_credit_schedule.data)
     kinks = sched["kinks"]  # [n_kinks, 3]
@@ -91,24 +85,22 @@ def premium_subsidy(
 
     in_range = (gross_income >= sp_kinks[0]) & (gross_income < sp_kinks[-1])
     is_insured = buy_private == BuyPrivate.yes
-    gated = jnp.where(is_insured & in_range, subsidy, 0.0)
-    return gated * (1.0 - medicaid_eligibility_share)
+    return jnp.where(is_insured & in_range & ~is_medicaid_eligible, subsidy, 0.0)
 
 
 def cost_sharing(
     gross_income: FloatND,
     spousal_income: DiscreteState,
     buy_private: DiscreteAction,
-    medicaid_eligibility_share: FloatND,
+    is_medicaid_eligible: BoolND,
     cost_sharing_schedule: MappingLeaf,
 ) -> FloatND:
     """Compute ACA cost-sharing reduction scale factor.
 
     Bracket lookup on FPL kink points to step-function scale factor.
     Applied to deductible, coinsurance, and OOP max. Returns the neutral
-    scale 1.0 when buy_private==no (no reduction for uninsured); for the
-    insured the scale is blended toward the neutral 1.0 by the
-    Medicaid-eligibility share (Medicaid cost-sharing is handled separately).
+    scale 1.0 when buy_private==no (no reduction for uninsured) or when
+    Medicaid-eligible (Medicaid cost-sharing is handled separately).
     """
     sched = cast("Mapping[str, Any]", cost_sharing_schedule.data)
     kinks = sched["kinks"]  # [n_kinks, 3]
@@ -116,44 +108,40 @@ def cost_sharing(
     bracket = jnp.searchsorted(kinks[:, spousal_income], gross_income, side="right")
     scale = factors[bracket]
     is_insured = buy_private == BuyPrivate.yes
-    blended = scale * (1.0 - medicaid_eligibility_share) + medicaid_eligibility_share
-    return jnp.where(is_insured, blended, 1.0)
+    return jnp.where(is_insured & ~is_medicaid_eligible, scale, 1.0)
 
 
-def medicaid_eligibility_share(
-    ssi_eligibility_share: FloatND,
+def is_medicaid_eligible(
+    is_ssi_eligible: BoolND,
     aca_magi: FloatND,
     spousal_income: DiscreteState,
     crossed_oamc_threshold: ScalarBool,
     is_disabled: BoolND,
     medicaid_schedule: MappingLeaf,
-) -> FloatND:
-    """Medicaid eligibility share over two tracks under ACA expansion.
+) -> BoolND:
+    """Determine Medicaid eligibility on two tracks under ACA expansion.
 
-    The household is eligible through either track; the share is the
-    probabilistic union of the two track shares:
+    A household is eligible when it qualifies on either track:
 
-    - **Categorical** (SSI-linked): `ssi_eligibility_share`, the smooth share
-      combining the aged-or-disabled gate with the SSI asset and income tests.
+    - **Categorical** (SSI-linked): `is_ssi_eligible`, which applies the
+      aged-or-disabled gate plus the SSI asset and income tests.
     - **Expansion** (ACA): the under-65, non-disabled population with MAGI
       below the expansion threshold (138% FPL encoded in
-      `medicaid_schedule["income_threshold"]`). The `(aged | disabled)`
-      categorical gate stays hard — expansion never reaches the aged or the
-      disabled, who stay on the categorical track with its asset test — and
-      only the MAGI income test is smoothed by the same quintic-smoothstep
-      band as the baseline tests (`share_below_threshold`).
+      `medicaid_schedule["income_threshold"]`). Expansion never reaches the
+      aged or the disabled; they stay on the categorical track with its
+      asset test.
 
     Expansion uses full-count MAGI, not the half-counted SSI
-    `countable_income`. Combining the two shares as `s + (1 - s) · e` is the
-    probability that at least one track qualifies, keeping the result in
-    `[0, 1]` and reducing to the categorical share when expansion is shut off.
+    `countable_income`.
     """
     sched = cast("Mapping[str, Any]", medicaid_schedule.data)
     threshold = sched["income_threshold"]
-    expansion = ((~crossed_oamc_threshold) & (~is_disabled)) * share_below_threshold(
-        aca_magi, threshold[spousal_income]
+    expansion = (
+        (~crossed_oamc_threshold)
+        & (~is_disabled)
+        & (aca_magi < threshold[spousal_income])
     )
-    return ssi_eligibility_share + (1.0 - ssi_eligibility_share) * expansion
+    return is_ssi_eligible | expansion
 
 
 def premium_default(

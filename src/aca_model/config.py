@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 SRC = Path(__file__).parent.resolve()
 ROOT = SRC.parents[1]
@@ -92,6 +93,56 @@ class GridConfig:
     # transient that savings-batching leaves behind. `0` evaluates the whole
     # mesh in one kernel. Only consulted under `solver="dcegm"`.
     n_stochastic_node_batch_size: int = 0
+    # Block size for splaying the NBEGM continuation's child stochastic-node
+    # expectation (health, health-cost shocks, the wage residual). `0` reads the
+    # whole joint node mesh in one pass — fast, but its peak intermediate scales
+    # with the full ride-along × node × child-grid product. A positive value loops
+    # the mesh in blocks of that size, trading runtime for a much smaller peak; `1`
+    # (one node at a time) is the memory-minimal setting for a CPU validation grid.
+    # Only consulted under `solver="nbegm"`.
+    n_nbegm_stochastic_node_batch_size: int = 0
+    # Streams the per-interval upper envelope over candidate-segment blocks of this
+    # size instead of materialising the full (query x candidate) bracket matrix per
+    # ride cell. `0` keeps the one-shot dense envelope; the result is identical
+    # either way — the knob trades peak device memory against a sequential scan.
+    # Only consulted under `solver="nbegm"`.
+    n_nbegm_envelope_segment_block_size: int = 0
+    # Streams both NBEGM ride-along cores (continuation fan-out and envelope
+    # solve) over ride-cell blocks of this size instead of vmapping the whole
+    # flattened ride mesh at once — the dominant peak-memory term at production
+    # mesh sizes. `0` keeps the whole-mesh vmap; the result is identical either
+    # way. Only consulted under `solver="nbegm"`.
+    #
+    # Backend-dependent tuning at production ride-mesh sizes (under both cliff-read
+    # modes). On GPU the whole-mesh vmap stays within a few GiB, so `0` is fine. The
+    # CPU XLA backend does not fuse the fan-out and materialises the whole flattened
+    # ride mesh at once — a production-grid solve then needs hundreds of GiB even at
+    # a small asset grid (the blow-up rides the aime/shock/health mesh, not assets).
+    # Set this to a positive block (e.g. 64) for a CPU solve; it bounds the peak to
+    # the GPU's few-GiB footprint at the cost of serialising the mesh into a
+    # `lax.map` scan.
+    n_nbegm_cell_block_size: int = 0
+    # How NBEGM parents read the child value's institutional cliffs:
+    # - "one_sided" (default) — carry rows hold each cliff preimage as a duplicated
+    #   abscissa with exact one-sided limits; reads never average across a cliff,
+    #   but publishing the topology gates the stochastic-dim fold off (slower).
+    # - "bridged" — plain carry rows; interpolation may bridge a cliff like any
+    #   finite-grid solver, and the fold stays available. The fast setting for
+    #   inner estimation loops, polished afterwards under "one_sided".
+    # Only consulted under `solver="nbegm"`.
+    nbegm_jump_read: Literal["one_sided", "bridged"] = "one_sided"
+    # Block size for streaming the discrete-action branch axis in both NBEGM
+    # ride-along cores (one continuation row / one continuous subproblem per live
+    # labor level). `0` runs the whole branch axis in one vectorized pass; a positive
+    # value scans it in blocks of that many branches (identical result, per-branch
+    # intermediates bounded by one block). Only consulted under `solver="nbegm"`.
+    n_nbegm_branch_batch_size: int = 0
+    # Keep `labor_supply` a live discrete action on the M1 regime under NBEGM (the
+    # branch compiler solves each labor level against its own continuation, utility,
+    # and breakpoint partition); `buy_private` stays fixed. `False` fixes both actions
+    # to a single level so the only choice is continuous consumption. Only consulted
+    # under `solver="nbegm"`.
+    nbegm_live_labor_supply: bool = False
 
 
 MODEL_CONFIG = ModelConfig()

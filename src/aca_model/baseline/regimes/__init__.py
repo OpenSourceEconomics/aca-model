@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import DiscreteGrid, Regime
-from lcm.solvers import DCEGM
+from lcm.solvers import DCEGM, NBEGM
 from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import _nongroup as nongroup
@@ -33,7 +33,13 @@ from aca_model.baseline.regimes._common import (
     build_model_states,
 )
 from aca_model.baseline.regimes._dcegm import build_dcegm_solver
+from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.config import GridConfig
+
+# NBEGM is a per-regime (not global) solver: it solves one 1-D
+# consumption/savings regime with at most one discrete action, so it attaches
+# only to the M1 vertical-slice regime.
+_NBEGM_REGIME = "nongroup_nomc_inelig_canwork"
 
 __all__ = [
     "REGIME_SPECS",
@@ -54,7 +60,11 @@ _HIS_BUILDERS = {
 
 
 def build_regime(
-    name: str, grids: Grids, *, dcegm_solver: DCEGM | None = None
+    name: str,
+    grids: Grids,
+    *,
+    dcegm_solver: DCEGM | None = None,
+    nbegm_solver: NBEGM | None = None,
 ) -> Regime:
     """Build a single baseline Regime object for the given regime name."""
     if name == "dead":
@@ -67,7 +77,7 @@ def build_regime(
     if builder is None:
         msg = f"Unknown HIS type: {spec['his']}"
         raise ValueError(msg)
-    return builder(name, grids, dcegm_solver=dcegm_solver)
+    return builder(name, grids, dcegm_solver=dcegm_solver, nbegm_solver=nbegm_solver)
 
 
 def build_all_regimes(
@@ -98,9 +108,15 @@ def build_all_regimes(
         consumption_dollars_points=consumption_dollars_points,
     )
     dcegm_solver = build_dcegm_solver(grids) if solver == "dcegm" else None
+    nbegm_solver = build_nbegm_solver(grids) if solver == "nbegm" else None
     regimes = {}
     for name in REGIME_SPECS:
-        regimes[name] = build_regime(name, grids, dcegm_solver=dcegm_solver)
+        regimes[name] = build_regime(
+            name,
+            grids,
+            dcegm_solver=dcegm_solver,
+            nbegm_solver=nbegm_solver if name == _NBEGM_REGIME else None,
+        )
     regimes["dead"] = build_dead_regime(solver=solver)
     return regimes
 
@@ -130,7 +146,7 @@ def build_model_slots(
     )
     return {
         "functions": build_model_functions(solver=solver),
-        "constraints": build_model_constraints(solver=solver),
+        "constraints": build_model_constraints(),
         "states": build_model_states(grids),
         "state_transitions": build_model_state_transitions(),
     }

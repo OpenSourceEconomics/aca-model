@@ -4,6 +4,7 @@ Ported from struct-ret/src/model/auxiliaries.py.
 """
 
 import jax.numpy as jnp
+import numpy as np
 from lcm import categorical
 from lcm.typing import (
     ContinuousState,
@@ -39,12 +40,16 @@ class SpousalIncome:
     married_has_inc: ScalarInt
 
 
-HOURS_VALUES = jnp.array([0.0, 1000.0, 1500.0, 2000.0, 2500.0])
+# Host array, not a module-level JAX array: a device array here would
+# reserve the GPU memory pool at import time in every process that imports
+# the model. It is converted to a device array at each indexing site, where
+# the value folds into the surrounding compiled function.
+HOURS_VALUES = np.array([0.0, 1000.0, 1500.0, 2000.0, 2500.0])
 
 
 def working_hours_value(labor_supply: DiscreteAction) -> FloatND:
     """Map labor supply choice to annual hours worked."""
-    return HOURS_VALUES[labor_supply]
+    return jnp.asarray(HOURS_VALUES)[labor_supply]
 
 
 def wage(
@@ -74,7 +79,7 @@ def income(
 
     income = wage * hours^(1 + exp) * int^(-exp)
     """
-    hours = HOURS_VALUES[labor_supply]
+    hours = jnp.asarray(HOURS_VALUES)[labor_supply]
     return jnp.where(
         hours > 0.0,
         wage

@@ -67,6 +67,49 @@ def test_leisure_bad_health() -> None:
     assert jnp.isclose(result, 4500.0)
 
 
+def test_leisure_canwork_stays_positive_when_work_cost_meets_endowment() -> None:
+    """Leisure bends to a strictly positive floor when work costs reach the endowment.
+
+    Without a floor, leisure would be zero (or negative past the endowment) and feed a
+    non-positive base into the CRRA aggregator. The smooth floor keeps it clearly
+    positive.
+    """
+    result = preferences.leisure_canwork_retiree_or_nongroup(
+        working_hours_value=jnp.array(4500.0),
+        good_health=jnp.int32(1),
+        lagged_labor_supply=jnp.int32(1),
+        time_endowment=jnp.asarray(5000.0),
+        leisure_cost_of_bad_health=jnp.asarray(0.0),
+        fixed_cost_of_work=jnp.asarray(500.0),  # 4500 + 500 == 5000 == endowment
+        labor_force_reentry_cost=jnp.asarray(0.0),
+    )
+    assert result > 1.0
+
+
+def test_leisure_canwork_tied_decreases_smoothly_into_saturation() -> None:
+    """Past the endowment, more work cost still lowers leisure, never below zero.
+
+    A flat clamp or a raw `endowment - cost` would either pin leisure or drive it
+    negative; the smooth floor keeps it strictly positive and strictly decreasing.
+    """
+    common = {
+        "good_health": jnp.int32(1),
+        "time_endowment": jnp.asarray(5000.0),
+        "leisure_cost_of_bad_health": jnp.asarray(0.0),
+    }
+    at_endowment = preferences.leisure_canwork_tied(
+        working_hours_value=jnp.array(4500.0),
+        fixed_cost_of_work=jnp.asarray(500.0),  # cost == endowment
+        **common,
+    )
+    past_endowment = preferences.leisure_canwork_tied(
+        working_hours_value=jnp.array(4500.0),
+        fixed_cost_of_work=jnp.asarray(700.0),  # cost exceeds endowment by 200
+        **common,
+    )
+    assert at_endowment > past_endowment > 0.0
+
+
 def test_utility_positive_leisure() -> None:
     result = preferences.u_alive(
         consumption_equiv=jnp.array(10000.0),

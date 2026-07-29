@@ -1,18 +1,17 @@
 """Regime transitions and builder for tied HIS regimes.
 
 Tied regimes: agents with employer-tied health insurance.
-Tied agents who stop working become nongroup. The Medicaid eligibility
-share routes probability mass to the nongroup target.
+Tied agents who stop working become nongroup.
+Medicaid-eligible agents are also overridden to nongroup.
 """
 
 from collections.abc import Callable
 
 import jax.numpy as jnp
 from lcm import Regime
-from lcm.solvers import DCEGM
-from lcm.typing import Age, DiscreteAction, FloatND, Period
+from lcm.solvers import DCEGM, NBEGM
+from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
 
-from aca_model.agent import preferences
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
 from aca_model.baseline.regimes._common import (
@@ -41,16 +40,14 @@ def _make_transition_canwork(
     """Create transition for canwork tied regimes.
 
     Tied agents who stop working become nongroup (lose employer coverage).
-    The Medicaid eligibility share routes that fraction of the survival
-    mass to the nongroup target — a smooth probability mixture, not a
-    discrete override.
+    Medicaid-eligible agents are also overridden to nongroup targets.
     """
 
     def transition(
         age: Age,
         period: Period,
         labor_supply: DiscreteAction,
-        medicaid_eligibility_share: FloatND,
+        is_medicaid_eligible: BoolND,
         survival_probs: FloatND,
     ) -> FloatND:
         sp = survival_probs[period]
@@ -61,10 +58,10 @@ def _make_transition_canwork(
         stopped = labor_supply == LaborSupply.do_not_work
         ng_target = select_target_for_age(next_age, mc_next, ng)
         target = jnp.where(stopped, ng_target, target)
+        # Medicaid eligibility overrides to nongroup
         ng_ssi = select_target_for_age(next_age, mc_next, ng)
-        return medicaid_eligibility_share * build_regime_probs(ng_ssi, sp) + (
-            1.0 - medicaid_eligibility_share
-        ) * build_regime_probs(target, sp)
+        target = jnp.where(is_medicaid_eligible, ng_ssi, target)
+        return build_regime_probs(target, sp)
 
     return transition
 
@@ -85,7 +82,11 @@ def _build_functions(spec: RegimeSpec) -> dict:
 
 
 def build_regime(
-    name: str, grids: Grids, *, dcegm_solver: DCEGM | None = None
+    name: str,
+    grids: Grids,
+    *,
+    dcegm_solver: DCEGM | None = None,
+    nbegm_solver: NBEGM | None = None,
 ) -> Regime:
     """Build a tied regime (all tied regimes are canwork)."""
     spec = REGIME_SPECS[name]
@@ -95,19 +96,21 @@ def build_regime(
     transition_func = _make_transition_canwork(gets_mc, own, ng)
 
     states = build_states(spec, grids)
-    solver_kwargs: dict = {} if dcegm_solver is None else {"solver": dcegm_solver}
+    egm_solver = dcegm_solver if dcegm_solver is not None else nbegm_solver
+    solver_kwargs: dict = {} if egm_solver is None else {"solver": egm_solver}
+    state_solver = (
+        "brute_force"
+        if egm_solver is None
+        else ("nbegm" if nbegm_solver is not None else "dcegm")
+    )
     return Regime(
         transition=build_granular_regime_transition(
             transition_func=transition_func, target_ids=(*own.values(), *ng.values())
         ),
         active=make_active_func(spec),
         states=states,
-        state_transitions=build_state_transitions(
-            spec, solver="brute_force" if dcegm_solver is None else "dcegm"
-        ),
+        state_transitions=build_state_transitions(spec, solver=state_solver),
         actions=build_actions(spec, grids),
         functions=_build_functions(spec),
-        # `borrowing_constraint` is broadcast from the model level.
-        constraints={"positive_leisure": preferences.positive_leisure},
         **solver_kwargs,
     )

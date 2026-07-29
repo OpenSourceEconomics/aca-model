@@ -6,9 +6,11 @@ wealth (liquid assets + pension wealth) when HIS changes.
 """
 
 import jax.numpy as jnp
+import pytest
 from dags import concatenate_functions
 
 from aca_model.agent import assets_and_income
+from aca_model.baseline.regimes._common import REGIME_SPECS, build_pension_functions
 from aca_model.environment import pensions
 
 ATOL = 0.01
@@ -199,3 +201,111 @@ def test_rebalancing_preserves_total_wealth_across_his_change() -> None:
 
     residual = (1.0 - SURVIVAL[PERIOD]) * jnp.abs(next_imputed - next_exact)
     assert jnp.abs(total_with_adjustment - total_without_change) <= residual + ATOL
+
+
+def _solve_phase_adjustment_across_his_change() -> jnp.ndarray:
+    """Solve-phase pension assets adjustment for a HIS 0 → 1 transition.
+
+    A HIS change makes next period's AIME imputation diverge from the
+    accrual-evolved pension wealth, so the reconciliation the solve phase
+    applies is nonzero — the correction the simulate phase must suppress.
+    """
+    old_his = jnp.int32(0)
+    new_his = jnp.int32(1)
+    pia = jnp.array(8000.0)
+    labor_income = jnp.array(30_000.0)
+    mtr = jnp.array(0.0)
+
+    pw_old = _impute_pension_wealth(pia=pia, period=PERIOD, his=old_his)
+    benefit_old = pensions.benefit(
+        pension_wealth=pw_old,
+        imp_fraction_receiving=FRACTION_RECEIVING,
+        epdv_constant_pension=EPDV,
+        period=PERIOD,
+    )
+    accrual_val = pensions.accrual(
+        labor_income=labor_income, period=PERIOD, his=old_his, **ACCRUAL_KWARGS
+    )
+    next_exact = pensions.wealth_next_before_adjustment(
+        pension_wealth=pw_old,
+        pension_benefit=benefit_old,
+        pension_accrual=accrual_val,
+        rate_of_return=RATE_OF_RETURN,
+        unconditional_survival_prob=SURVIVAL,
+        period=PERIOD,
+    )
+    next_imputed = _impute_pension_wealth(pia=pia, period=PERIOD + 1, his=new_his)
+
+    return pensions.assets_adjustment(
+        pension_wealth_next_before_adjustment=next_exact,
+        imputed_pension_wealth_next_period=next_imputed,
+        marginal_tax_rate=mtr,
+        unconditional_survival_prob=SURVIVAL,
+        period=PERIOD,
+    )
+
+
+# Both assets laws that carry `pension_assets_adjustment`, with inputs chosen so
+# the no-adjustment baseline is 18000 either way (savings = cash + transfers −
+# consumption = 20000; 20000 − 2000 oop = 18000). `next_assets` is the brute-force
+# law; `next_assets_from_savings` is the post-decision (DC-EGM / NBEGM) form.
+_ADJUSTED_ASSETS_LAWS = {
+    "brute": (
+        assets_and_income.next_assets,
+        {
+            "cash_on_hand": jnp.array(100_000.0),
+            "transfers": jnp.array(0.0),
+            "consumption_dollars": jnp.array(80_000.0),
+            "oop_costs": jnp.array(2_000.0),
+        },
+    ),
+    "savings": (
+        assets_and_income.next_assets_from_savings,
+        {
+            "savings": jnp.array(20_000.0),
+            "oop_costs": jnp.array(2_000.0),
+        },
+    ),
+}
+
+
+@pytest.mark.parametrize("law_key", ["brute", "savings"])
+def test_simulate_pension_adjustment_leaves_next_assets_at_no_adjustment_carry(
+    law_key: str,
+) -> None:
+    """Simulate carries the true pension balance, so the assets law gets no
+    pension adjustment even when a real imputation gap exists.
+
+    The agent holds `assets = 18000` after consumption and OOP; the
+    simulate-phase `pension_assets_adjustment` contributes exactly zero, so
+    the pension balance is carried as a state rather than reconciled twice.
+    Holds for both the brute-force and the DC-EGM/NBEGM (savings) assets law.
+    """
+    law, kwargs = _ADJUSTED_ASSETS_LAWS[law_key]
+    functions = build_pension_functions(REGIME_SPECS["tied_nomc_choose_canwork"])
+    simulate_adjustment = functions["pension_assets_adjustment"].simulate()
+
+    combined = concatenate_functions({"next_assets": law}, targets="next_assets")
+    next_assets = combined(pension_assets_adjustment=simulate_adjustment, **kwargs)
+    assert jnp.isclose(next_assets, 18_000.0, atol=ATOL)
+
+
+@pytest.mark.parametrize("law_key", ["brute", "savings"])
+def test_reenabling_pension_adjustment_in_simulate_inflates_next_assets(
+    law_key: str,
+) -> None:
+    """Re-adding the solve-phase adjustment to simulate double-counts pension
+    wealth: the assets law inflates by the (nonzero) reconciliation credit.
+
+    This is the failure the `simulate=zero` wiring prevents. The solve-phase
+    adjustment is what re-enabling would inject; feeding it into the assets
+    law shifts assets away from the true-balance carry by exactly that credit.
+    Holds for both the brute-force and the DC-EGM/NBEGM (savings) assets law.
+    """
+    law, kwargs = _ADJUSTED_ASSETS_LAWS[law_key]
+    solve_adjustment = _solve_phase_adjustment_across_his_change()
+
+    combined = concatenate_functions({"next_assets": law}, targets="next_assets")
+    inflated = combined(pension_assets_adjustment=solve_adjustment, **kwargs)
+    assert jnp.isclose(inflated, 18_000.0 + solve_adjustment, atol=ATOL)
+    assert jnp.abs(solve_adjustment) > 100.0

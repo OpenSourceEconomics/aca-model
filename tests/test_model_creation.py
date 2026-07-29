@@ -296,10 +296,7 @@ def test_aca_nongroup_inelig_has_real_functions() -> None:
     assert regime.functions["cost_sharing_scale"] is aca_hi.cost_sharing
     assert regime.functions["cash_on_hand"] is aca_hi.cash_on_hand
     assert regime.functions["primary_oop"] is aca_hi.primary_oop
-    assert (
-        regime.functions["medicaid_eligibility_share"]
-        is aca_hi.medicaid_eligibility_share
-    )
+    assert regime.functions["is_medicaid_eligible"] is aca_hi.is_medicaid_eligible
 
 
 def test_aca_no_mandate_has_no_mandate_function() -> None:
@@ -320,10 +317,7 @@ def test_aca_other_regimes_have_no_aca_policy_keys() -> None:
     assert "hic_premium_subsidy" not in regime.functions
     assert "cost_sharing_scale" not in regime.functions
     # Medicaid expansion applies to ALL regimes
-    assert (
-        regime.functions["medicaid_eligibility_share"]
-        is aca_hi.medicaid_eligibility_share
-    )
+    assert regime.functions["is_medicaid_eligible"] is aca_hi.is_medicaid_eligible
 
 
 @pytest.mark.parametrize("policy", list(PolicyVariant))
@@ -337,10 +331,7 @@ def test_aca_no_medicaid_expansion_keeps_baseline_medicaid() -> None:
     """ACA_NO_MEDICAID_EXPANSION: baseline Medicaid, but has subsidies + mandate."""
     regimes = build_aca_regimes(PolicyVariant.ACA_NO_MEDICAID_EXPANSION)
     retiree = regimes["retiree_nomc_inelig_canwork"]
-    assert (
-        retiree.functions["medicaid_eligibility_share"]
-        is not aca_hi.medicaid_eligibility_share
-    )
+    assert retiree.functions["is_medicaid_eligible"] is not aca_hi.is_medicaid_eligible
 
     nongroup = regimes["nongroup_nomc_inelig_canwork"]
     assert nongroup.functions["mandate_penalty"] is aca_hi.mandate_penalty
@@ -351,10 +342,7 @@ def test_aca_no_medicaid_expansion_no_mandate() -> None:
     """ACA_NO_MEDICAID_EXPANSION_NO_MANDATE: baseline Medicaid, subsidies, no mandate."""
     regimes = build_aca_regimes(PolicyVariant.ACA_NO_MEDICAID_EXPANSION_NO_MANDATE)
     retiree = regimes["retiree_nomc_inelig_canwork"]
-    assert (
-        retiree.functions["medicaid_eligibility_share"]
-        is not aca_hi.medicaid_eligibility_share
-    )
+    assert retiree.functions["is_medicaid_eligible"] is not aca_hi.is_medicaid_eligible
 
     nongroup = regimes["nongroup_nomc_inelig_canwork"]
     assert "mandate_penalty" not in nongroup.functions
@@ -365,10 +353,7 @@ def test_aca_only_medicaid_expansion() -> None:
     """ACA_ONLY_MEDICAID_EXPANSION: Medicaid expansion only, no subsidies/mandate."""
     regimes = build_aca_regimes(PolicyVariant.ACA_ONLY_MEDICAID_EXPANSION)
     retiree = regimes["retiree_nomc_inelig_canwork"]
-    assert (
-        retiree.functions["medicaid_eligibility_share"]
-        is aca_hi.medicaid_eligibility_share
-    )
+    assert retiree.functions["is_medicaid_eligible"] is aca_hi.is_medicaid_eligible
 
     nongroup = regimes["nongroup_nomc_inelig_canwork"]
     assert "mandate_penalty" not in nongroup.functions

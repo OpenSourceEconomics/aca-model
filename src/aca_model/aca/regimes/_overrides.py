@@ -42,7 +42,7 @@ def apply_aca_overrides(
     )
 
     if has_medicaid_expansion:
-        functions["medicaid_eligibility_share"] = aca_hi.medicaid_eligibility_share
+        functions["is_medicaid_eligible"] = aca_hi.is_medicaid_eligible
 
     if has_subsidies and spec["his"] == "nongroup" and spec["mc"] == "nomc":
         if has_mandate:

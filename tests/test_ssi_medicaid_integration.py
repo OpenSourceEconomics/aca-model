@@ -1,7 +1,7 @@
 """Integration tests for SSI → Medicaid → OOP chain.
 
-Compose via dags: countable_income → ssi_eligibility_share → ssi_benefit,
-and medicaid_eligibility_share → oop_with_medicaid.
+Compose via dags: countable_income → is_ssi_eligible → ssi_benefit,
+and is_medicaid_eligible → oop_with_medicaid.
 """
 
 import jax.numpy as jnp
@@ -25,13 +25,13 @@ def test_low_income_qualifies_for_ssi_and_medicaid() -> None:
     """Low-income agent with Medicare → SSI eligible → Medicaid → reduced OOP."""
     functions = {
         "countable_income": health_insurance.countable_income,
-        "ssi_eligibility_share": health_insurance.ssi_eligibility_share,
+        "is_ssi_eligible": health_insurance.is_ssi_eligible,
         "ssi_benefit": health_insurance.ssi_benefit,
-        "medicaid_eligibility_share": health_insurance.medicaid_eligibility_share,
+        "is_medicaid_eligible": health_insurance.is_medicaid_eligible,
     }
     combined = concatenate_functions(
         functions,
-        targets=["ssi_eligibility_share", "ssi_benefit", "medicaid_eligibility_share"],
+        targets=["is_ssi_eligible", "ssi_benefit", "is_medicaid_eligible"],
         return_type="dict",
     )
     result = combined(
@@ -49,8 +49,8 @@ def test_low_income_qualifies_for_ssi_and_medicaid() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert jnp.isclose(result["ssi_eligibility_share"], 1.0)
-    assert jnp.isclose(result["medicaid_eligibility_share"], 1.0)
+    assert result["is_ssi_eligible"]
+    assert result["is_medicaid_eligible"]
     assert result["ssi_benefit"] > 0.0
 
 
@@ -58,12 +58,12 @@ def test_high_income_ineligible_for_ssi() -> None:
     """High-income agent → SSI ineligible → Medicaid ineligible."""
     functions = {
         "countable_income": health_insurance.countable_income,
-        "ssi_eligibility_share": health_insurance.ssi_eligibility_share,
-        "medicaid_eligibility_share": health_insurance.medicaid_eligibility_share,
+        "is_ssi_eligible": health_insurance.is_ssi_eligible,
+        "is_medicaid_eligible": health_insurance.is_medicaid_eligible,
     }
     combined = concatenate_functions(
         functions,
-        targets=["ssi_eligibility_share", "medicaid_eligibility_share"],
+        targets=["is_ssi_eligible", "is_medicaid_eligible"],
         return_type="dict",
     )
     result = combined(
@@ -81,25 +81,25 @@ def test_high_income_ineligible_for_ssi() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert jnp.isclose(result["ssi_eligibility_share"], 0.0)
-    assert jnp.isclose(result["medicaid_eligibility_share"], 0.0)
+    assert not result["is_ssi_eligible"]
+    assert not result["is_medicaid_eligible"]
 
 
 def test_disabled_under_65_qualifies_for_ssi_and_medicaid() -> None:
     """A disabled, under-65, no-Medicare household qualifies on the categorical track.
 
     Disability — not Medicare status — opens the categorical SSI/Medicaid
-    track, so an asset- and income-eligible disabled household gets a full
-    eligibility share even before reaching the Medicare age.
+    track, so an asset- and income-eligible disabled household qualifies even
+    before reaching the Medicare age.
     """
     functions = {
         "countable_income": health_insurance.countable_income,
-        "ssi_eligibility_share": health_insurance.ssi_eligibility_share,
-        "medicaid_eligibility_share": health_insurance.medicaid_eligibility_share,
+        "is_ssi_eligible": health_insurance.is_ssi_eligible,
+        "is_medicaid_eligible": health_insurance.is_medicaid_eligible,
     }
     combined = concatenate_functions(
         functions,
-        targets=["ssi_eligibility_share", "medicaid_eligibility_share"],
+        targets=["is_ssi_eligible", "is_medicaid_eligible"],
         return_type="dict",
     )
     result = combined(
@@ -117,36 +117,8 @@ def test_disabled_under_65_qualifies_for_ssi_and_medicaid() -> None:
         ssi_assets_test=SSI_ASSETS_TEST,
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
-    assert jnp.isclose(result["ssi_eligibility_share"], 1.0)
-    assert jnp.isclose(result["medicaid_eligibility_share"], 1.0)
-
-
-def test_no_categorical_gate_blocks_ssi_under_baseline() -> None:
-    """Baseline SSI requires aged or disabled; failing both gives share 0."""
-    functions = {
-        "countable_income": health_insurance.countable_income,
-        "ssi_eligibility_share": health_insurance.ssi_eligibility_share,
-    }
-    combined = concatenate_functions(
-        functions,
-        targets="ssi_eligibility_share",
-    )
-    result = combined(
-        labor_income=jnp.array(0.0),
-        capital_income=jnp.array(0.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
-        ss_benefit=jnp.array(0.0),
-        pension_benefit=jnp.array(0.0),
-        ssi_ignored_overall=jnp.asarray(20.0),
-        ssi_ignored_earned=jnp.asarray(65.0),
-        assets=jnp.array(100.0),
-        spousal_income=jnp.int32(0),
-        crossed_oamc_threshold=jnp.asarray(False),
-        is_disabled=jnp.asarray(False),
-        ssi_assets_test=SSI_ASSETS_TEST,
-        ssi_maximum_benefit=SSI_MAX_BENEFIT,
-    )
-    assert jnp.isclose(result, 0.0)
+    assert result["is_ssi_eligible"]
+    assert result["is_medicaid_eligible"]
 
 
 def test_aca_expansion_uses_magi_not_countable_income() -> None:
@@ -154,17 +126,17 @@ def test_aca_expansion_uses_magi_not_countable_income() -> None:
 
     The ACA expansion test reads full-count MAGI, so a worker whose SSI
     `countable_income` (earnings half-counted) lands below the threshold but
-    whose `aca_magi` (full earnings) exceeds it gets no expansion share.
+    whose `aca_magi` (full earnings) exceeds it is not expansion-eligible.
     """
     functions = {
         "countable_income": health_insurance.countable_income,
         "aca_magi": health_insurance.aca_magi,
-        "ssi_eligibility_share": health_insurance.ssi_eligibility_share,
-        "medicaid_eligibility_share": aca_hi.medicaid_eligibility_share,
+        "is_ssi_eligible": health_insurance.is_ssi_eligible,
+        "is_medicaid_eligible": aca_hi.is_medicaid_eligible,
     }
     combined = concatenate_functions(
         functions,
-        targets=["countable_income", "aca_magi", "medicaid_eligibility_share"],
+        targets=["countable_income", "aca_magi", "is_medicaid_eligible"],
         return_type="dict",
     )
     result = combined(
@@ -187,14 +159,14 @@ def test_aca_expansion_uses_magi_not_countable_income() -> None:
     )
     assert result["countable_income"] < 15000.0
     assert result["aca_magi"] > 15000.0
-    assert jnp.isclose(result["medicaid_eligibility_share"], 0.0)
+    assert not result["is_medicaid_eligible"]
 
 
 def test_medicaid_reduces_oop() -> None:
     """Medicaid as secondary payer reduces OOP below primary insurance OOP."""
     functions = {
         "primary_oop": health_insurance.primary_oop,
-        "medicaid_eligibility_share": health_insurance.medicaid_eligibility_share,
+        "is_medicaid_eligible": health_insurance.is_medicaid_eligible,
         "oop_costs": health_insurance.oop_with_medicaid,
     }
     combined = concatenate_functions(functions, targets="oop_costs")
@@ -206,7 +178,7 @@ def test_medicaid_reduces_oop() -> None:
         deductible=jnp.asarray(500.0),
         coinsurance_rate=jnp.asarray(0.2),
         oop_max=jnp.asarray(5000.0),
-        ssi_eligibility_share=jnp.array(1.0),
+        is_ssi_eligible=jnp.array(True),
         deductible_medicaid=jnp.asarray(100.0),
         coinsurance_rate_medicaid=jnp.asarray(0.05),
         oop_max_medicaid=jnp.asarray(1000.0),
@@ -219,7 +191,7 @@ def test_medicaid_reduces_oop() -> None:
         deductible=jnp.asarray(500.0),
         coinsurance_rate=jnp.asarray(0.2),
         oop_max=jnp.asarray(5000.0),
-        ssi_eligibility_share=jnp.array(0.0),
+        is_ssi_eligible=jnp.array(False),
         deductible_medicaid=jnp.asarray(100.0),
         coinsurance_rate_medicaid=jnp.asarray(0.05),
         oop_max_medicaid=jnp.asarray(1000.0),

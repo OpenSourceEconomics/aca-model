@@ -5,7 +5,6 @@ build_common_functions. No policy logic, no HIS-specific conditionals.
 """
 
 import functools
-import itertools
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -43,7 +42,7 @@ from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment import pensions, social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
-SolverName = Literal["brute_force", "dcegm"]
+SolverName = Literal["brute_force", "dcegm", "nbegm"]
 
 
 @categorical(ordered=False)
@@ -195,7 +194,7 @@ config = MODEL_CONFIG
 
 @dataclass(frozen=True)
 class Grids:
-    assets: LinSpacedGrid | PiecewiseLinSpacedGrid
+    assets: LinSpacedGrid
     aime: PiecewiseLinSpacedGrid
     pension_wealth: LinSpacedGrid
     consumption_dollars: IrregSpacedGrid
@@ -286,10 +285,11 @@ def build_grids(
     )
 
     return Grids(
-        assets=_build_assets_grid(
-            grid_config=grid_config,
-            fixed_params=fixed_params,
-            assets_start=assets_start,
+        assets=LinSpacedGrid(
+            start=assets_start,
+            stop=500_000.0,
+            n_points=grid_config.n_assets_gridpoints,
+            batch_size=grid_config.n_assets_batch_size,
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         pension_wealth=_PENSION_WEALTH_GRID,
@@ -304,118 +304,6 @@ def build_grids(
         pref_type=pref_type_grid,
         grid_config=grid_config,
     )
-
-
-# Smallest assets-grid budget that gets dedicated SSI-band nodes. Below
-# this (smoke-test sizes) there is no base resolution worth refining, so
-# the grid stays plain linspaced.
-MIN_ASSETS_GRIDPOINTS_FOR_BAND_NODES = 8
-
-_ASSETS_GRID_STOP = 500_000.0
-
-
-def _build_assets_grid(
-    *,
-    grid_config: GridConfig,
-    fixed_params: UserParams,
-    assets_start: float,
-) -> LinSpacedGrid | PiecewiseLinSpacedGrid:
-    """Return the assets grid, with dedicated nodes across each SSI band.
-
-    Each distinct `ssi_assets_test` value `t` (one per household type)
-    gets nodes at `{t - h, t, t + h}` with
-    `h = ELIGIBILITY_BAND_HALF_WIDTH`, so the smoothed eligibility ramp
-    is resolved at node resolution — a band narrower than a grid cell is
-    a cliff to any solver that reasons per node. The band nodes sit on
-    top of the configured base resolution, which spreads over the
-    segments between bands proportionally to their span (at least two
-    points per segment, the piecewise-grid minimum). Budgets below
-    `MIN_ASSETS_GRIDPOINTS_FOR_BAND_NODES` keep the plain linspaced grid.
-    """
-    n_base = grid_config.n_assets_gridpoints
-    half_width = health_insurance.ELIGIBILITY_BAND_HALF_WIDTH
-    thresholds = sorted(
-        {
-            float(v)
-            for v in np.asarray(fixed_params["ssi_assets_test"])
-            if assets_start < float(v) - half_width
-            and float(v) + half_width < _ASSETS_GRID_STOP
-        }
-    )
-    if n_base < MIN_ASSETS_GRIDPOINTS_FOR_BAND_NODES or not thresholds:
-        return LinSpacedGrid(
-            start=assets_start,
-            stop=_ASSETS_GRID_STOP,
-            n_points=n_base,
-            batch_size=grid_config.n_assets_batch_size,
-        )
-    _fail_if_bands_overlap(thresholds=thresholds, half_width=half_width)
-
-    outer_bounds = [
-        (assets_start, thresholds[0] - half_width),
-        *[
-            (lo + half_width, hi - half_width)
-            for lo, hi in itertools.pairwise(thresholds)
-        ],
-        (thresholds[-1] + half_width, _ASSETS_GRID_STOP),
-    ]
-    outer_n_points = _allocate_points_by_span(bounds=outer_bounds, total=n_base)
-
-    segments: list[PiecewiseGridSegment] = []
-    for (lo, hi), n_outer, threshold in zip(
-        outer_bounds[:-1], outer_n_points[:-1], thresholds, strict=True
-    ):
-        segments.append(
-            PiecewiseGridSegment(interval=f"[{lo}, {hi})", n_points=n_outer)
-        )
-        segments.append(
-            PiecewiseGridSegment(interval=f"[{hi}, {threshold})", n_points=2)
-        )
-        segments.append(
-            PiecewiseGridSegment(
-                interval=f"[{threshold}, {threshold + half_width})", n_points=2
-            )
-        )
-    final_lo, final_hi = outer_bounds[-1]
-    segments.append(
-        PiecewiseGridSegment(
-            interval=f"[{final_lo}, {final_hi}]", n_points=outer_n_points[-1]
-        )
-    )
-    return PiecewiseLinSpacedGrid(
-        segments=tuple(segments), batch_size=grid_config.n_assets_batch_size
-    )
-
-
-def _allocate_points_by_span(
-    *, bounds: list[tuple[float, float]], total: int
-) -> list[int]:
-    """Split `total` points over segments proportionally to their span.
-
-    Every segment gets at least the two points `PiecewiseLinSpacedGrid`
-    requires; the remainder goes one-by-one to the segment with the
-    largest gap between its proportional entitlement and its current
-    allocation.
-    """
-    spans = [hi - lo for lo, hi in bounds]
-    full_span = sum(spans)
-    entitlements = [total * span / full_span for span in spans]
-    alloc = [2] * len(bounds)
-    for _ in range(max(0, total - 2 * len(bounds))):
-        shortfalls = [e - a for e, a in zip(entitlements, alloc, strict=True)]
-        alloc[shortfalls.index(max(shortfalls))] += 1
-    return alloc
-
-
-def _fail_if_bands_overlap(*, thresholds: list[float], half_width: float) -> None:
-    for lo, hi in itertools.pairwise(thresholds):
-        if hi - lo <= 2.0 * half_width:
-            msg = (
-                f"SSI assets-test thresholds {lo} and {hi} are closer than "
-                f"the {2 * half_width}-wide smoothing band; bands must not "
-                "overlap."
-            )
-            raise ValueError(msg)
 
 
 def get_hcc_persistent_shock(*, grid_config: GridConfig) -> RouwenhorstAR1Process:
@@ -566,14 +454,27 @@ def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     return states
 
 
-def build_actions(spec: RegimeSpec, grids: Grids) -> dict:
-    """Build the action dict for a non-dead regime."""
+def build_actions(
+    spec: RegimeSpec,
+    grids: Grids,
+    *,
+    drop_buy_private: bool = False,
+    drop_labor_supply: bool = False,
+) -> dict:
+    """Build the action dict for a non-dead regime.
+
+    The `drop_*` flags fix a discrete action to a single level for the NBEGM
+    M1 vertical slice (its case-piece envelope handles at most one discrete
+    action). The dropped action's former consumers are rebound to the fixed
+    level at the regime builder, so removing it here is the action side of the
+    dags remove-and-fix.
+    """
     actions: dict = {}
     if spec["ss"] == "choose":
         actions["claim_ss"] = DiscreteGrid(ClaimedSS)
-    if spec["canwork"] == "canwork":
+    if spec["canwork"] == "canwork" and not drop_labor_supply:
         actions["labor_supply"] = DiscreteGrid(LaborSupply)
-    if spec["his"] == "nongroup" and spec["mc"] == "nomc":
+    if spec["his"] == "nongroup" and spec["mc"] == "nomc" and not drop_buy_private:
         actions["buy_private"] = DiscreteGrid(BuyPrivate)
     actions["consumption_dollars"] = grids.consumption_dollars
     return actions
@@ -650,7 +551,7 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
         for name in build_model_functions(solver=solver)
         if name not in _DEAD_KEEPS
     }
-    constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
+    constraint_masks = dict.fromkeys(build_model_constraints())
     return Regime(
         transition=None,
         functions={"utility": preferences.bequest, **function_masks},
@@ -688,13 +589,18 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     Contains exactly the functions that are identical across all 18 living
     regimes AND are never swapped by the ACA policy overlay. Spec-dependent
     selections (`good_health`, `leisure`, …) and overlay-swapped names
-    (`medicaid_eligibility_share`, `cash_on_hand`, `primary_oop`) stay
-    regime-level in `build_common_functions`. The `dead` regime masks every entry the
+    (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`) stay regime-level
+    in `build_common_functions`. The `dead` regime masks every entry the
     bequest DAG does not read (see `build_dead_regime`). Under DC-EGM the
     solver-contract functions join the broadcast set.
     """
     functions: dict = {}
     if solver == "dcegm":
+        # DC-EGM solves every living regime, so the solver-contract functions are
+        # broadcast model-wide. NBEGM solves only the M1 regime, which carries
+        # them at regime level (see `_nongroup.build_regime`); broadcasting them
+        # would force every brute regime to supply the solver's
+        # `marginal_continuation`.
         functions |= build_dcegm_functions()
     functions["total_health_costs"] = health_insurance.total_costs
     functions["oop_costs"] = health_insurance.oop_with_medicaid
@@ -712,7 +618,7 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
 
     # SSI/Medicaid (eligibility itself is overlay-swapped, hence regime-level)
     functions["countable_income"] = health_insurance.countable_income
-    functions["ssi_eligibility_share"] = health_insurance.ssi_eligibility_share
+    functions["is_ssi_eligible"] = health_insurance.is_ssi_eligible
     functions["ssi_benefit"] = health_insurance.ssi_benefit
 
     # Taxes
@@ -747,15 +653,29 @@ def build_dcegm_functions() -> dict:
     }
 
 
-def build_model_constraints(*, solver: SolverName = "brute_force") -> dict:
+def build_nbegm_functions() -> dict:
+    """Build the regime functions the NBEGM solver-contract requires.
+
+    NBEGM inverts the Euler equation internally (CRRA from the utility
+    parameters), so unlike DC-EGM it needs only the savings-form budget
+    (`resources`) and the post-decision savings node — not
+    `inverse_marginal_utility`.
+    """
+    return {
+        "resources": assets_and_income.resources,
+        "savings": assets_and_income.savings,
+    }
+
+
+def build_model_constraints() -> dict:
     """Build the model-level constraints broadcast into every regime.
 
     `dead` masks the borrowing constraint — it has no consumption action.
-    Under DC-EGM there is no explicit borrowing constraint: the savings
-    grid's lower bound enforces it.
+    The constraint is broadcast under every solver: an EGM solve (DC-EGM or
+    NBEGM) enforces the borrowing limit through the savings grid's lower
+    bound, but forward simulation re-decides consumption by an argmax over
+    the consumption grid and needs the explicit feasibility mask.
     """
-    if solver == "dcegm":
-        return {}
     return {"borrowing_constraint": assets_and_income.borrowing_constraint}
 
 
@@ -847,9 +767,7 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     functions["aca_magi"] = health_insurance.aca_magi
 
     # Swapped per policy variant by the ACA overlay, hence regime-level
-    functions["medicaid_eligibility_share"] = (
-        health_insurance.medicaid_eligibility_share
-    )
+    functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
     functions["premium_default"] = assets_and_income.premium_default
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
 
@@ -900,10 +818,7 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
       `imputed_pension_wealth_next_period` feed the solve-phase
       `pension_assets_adjustment`, which reconciles the accrual-evolved
       pension with next period's AIME imputation; in simulate the adjustment
-      is zero because the true wealth is carried directly. The imputation is
-      the `medicaid_eligibility_share`-weighted mixture of two legs — the
-      deterministic `target_his` lookup and the nongroup (Medicaid-target)
-      lookup — matching the probability mixture in the regime transition.
+      is zero because the true wealth is carried directly.
     """
     can_work = spec["canwork"] == "canwork"
 
@@ -922,12 +837,6 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
         else health_insurance.target_his_forcedout
     )
     functions["pia_unadjusted_next_period"] = social_security.pia_unadjusted_next_period
-    functions["imputed_pension_wealth_next_period_no_medicaid"] = (
-        pensions.imputed_pension_wealth_next_period_no_medicaid
-    )
-    functions["imputed_pension_wealth_next_period_medicaid"] = (
-        pensions.imputed_pension_wealth_next_period_medicaid
-    )
     functions["imputed_pension_wealth_next_period"] = (
         pensions.imputed_pension_wealth_next_period
     )
@@ -1096,7 +1005,7 @@ def _build_per_target_regime_assets(
     targets use the full `next_assets` with the pension correction.
     Under DC-EGM both laws take their post-decision (savings) form.
     """
-    if solver == "dcegm":
+    if solver in ("dcegm", "nbegm"):
         living_law = assets_and_income.next_assets_from_savings
         dead_law = assets_and_income.next_assets_when_dead_from_savings
     else:

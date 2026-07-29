@@ -265,13 +265,12 @@ def test_convert_total_ben_to_pia_zero_mtr() -> None:
 def test_imputed_pension_wealth_uses_unadjusted_pia() -> None:
     """Next-period pension wealth is imputed from the unadjusted PIA channel.
 
-    The deterministic-target leg `imputed_pension_wealth_next_period_no_medicaid`
-    reads `pia_unadjusted_next_period` (pure labor accrual) and returns
-    `Γ · pbmax(pia_unadjusted_next_period)`. Feeding the unreduced PIA yields the
-    unreduced imputed wealth, independent of any claim-age reduction baked into
-    the carried AIME.
+    `imputed_pension_wealth_next_period` reads `pia_unadjusted_next_period` (pure labor
+    accrual) and returns `Γ · pbmax(pia_unadjusted_next_period)`. Feeding the unreduced
+    PIA yields the unreduced imputed wealth, independent of any claim-age
+    reduction baked into the carried AIME.
     """
-    result = pensions.imputed_pension_wealth_next_period_no_medicaid(
+    result = pensions.imputed_pension_wealth_next_period(
         pia_unadjusted_next_period=jnp.array(500.0),
         target_his=jnp.int32(0),
         period=jnp.int32(28),

@@ -2,9 +2,33 @@
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from aca_model.agent import labor_market
 from aca_model.agent.labor_market import LaborSupply
+
+
+def test_hours_values_is_host_array_so_import_allocates_no_device_memory() -> None:
+    """`HOURS_VALUES` is a host (NumPy) array, not a device-pinned JAX array.
+
+    A module-level JAX array materializes on the default device the moment the
+    module is imported, reserving the GPU memory pool in every process that
+    imports the model — including the estimation orchestrator, which only
+    launches GPU worker ranks and must leave the devices free for them.
+    """
+    assert isinstance(labor_market.HOURS_VALUES, np.ndarray)
+
+
+@pytest.mark.parametrize(
+    ("choice", "expected_hours"),
+    [(0, 0.0), (1, 1000.0), (2, 1500.0), (3, 2000.0), (4, 2500.0)],
+)
+def test_working_hours_value_maps_choice_to_annual_hours(
+    choice: int, expected_hours: float
+) -> None:
+    """Each labor-supply choice maps to its annual hours worked."""
+    result = labor_market.working_hours_value(jnp.asarray(choice, dtype=jnp.int32))
+    np.testing.assert_allclose(float(result), expected_hours)
 
 
 def test_wage_combines_age_health_profile_with_residual() -> None:

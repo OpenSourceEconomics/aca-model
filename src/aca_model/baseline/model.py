@@ -23,7 +23,6 @@ from aca_model.baseline.regimes import (
     build_model_slots,
 )
 from aca_model.config import MODEL_CONFIG, GridConfig
-from aca_model.environment.pensions import with_nongroup_imputation_slices
 
 
 def create_model(
@@ -84,7 +83,6 @@ def create_model(
     _fail_if_dcegm_without_consumption_points(
         solver=solver, consumption_dollars_points=consumption_dollars_points
     )
-    fixed_params = with_nongroup_imputation_slices(fixed_params)
     regimes = build_all_regimes(
         grid_config=grid_config,
         fixed_params=fixed_params,
