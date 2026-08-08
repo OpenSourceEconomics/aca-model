@@ -107,6 +107,20 @@ class GridConfig:
     # either way — the knob trades peak device memory against a sequential scan.
     # Only consulted under `solver="nbegm"`.
     n_nbegm_envelope_segment_block_size: int = 0
+    # Which arithmetic decides ownership in the merged upper envelope:
+    # - "certified" (default) — candidates are compared in double-double precision
+    #   and no winner is published where none is separated, so the reported owner is
+    #   one the arithmetic could prove. Ordering survives the cancellation a nearly
+    #   tied crossing produces, at roughly an order of magnitude more arithmetic per
+    #   read — and the envelope read is the dominant per-cell cost of a case-piece
+    #   solve, so this is the setting that decides the solver's runtime.
+    # - "ordinary" — each candidate is read in the working format and the largest
+    #   owns the query. Adequate wherever candidate values are separated by much
+    #   more than the format's resolution at their own magnitude.
+    # Incompatible with a positive `n_nbegm_envelope_segment_block_size`, which
+    # selects a blocked scan that carries the certified arithmetic only.
+    # Only consulted under `solver="nbegm"`.
+    nbegm_envelope_arithmetic: Literal["certified", "ordinary"] = "certified"
     # Streams both NBEGM ride-along cores (continuation fan-out and envelope
     # solve) over ride-cell blocks of this size instead of vmapping the whole
     # flattened ride mesh at once — the dominant peak-memory term at production

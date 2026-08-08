@@ -54,6 +54,10 @@ def build_nbegm_solver(grids: Grids) -> NBEGM:
         envelope_segment_block_size=(
             grids.grid_config.n_nbegm_envelope_segment_block_size
         ),
+        # Which arithmetic decides envelope ownership per the grid config;
+        # "certified" is exact and can abstain, "ordinary" reads in the working
+        # format at a fraction of the cost.
+        envelope_arithmetic=grids.grid_config.nbegm_envelope_arithmetic,
         # Stream both ride-along cores over ride-cell blocks per the grid config;
         # `0` vmaps the whole flattened mesh at once.
         cell_block_size=grids.grid_config.n_nbegm_cell_block_size,
