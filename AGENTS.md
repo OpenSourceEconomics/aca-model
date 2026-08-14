@@ -29,7 +29,7 @@ Four subpackages, cleanly separated by concern:
   preferences (CES utility, leisure, bequests), asset transitions & cash-on-hand
 - **`environment/`** — External rules: Social Security (AIME→PIA, earnings test, SSDI),
   private pensions, federal income & payroll taxes
-- **`baseline/`** — Pre-ACA model specification: 18 active regimes + dead state, health
+- **`baseline/`** — Pre-ACA model specification: 36 active regimes + dead state, health
   insurance premiums/OOP, SSI/Medicaid eligibility
 - **`aca/`** — ACA policy overlay: mandate penalty, premium subsidies, cost-sharing
   reductions, Medicaid expansion. Applied via function swapping on baseline regimes.
@@ -40,19 +40,30 @@ The model is built on **pylcm** (`lcm.Model`, `lcm.Regime`). Each regime is a
 self-contained dynamic program with states, actions, functions, state transitions, and
 regime transitions.
 
-**18 regimes** are factored along 4 dimensions:
+**36 regimes** are factored along 5 dimensions:
 
 ```
-{HIS} × {Medicare} × {SS} × {Labor}
+{Marital} × {HIS} × {Medicare} × {SS} × {Labor}
+Marital ∈ {single, married}
 HIS ∈ {retiree, tied, nongroup}
 Medicare ∈ {nomc, dimc, oamc}
 SS ∈ {inelig, choose, forced}
 Labor ∈ {canwork, forcedout}
 ```
 
-Only 18 of the 54 possible combinations are active. Regime names encode the spec:
-`"retiree_nomc_inelig_canwork"`. The `REGIME_SPECS` dict in
+Only 18 of the 54 `{HIS} × {Medicare} × {SS} × {Labor}` combinations are active, and
+each comes in a single and a married copy. Regime names encode the spec:
+`"single_retiree_nomc_inelig_canwork"`. The `REGIME_SPECS` dict in
 `baseline/regimes/_common.py` drives all regime construction programmatically.
+
+Marital status is a regime axis rather than a state because it never changes within a
+household's path and everything that reads it — the equivalence scale, spousal income,
+the marital-indexed tax and premium breakpoints — is then a regime-fixed constant. What
+survives as a state is `spousal_income ∈ {no_inc, has_inc}`, carried only inside the
+married regimes. The transition kernels index the *source* code
+`z ∈ {single, married_no_inc, married_has_inc}`, not the collapsed marital status:
+`P(single' | z)` differs between the two married rows, so a kernel indexed by marital
+status alone would misstate the chain.
 
 ### Regime Construction
 
@@ -103,7 +114,7 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   computed by any DAG function (e.g., `benefit_withheld_fraction` in inelig regimes),
   pylcm treats it as an external parameter supplied via the params dict. This is
   intentional — don't add stub functions to "fix" missing DAG entries.
-- **`buy_private` action**: Only nongroup-nomc regimes (2 of 18) have `buy_private` as
+- **`buy_private` action**: Only nongroup-nomc regimes (4 of 36) have `buy_private` as
   an action. Those use `premium()` and `primary_oop()` which condition on it. All other
   regimes use `premium_insured()` / `premium_retired()` and `oop_costs` directly — no
   `buy_private` parameter at all.

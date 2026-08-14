@@ -562,7 +562,7 @@ def _select_leisure(spec: RegimeSpec) -> Callable[..., Any]:
 def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     """Build the model-level functions broadcast into every regime.
 
-    Contains exactly the functions that are identical across all 18 living
+    Contains exactly the functions that are identical across all 36 living
     regimes AND are never swapped by the ACA policy overlay. Spec-dependent
     selections (`good_health`, `leisure`, …) and overlay-swapped names
     (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`) stay regime-level

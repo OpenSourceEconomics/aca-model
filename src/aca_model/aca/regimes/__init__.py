@@ -28,7 +28,7 @@ def build_all_regimes(
     solver: SolverName = "brute_force",
     consumption_dollars_points: tuple[float, ...] | None = None,
 ) -> dict[str, Regime]:
-    """Build all 19 regimes with ACA policy overrides."""
+    """Build all 37 regimes with ACA policy overrides."""
     regimes = baseline_build_all_regimes(
         grid_config=grid_config,
         fixed_params=fixed_params,

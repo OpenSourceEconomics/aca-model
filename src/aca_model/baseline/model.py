@@ -71,8 +71,9 @@ def create_model(
             `inject_consumption_dollars_points`.
 
     Returns:
-        A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
-        ages 51-95. Regime names follow the `<his>_<medicare>_<ss>_<work>` scheme.
+        A pylcm Model with 37 regimes (36 non-terminal + dead) spanning ages
+        51-95. Regime names follow the
+        `<marital>_<his>_<medicare>_<ss>_<work>` scheme.
 
     """
     ages = AgeGrid(
