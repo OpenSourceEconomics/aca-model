@@ -119,6 +119,31 @@ def _seeded_panel(model: Model, initial_conditions: dict) -> pd.DataFrame:
     return df.sort_values(["subject_id", "period"]).reset_index(drop=True)
 
 
+# Building the model and solving it each dominate a leg's wall time, so the
+# legs share them: one model across all four, and one panel per distinct seed.
+# The two seeds are genuinely different runs — the mapped one carries the
+# pre-split reference's states, the fresh one is drawn under the split
+# encoding — so they cannot share a panel.
+@pytest.fixture(scope="module")
+def model() -> Model:
+    return _make_model()
+
+
+@pytest.fixture(scope="module")
+def mapped_panel(model: Model) -> pd.DataFrame:
+    """The panel the pre-split reference's seed produces under the split."""
+    return _seeded_panel(model, _mapped_initial_conditions(model, _reference()))
+
+
+@pytest.fixture(scope="module")
+def fresh_panel(model: Model) -> pd.DataFrame:
+    """The panel a seed drawn under the split encoding produces."""
+    return _seeded_panel(
+        model,
+        get_benchmark_initial_conditions(model=model, n_subjects=N_SUBJECTS, seed=SEED),
+    )
+
+
 @pytest.mark.parametrize("name", list(REGIME_SPECS))
 def test_regime_probabilities_sum_to_one_over_retained_targets(name: str) -> None:
     """Every regime's declared targets carry the whole unit of probability.
@@ -185,19 +210,17 @@ def _source_codes(panel: pd.DataFrame) -> np.ndarray:
 
 
 @pytest.mark.long_running
-def test_simulated_transitions_reproduce_the_implied_three_by_three() -> None:
+def test_simulated_transitions_reproduce_the_implied_three_by_three(
+    model: Model, fresh_panel: pd.DataFrame
+) -> None:
     """Simulated `z -> z'` frequencies match the chain the model composes.
 
     The split replaces one three-category draw by a marital draw and a
     conditional one; the composed kernel must be the original, which the
     realised frequencies confirm up to sampling error.
     """
-    model = _make_model()
     _, _, params = get_benchmark_params(model=model)
-    panel = _seeded_panel(
-        model,
-        get_benchmark_initial_conditions(model=model, n_subjects=N_SUBJECTS, seed=SEED),
-    )
+    panel = fresh_panel
     expected = _implied_chain_from_params(params)
 
     codes = _source_codes(panel)
@@ -261,31 +284,31 @@ def _period_zero(panel: pd.DataFrame) -> pd.DataFrame:
 
 
 @pytest.mark.long_running
-def test_period_zero_value_matches_the_pre_split_encoding() -> None:
+def test_period_zero_value_matches_the_pre_split_encoding(
+    mapped_panel: pd.DataFrame,
+) -> None:
     """`V` at a mapped seed is the same number under both encodings.
 
     Period zero precedes every shock draw, so the recorded value is the value
     function evaluated at the seed — the quantity the split must preserve.
     """
     reference = _reference()
-    model = _make_model()
-    panel = _seeded_panel(model, _mapped_initial_conditions(model, reference))
 
-    new = _period_zero(panel)["value"].to_numpy()
+    new = _period_zero(mapped_panel)["value"].to_numpy()
     old = _period_zero(reference["panel"])["value"].to_numpy()
     max_error = float(np.abs(new - old).max())
     assert max_error <= _VALUE_ATOL, f"max absolute value deviation {max_error:.3e}"
 
 
 @pytest.mark.long_running
-def test_period_zero_policy_matches_the_pre_split_encoding() -> None:
+def test_period_zero_policy_matches_the_pre_split_encoding(
+    mapped_panel: pd.DataFrame,
+) -> None:
     """Every discrete decision at a mapped seed is identical under both
     encodings, once the regime name is stripped of its marital axis."""
     reference = _reference()
-    model = _make_model()
-    panel = _seeded_panel(model, _mapped_initial_conditions(model, reference))
 
-    new = _period_zero(panel)
+    new = _period_zero(mapped_panel)
     old = _period_zero(reference["panel"])
     for column in _DISCRETE_COLUMNS:
         if column not in old.columns:
@@ -298,14 +321,13 @@ def test_period_zero_policy_matches_the_pre_split_encoding() -> None:
 
 
 @pytest.mark.long_running
-def test_seed_maps_onto_the_regime_carrying_its_spousal_code() -> None:
+def test_seed_maps_onto_the_regime_carrying_its_spousal_code(model: Model) -> None:
     """The mapping sends each pre-split code to the regime that can hold it.
 
     Guards the mapping itself: `single` must land in a single regime, and both
     married codes in the married copy of the same regime.
     """
     reference = _reference()
-    model = _make_model()
     mapped = _mapped_initial_conditions(model, reference)
 
     ids_to_names = {int(v): k for k, v in model.regime_names_to_ids.items()}
