@@ -176,18 +176,19 @@ def test_regime_probabilities_sum_to_one_over_retained_targets(name: str) -> Non
         assert abs(retained - 1.0) <= _MASS_ATOL, f"age {age}: {retained!r}"
 
 
-def _implied_chain_from_params(params: dict) -> np.ndarray:
+def _implied_chain_from_params(fixed_params: dict) -> np.ndarray:
     """Return the `[n_ages, 3, 3]` chain the model's own factors compose to.
 
     Row `z` is `(pS(z), pM(z) q0(z), pM(z) q1(z))` read off the regime that
     carries source code `z`: the single regimes carry `z = single`, the
-    married ones both married codes.
+    married ones both married codes. Both kernels are data-derived, so they
+    live in `fixed_params` under the regime that holds them.
     """
-    single = params["single_retiree_nomc_inelig_canwork"]
-    married = params["married_retiree_nomc_inelig_canwork"]
-    single_marital = np.asarray(single["marital_probs"])
+    single = fixed_params["single_retiree_nomc_inelig_canwork"]
+    married = fixed_params["married_retiree_nomc_inelig_canwork"]
+    single_marital = np.asarray(single["marital_trans_probs"])
     single_income = np.asarray(single["spousal_income_trans_probs"])
-    married_marital = np.asarray(married["marital_probs"])
+    married_marital = np.asarray(married["marital_trans_probs"])
     married_income = np.asarray(married["spousal_income_trans_probs"])
 
     n_ages = single_marital.shape[0]
@@ -197,6 +198,24 @@ def _implied_chain_from_params(params: dict) -> np.ndarray:
     chain[:, 1:, 0] = married_marital[:, :, 0]
     chain[:, 1:, 1:] = married_marital[:, :, 1, None] * married_income
     return chain
+
+
+def test_factored_kernels_compose_to_a_row_stochastic_chain() -> None:
+    """Each source code's marital and within-marriage factors multiply back to
+    a unit of probability over the three target codes."""
+    fixed_params, _, _ = get_benchmark_params(model=None)
+    chain = _implied_chain_from_params(fixed_params)
+    np.testing.assert_allclose(chain.sum(axis=2), 1.0, rtol=0, atol=_MASS_ATOL)
+
+
+def test_factored_kernels_compose_to_nonnegative_probabilities() -> None:
+    """No composed `z -> z'` entry is negative.
+
+    A product of two valid factors cannot be, so a negative entry means the
+    slicing has misaligned an axis rather than that the data are bad.
+    """
+    fixed_params, _, _ = get_benchmark_params(model=None)
+    assert _implied_chain_from_params(fixed_params).min() >= 0.0
 
 
 def _source_codes(panel: pd.DataFrame) -> np.ndarray:
@@ -219,9 +238,9 @@ def test_simulated_transitions_reproduce_the_implied_three_by_three(
     conditional one; the composed kernel must be the original, which the
     realised frequencies confirm up to sampling error.
     """
-    _, _, params = get_benchmark_params(model=model)
+    fixed_params, _, _ = get_benchmark_params(model=model)
     panel = fresh_panel
-    expected = _implied_chain_from_params(params)
+    expected = _implied_chain_from_params(fixed_params)
 
     codes = _source_codes(panel)
     subject = panel["subject_id"].to_numpy()
@@ -283,6 +302,18 @@ def _period_zero(panel: pd.DataFrame) -> pd.DataFrame:
     return panel.loc[panel["period"] == 0].sort_values("subject_id")
 
 
+# An action a regime does not offer is recorded as missing rather than as a
+# value, and two missing entries are a match. Filling before stringifying is
+# what makes them compare equal: `astype("str")` keeps a missing entry missing,
+# and a missing entry never equals itself.
+_ABSENT = "<absent>"
+
+
+def _labels(values: pd.Series) -> np.ndarray:
+    """Return `values` as comparable string labels, absences included."""
+    return values.fillna(_ABSENT).astype("str").to_numpy(dtype=object)
+
+
 @pytest.mark.long_running
 def test_period_zero_value_matches_the_pre_split_encoding(
     mapped_panel: pd.DataFrame,
@@ -313,11 +344,10 @@ def test_period_zero_policy_matches_the_pre_split_encoding(
     for column in _DISCRETE_COLUMNS:
         if column not in old.columns:
             continue
-        left = new[column].astype("str").to_numpy()
+        left = _labels(new[column])
         if column == "regime_name":
             left = np.array([name.split("_", 1)[1] for name in left], dtype=object)
-        right = old[column].astype("str").to_numpy()
-        assert np.array_equal(left, right), column
+        assert np.array_equal(left, _labels(old[column])), column
 
 
 @pytest.mark.long_running
