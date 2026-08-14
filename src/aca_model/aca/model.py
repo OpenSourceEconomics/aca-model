@@ -44,7 +44,7 @@ def create_model(
             Not routed to the pylcm Model.
         derived_categoricals: Categorical mappings for `pd.Series`
             fixed_params index levels that aren't model state/action
-            grids — `target_his`, `his`, `good_health`, `is_married`,
+            grids — `target_his`, `his`, `good_health`, and
             `pref_type`.
         grid_config: Continuous-grid point counts.
         pref_type_grid: Pref-type `DiscreteGrid`.

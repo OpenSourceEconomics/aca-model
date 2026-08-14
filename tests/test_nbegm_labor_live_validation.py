@@ -27,7 +27,7 @@ from aca_model.baseline.regimes._common import Grids, RegimeSpec
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
-_M1_REGIME = "nongroup_nomc_inelig_canwork"
+_M1_REGIME = "single_nongroup_nomc_inelig_canwork"
 
 
 def _is_m1(spec: RegimeSpec) -> bool:

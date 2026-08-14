@@ -47,147 +47,94 @@ SolverName = Literal["brute_force", "dcegm", "nbegm"]
 
 @categorical(ordered=False)
 class RegimeId:
-    retiree_nomc_inelig_canwork: ScalarInt
-    tied_nomc_inelig_canwork: ScalarInt
-    nongroup_nomc_inelig_canwork: ScalarInt
-    retiree_dimc_inelig_canwork: ScalarInt
-    nongroup_dimc_inelig_canwork: ScalarInt
-    retiree_nomc_choose_canwork: ScalarInt
-    tied_nomc_choose_canwork: ScalarInt
-    nongroup_nomc_choose_canwork: ScalarInt
-    retiree_dimc_choose_canwork: ScalarInt
-    nongroup_dimc_choose_canwork: ScalarInt
-    retiree_oamc_choose_canwork: ScalarInt
-    tied_oamc_choose_canwork: ScalarInt
-    nongroup_oamc_choose_canwork: ScalarInt
-    retiree_oamc_forced_canwork: ScalarInt
-    tied_oamc_forced_canwork: ScalarInt
-    nongroup_oamc_forced_canwork: ScalarInt
-    retiree_oamc_forced_forcedout: ScalarInt
-    nongroup_oamc_forced_forcedout: ScalarInt
+    single_retiree_nomc_inelig_canwork: ScalarInt
+    single_tied_nomc_inelig_canwork: ScalarInt
+    single_nongroup_nomc_inelig_canwork: ScalarInt
+    single_retiree_dimc_inelig_canwork: ScalarInt
+    single_nongroup_dimc_inelig_canwork: ScalarInt
+    single_retiree_nomc_choose_canwork: ScalarInt
+    single_tied_nomc_choose_canwork: ScalarInt
+    single_nongroup_nomc_choose_canwork: ScalarInt
+    single_retiree_dimc_choose_canwork: ScalarInt
+    single_nongroup_dimc_choose_canwork: ScalarInt
+    single_retiree_oamc_choose_canwork: ScalarInt
+    single_tied_oamc_choose_canwork: ScalarInt
+    single_nongroup_oamc_choose_canwork: ScalarInt
+    single_retiree_oamc_forced_canwork: ScalarInt
+    single_tied_oamc_forced_canwork: ScalarInt
+    single_nongroup_oamc_forced_canwork: ScalarInt
+    single_retiree_oamc_forced_forcedout: ScalarInt
+    single_nongroup_oamc_forced_forcedout: ScalarInt
+    married_retiree_nomc_inelig_canwork: ScalarInt
+    married_tied_nomc_inelig_canwork: ScalarInt
+    married_nongroup_nomc_inelig_canwork: ScalarInt
+    married_retiree_dimc_inelig_canwork: ScalarInt
+    married_nongroup_dimc_inelig_canwork: ScalarInt
+    married_retiree_nomc_choose_canwork: ScalarInt
+    married_tied_nomc_choose_canwork: ScalarInt
+    married_nongroup_nomc_choose_canwork: ScalarInt
+    married_retiree_dimc_choose_canwork: ScalarInt
+    married_nongroup_dimc_choose_canwork: ScalarInt
+    married_retiree_oamc_choose_canwork: ScalarInt
+    married_tied_oamc_choose_canwork: ScalarInt
+    married_nongroup_oamc_choose_canwork: ScalarInt
+    married_retiree_oamc_forced_canwork: ScalarInt
+    married_tied_oamc_forced_canwork: ScalarInt
+    married_nongroup_oamc_forced_canwork: ScalarInt
+    married_retiree_oamc_forced_forcedout: ScalarInt
+    married_nongroup_oamc_forced_forcedout: ScalarInt
     dead: ScalarInt
 
 
 class RegimeSpec(TypedDict):
-    """Structural decomposition of a regime: (HIS, Medicare, SS, work) axes."""
+    """Structural decomposition of a regime: (marital, HIS, Medicare, SS, work)."""
 
+    marital: Literal["single", "married"]
     his: Literal["retiree", "tied", "nongroup"]
     mc: Literal["nomc", "dimc", "oamc"]
     ss: Literal["inelig", "choose", "forced"]
     canwork: Literal["canwork", "forcedout"]
 
 
-# {his}_{mc}_{ss}_{canwork}
+# The eighteen active combinations of the four within-marriage axes, in the
+# order their regime ids are assigned.
+_LIVING_AXES: tuple[tuple[str, str, str, str], ...] = (
+    ("retiree", "nomc", "inelig", "canwork"),
+    ("tied", "nomc", "inelig", "canwork"),
+    ("nongroup", "nomc", "inelig", "canwork"),
+    ("retiree", "dimc", "inelig", "canwork"),
+    ("nongroup", "dimc", "inelig", "canwork"),
+    ("retiree", "nomc", "choose", "canwork"),
+    ("tied", "nomc", "choose", "canwork"),
+    ("nongroup", "nomc", "choose", "canwork"),
+    ("retiree", "dimc", "choose", "canwork"),
+    ("nongroup", "dimc", "choose", "canwork"),
+    ("retiree", "oamc", "choose", "canwork"),
+    ("tied", "oamc", "choose", "canwork"),
+    ("nongroup", "oamc", "choose", "canwork"),
+    ("retiree", "oamc", "forced", "canwork"),
+    ("tied", "oamc", "forced", "canwork"),
+    ("nongroup", "oamc", "forced", "canwork"),
+    ("retiree", "oamc", "forced", "forcedout"),
+    ("nongroup", "oamc", "forced", "forcedout"),
+)
+
+# Marital status is a regime axis; only `married` carries `spousal_income`.
+MARITAL_STATUSES: tuple[str, str] = ("single", "married")
+
+# {marital}_{his}_{mc}_{ss}_{canwork}
 REGIME_SPECS: dict[str, RegimeSpec] = {
-    "retiree_nomc_inelig_canwork": {
-        "his": "retiree",
-        "mc": "nomc",
-        "ss": "inelig",
-        "canwork": "canwork",
-    },
-    "tied_nomc_inelig_canwork": {
-        "his": "tied",
-        "mc": "nomc",
-        "ss": "inelig",
-        "canwork": "canwork",
-    },
-    "nongroup_nomc_inelig_canwork": {
-        "his": "nongroup",
-        "mc": "nomc",
-        "ss": "inelig",
-        "canwork": "canwork",
-    },
-    "retiree_dimc_inelig_canwork": {
-        "his": "retiree",
-        "mc": "dimc",
-        "ss": "inelig",
-        "canwork": "canwork",
-    },
-    "nongroup_dimc_inelig_canwork": {
-        "his": "nongroup",
-        "mc": "dimc",
-        "ss": "inelig",
-        "canwork": "canwork",
-    },
-    "retiree_nomc_choose_canwork": {
-        "his": "retiree",
-        "mc": "nomc",
-        "ss": "choose",
-        "canwork": "canwork",
-    },
-    "tied_nomc_choose_canwork": {
-        "his": "tied",
-        "mc": "nomc",
-        "ss": "choose",
-        "canwork": "canwork",
-    },
-    "nongroup_nomc_choose_canwork": {
-        "his": "nongroup",
-        "mc": "nomc",
-        "ss": "choose",
-        "canwork": "canwork",
-    },
-    "retiree_dimc_choose_canwork": {
-        "his": "retiree",
-        "mc": "dimc",
-        "ss": "choose",
-        "canwork": "canwork",
-    },
-    "nongroup_dimc_choose_canwork": {
-        "his": "nongroup",
-        "mc": "dimc",
-        "ss": "choose",
-        "canwork": "canwork",
-    },
-    "retiree_oamc_choose_canwork": {
-        "his": "retiree",
-        "mc": "oamc",
-        "ss": "choose",
-        "canwork": "canwork",
-    },
-    "tied_oamc_choose_canwork": {
-        "his": "tied",
-        "mc": "oamc",
-        "ss": "choose",
-        "canwork": "canwork",
-    },
-    "nongroup_oamc_choose_canwork": {
-        "his": "nongroup",
-        "mc": "oamc",
-        "ss": "choose",
-        "canwork": "canwork",
-    },
-    "retiree_oamc_forced_canwork": {
-        "his": "retiree",
-        "mc": "oamc",
-        "ss": "forced",
-        "canwork": "canwork",
-    },
-    "tied_oamc_forced_canwork": {
-        "his": "tied",
-        "mc": "oamc",
-        "ss": "forced",
-        "canwork": "canwork",
-    },
-    "nongroup_oamc_forced_canwork": {
-        "his": "nongroup",
-        "mc": "oamc",
-        "ss": "forced",
-        "canwork": "canwork",
-    },
-    "retiree_oamc_forced_forcedout": {
-        "his": "retiree",
-        "mc": "oamc",
-        "ss": "forced",
-        "canwork": "forcedout",
-    },
-    "nongroup_oamc_forced_forcedout": {
-        "his": "nongroup",
-        "mc": "oamc",
-        "ss": "forced",
-        "canwork": "forcedout",
-    },
+    f"{marital}_{his}_{mc}_{ss}_{canwork}": {
+        "marital": marital,
+        "his": his,
+        "mc": mc,
+        "ss": ss,
+        "canwork": canwork,
+    }
+    for marital in MARITAL_STATUSES
+    for his, mc, ss, canwork in _LIVING_AXES
 }
+
 
 config = MODEL_CONFIG
 
@@ -439,6 +386,8 @@ def build_states(spec: RegimeSpec, grids: Grids) -> dict:
         Health if spec["mc"] == "oamc" else HealthWithDisability,
         batch_size=gc.n_health_batch_size,
     )
+    if spec["marital"] == "married":
+        states["spousal_income"] = DiscreteGrid(SpousalIncome)
     if can_work:
         states["log_ft_wage_res"] = grids.wage_res
     if can_work and spec["his"] != "tied":
@@ -480,11 +429,38 @@ def build_actions(
     return actions
 
 
-def build_regime_probs(target: IntND, survival: FloatND) -> FloatND:
-    """Build regime transition probability vector."""
-    probs = jnp.zeros(19)
+# Living regimes plus `dead` — the length of every regime probability vector.
+N_REGIMES = len(REGIME_SPECS) + 1
+
+
+def build_regime_probs(
+    *,
+    target_single: IntND,
+    target_married: IntND,
+    survival: FloatND,
+    marital_probs: FloatND,
+) -> FloatND:
+    """Build the regime transition probability vector.
+
+    Surviving mass splits across the two marital targets by `marital_probs`;
+    the within-marriage axes pick the same target on both sides, since none of
+    them depends on next-period marital status.
+
+    Args:
+        target_single: Regime id reached if the household is single next period.
+        target_married: Regime id reached if it is married next period.
+        survival: Probability of surviving into the next period.
+        marital_probs: `(P[single'], P[married'])`, read at the household's own
+            source code.
+
+    Returns:
+        Probability vector over all regimes, `dead` included.
+
+    """
+    probs = jnp.zeros(N_REGIMES)
     probs = probs.at[RegimeId.dead].set(1.0 - survival)
-    return probs.at[target].add(survival)
+    probs = probs.at[target_single].add(survival * marital_probs[0])
+    return probs.at[target_married].add(survival * marital_probs[1])
 
 
 def build_granular_regime_transition(
@@ -605,9 +581,8 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     functions["total_health_costs"] = health_insurance.total_costs
     functions["oop_costs"] = health_insurance.oop_with_medicaid
     functions["capital_income"] = assets_and_income.capital_income
-    # spousal_income_amounts is a lookup table param, not a DAG function
-    functions["is_married"] = labor_market.is_married
-    functions["equivalence_scale"] = preferences.equivalence_scale
+    # `is_married` and `equivalence_scale` are regime-fixed: marital status is
+    # a regime axis, so both are supplied per regime rather than derived.
     functions["utility_scale_factor"] = preferences.utility_scale_factor
     functions["consumption_weight"] = preferences.consumption_weight
     functions["coefficient_rra"] = preferences.coefficient_rra
@@ -684,10 +659,9 @@ def build_model_states(grids: Grids) -> dict:
 
     These are the states every living regime carries with an identical grid.
     pylcm prunes them per regime by DAG reachability, so `dead` keeps only
-    `assets` and `pref_type` (the bequest DAG). `spousal_income` carries the
-    `distributed` flag — sharding is legal only on model-level states.
+    `assets` and `pref_type` (the bequest DAG). `spousal_income` is not among
+    them: it is declared on the `married` regimes only.
     """
-    gc = grids.grid_config
     return {
         "assets": grids.assets,
         "aime": grids.aime,
@@ -697,11 +671,6 @@ def build_model_states(grids: Grids) -> dict:
         ),
         "hcc_persistent": grids.hcc_persistent,
         "hcc_transitory": grids.hcc_transitory,
-        "spousal_income": DiscreteGrid(
-            SpousalIncome,
-            batch_size=gc.n_spousal_income_batch_size,
-            distributed=gc.spousal_income_distributed,
-        ),
         "pref_type": grids.pref_type,
     }
 
@@ -716,7 +685,6 @@ def build_model_state_transitions() -> dict:
     """
     return {
         "pref_type": fixed_transition("pref_type"),
-        "spousal_income": MarkovTransition(labor_market.next_spousal_income),
         # Carried state: evolved only in simulate (in solve, `pension_wealth`
         # is re-imputed from AIME each period and has no transition).
         "pension_wealth": pensions.wealth_next_before_adjustment,
@@ -765,6 +733,17 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     )
     # MAGI for the ACA Medicaid expansion track; pruned in the baseline DAG.
     functions["aca_magi"] = health_insurance.aca_magi
+
+    # Marital status is a regime axis, so the laws it selects between and the
+    # spouse-income addend are chosen here rather than branched at runtime.
+    # `single` regimes carry no `spousal_income_amount` / `equivalence_scale`
+    # function at all: their values are the constants supplied as params.
+    if spec["marital"] == "married":
+        functions["marital_probs"] = labor_market.marital_probs_married
+        functions["spousal_income_amount"] = labor_market.spousal_income_amount
+        functions["equivalence_scale"] = preferences.equivalence_scale_married
+    else:
+        functions["marital_probs"] = labor_market.marital_probs_single
 
     # Swapped per policy variant by the ACA overlay, hence regime-level
     functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
@@ -847,8 +826,14 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
     return functions
 
 
-def precompute_target_regimes(spec: RegimeSpec) -> MappingProxyType[str, int]:
+def precompute_target_regimes(
+    spec: RegimeSpec, *, marital: str
+) -> MappingProxyType[str, int]:
     """Pre-compute target regime IDs for each next-age bracket.
+
+    The within-marriage axes are resolved from `spec`; `marital` names the
+    next-period marital status the returned targets sit in, so the same
+    bracket logic serves both marital branches of one source regime.
 
     Coerces each `RegimeId.<name>` (`ScalarInt`, post-pylcm#349) to a
     Python `int` so the returned mapping's values can serve as dict
@@ -858,7 +843,8 @@ def precompute_target_regimes(spec: RegimeSpec) -> MappingProxyType[str, int]:
     def _resolve(his_val: str, mc_val: str, ss_val: str, canwork_val: str) -> int:
         for name, s in REGIME_SPECS.items():
             if (
-                s["his"] == his_val
+                s["marital"] == marital
+                and s["his"] == his_val
                 and s["mc"] == mc_val
                 and s["ss"] == ss_val
                 and s["canwork"] == canwork_val
@@ -899,12 +885,32 @@ _TARGET_KEYS = (
 )
 
 
-def make_targets(name: str) -> tuple[dict[str, int], dict[str, int]]:
-    """Build own and nongroup target subsets for a regime name."""
-    target_regimes = precompute_target_regimes(REGIME_SPECS[name])
-    own = {k: target_regimes[k] for k in _TARGET_KEYS}
-    ng = {k: target_regimes[k + "_ng"] for k in _TARGET_KEYS}
+def make_targets(
+    name: str,
+) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]:
+    """Build own and nongroup target subsets for a regime name.
+
+    Each subset is keyed by next-period marital status first, so a source
+    regime declares one set of within-marriage targets per marital branch.
+    """
+    spec = REGIME_SPECS[name]
+    own: dict[str, dict[str, int]] = {}
+    ng: dict[str, dict[str, int]] = {}
+    for marital in MARITAL_STATUSES:
+        target_regimes = precompute_target_regimes(spec, marital=marital)
+        own[marital] = {k: target_regimes[k] for k in _TARGET_KEYS}
+        ng[marital] = {k: target_regimes[k + "_ng"] for k in _TARGET_KEYS}
     return own, ng
+
+
+def flatten_targets(*subsets: dict[str, dict[str, int]]) -> tuple[int, ...]:
+    """Return every regime id in the given marital-keyed target subsets."""
+    return tuple(
+        target_id
+        for subset in subsets
+        for by_key in subset.values()
+        for target_id in by_key.values()
+    )
 
 
 def select_target_for_age(
@@ -962,6 +968,9 @@ def build_state_transitions(
     lagged_labor_supply_transition = _build_per_target_regime_lagged_labor_supply(spec)
     if lagged_labor_supply_transition:
         transitions["lagged_labor_supply"] = lagged_labor_supply_transition
+    spousal_income_transition = _build_per_target_spousal_income(spec)
+    if spousal_income_transition:
+        transitions["spousal_income"] = spousal_income_transition
     transitions["aime"] = _select_aime_law(spec)
     return transitions
 
@@ -993,6 +1002,23 @@ def _select_aime_law(spec: RegimeSpec) -> Callable[..., FloatND]:
     )
 
 
+def _reachable_target_names(spec: RegimeSpec) -> tuple[RegimeName, ...]:
+    """Return every living regime the spec's transition can reach.
+
+    Both marital branches are walked, so the result spans the single and the
+    married copies of each within-marriage target. `dead` is excluded — the
+    laws that need it name it explicitly.
+    """
+    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
+    names: list[RegimeName] = []
+    for marital in MARITAL_STATUSES:
+        for target_id in precompute_target_regimes(spec, marital=marital).values():
+            name = id_to_name.get(int(target_id))
+            if name is not None and name not in names:
+                names.append(name)
+    return tuple(names)
+
+
 def _build_per_target_regime_assets(
     spec: RegimeSpec, *, solver: SolverName = "brute_force"
 ) -> dict[RegimeName, Callable[..., FloatND]]:
@@ -1012,21 +1038,9 @@ def _build_per_target_regime_assets(
         living_law = assets_and_income.next_assets
         dead_law = assets_and_income.next_assets_when_dead
 
-    target_regimes = precompute_target_regimes(spec)
-    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
-
-    result: dict[RegimeName, Callable[..., FloatND]] = {}
-    seen_ids: set[int] = set()
-
-    for target_id in target_regimes.values():
-        if target_id in seen_ids:
-            continue
-        seen_ids.add(target_id)
-        target_name = id_to_name.get(target_id)
-        if target_name is None:
-            continue
-        result[target_name] = living_law
-
+    result: dict[RegimeName, Callable[..., FloatND]] = dict.fromkeys(
+        _reachable_target_names(spec), living_law
+    )
     result["dead"] = dead_law
     return result
 
@@ -1039,21 +1053,10 @@ def _build_per_target_regime_health(
     Pre-65 regimes use HealthWithDisability (3-state), post-65 use Health (2-state).
     Cross-grid transitions (3->2) happen at the age-65 boundary.
     """
-    target_regimes = precompute_target_regimes(spec)
-    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
-
     result: dict[RegimeName, MarkovTransition] = {}
-    seen_ids: set[int] = set()
 
-    for target_id in target_regimes.values():
-        if target_id == RegimeId.dead or target_id in seen_ids:
-            continue
-        seen_ids.add(target_id)
-        target_name = id_to_name.get(target_id)
-        if target_name is None:
-            continue
-        target_spec = REGIME_SPECS[target_name]
-        target_is_post65 = target_spec["mc"] == "oamc"
+    for target_name in _reachable_target_names(spec):
+        target_is_post65 = REGIME_SPECS[target_name]["mc"] == "oamc"
 
         if spec["mc"] != "oamc" and target_is_post65:
             result[target_name] = MarkovTransition(health.next_health_cross)
@@ -1075,21 +1078,10 @@ def _build_per_target_regime_claimed_ss(
     if spec["ss"] in ("forced", "forcedout"):
         return {}
 
-    target_regimes = precompute_target_regimes(spec)
-    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
-
     result: dict[RegimeName, Callable[..., BoolND]] = {}
-    seen_ids: set[int] = set()
 
-    for target_id in target_regimes.values():
-        if target_id == RegimeId.dead or target_id in seen_ids:
-            continue
-        seen_ids.add(target_id)
-        target_name = id_to_name.get(target_id)
-        if target_name is None:
-            continue
-        target_spec = REGIME_SPECS[target_name]
-        if target_spec["ss"] != "choose":
+    for target_name in _reachable_target_names(spec):
+        if REGIME_SPECS[target_name]["ss"] != "choose":
             continue
 
         if spec["ss"] == "choose":
@@ -1116,19 +1108,9 @@ def _build_per_target_regime_lagged_labor_supply(
     if spec["canwork"] != "canwork":
         return {}
 
-    target_regimes = precompute_target_regimes(spec)
-    id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
-
     result: dict[RegimeName, Callable[..., BoolND]] = {}
-    seen_ids: set[int] = set()
 
-    for target_id in target_regimes.values():
-        if target_id == RegimeId.dead or target_id in seen_ids:
-            continue
-        seen_ids.add(target_id)
-        target_name = id_to_name.get(target_id)
-        if target_name is None:
-            continue
+    for target_name in _reachable_target_names(spec):
         target_spec = REGIME_SPECS[target_name]
         target_has_lagged = (
             target_spec["canwork"] == "canwork" and target_spec["his"] != "tied"
@@ -1137,3 +1119,26 @@ def _build_per_target_regime_lagged_labor_supply(
             result[target_name] = labor_market.next_lagged_supply
 
     return result
+
+
+def _build_per_target_spousal_income(
+    spec: RegimeSpec,
+) -> dict[RegimeName, MarkovTransition]:
+    """Build per-target `spousal_income` laws.
+
+    Only the `married` targets carry the state, so only they get a key:
+
+    - from `married`, the law reads the carried code and conditions on it
+    - from `single`, there is no code to read, so the entry law states the
+      whole distribution over the target's two codes
+    """
+    law = (
+        labor_market.next_spousal_income
+        if spec["marital"] == "married"
+        else labor_market.enter_spousal_income
+    )
+    return {
+        target_name: MarkovTransition(law)
+        for target_name in _reachable_target_names(spec)
+        if REGIME_SPECS[target_name]["marital"] == "married"
+    }

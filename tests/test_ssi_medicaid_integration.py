@@ -14,11 +14,9 @@ from aca_model.baseline.health_insurance import BuyPrivate
 
 ATOL = 0.01
 
-SSI_ASSETS_TEST = jnp.array([2000.0, 3000.0, 3000.0])
-SSI_MAX_BENEFIT = jnp.array([8000.0, 12000.0, 12000.0])
-MEDICAID_SCHEDULE = MappingLeaf(
-    {"income_threshold": jnp.array([15000.0, 20000.0, 20000.0])}
-)
+SSI_ASSETS_TEST = jnp.asarray(2000.0)
+SSI_MAX_BENEFIT = jnp.asarray(8000.0)
+MEDICAID_SCHEDULE = MappingLeaf({"income_threshold": jnp.asarray(15000.0)})
 
 
 def test_low_income_qualifies_for_ssi_and_medicaid() -> None:
@@ -37,13 +35,12 @@ def test_low_income_qualifies_for_ssi_and_medicaid() -> None:
     result = combined(
         labor_income=jnp.array(0.0),
         capital_income=jnp.array(0.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.asarray(0.0),
         ss_benefit=jnp.array(500.0),
         pension_benefit=jnp.array(0.0),
         ssi_ignored_overall=jnp.asarray(20.0),
         ssi_ignored_earned=jnp.asarray(65.0),
         assets=jnp.array(1000.0),
-        spousal_income=jnp.int32(0),
         crossed_oamc_threshold=jnp.asarray(True),
         is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
@@ -69,13 +66,12 @@ def test_high_income_ineligible_for_ssi() -> None:
     result = combined(
         labor_income=jnp.array(50000.0),
         capital_income=jnp.array(5000.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.asarray(0.0),
         ss_benefit=jnp.array(2000.0),
         pension_benefit=jnp.array(0.0),
         ssi_ignored_overall=jnp.asarray(20.0),
         ssi_ignored_earned=jnp.asarray(65.0),
         assets=jnp.array(1000.0),
-        spousal_income=jnp.int32(0),
         crossed_oamc_threshold=jnp.asarray(True),
         is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
@@ -105,13 +101,12 @@ def test_disabled_under_65_qualifies_for_ssi_and_medicaid() -> None:
     result = combined(
         labor_income=jnp.array(0.0),
         capital_income=jnp.array(0.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.asarray(0.0),
         ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
         ssi_ignored_overall=jnp.asarray(20.0),
         ssi_ignored_earned=jnp.asarray(65.0),
         assets=jnp.array(100.0),
-        spousal_income=jnp.int32(0),
         crossed_oamc_threshold=jnp.asarray(False),
         is_disabled=jnp.asarray(True),
         ssi_assets_test=SSI_ASSETS_TEST,
@@ -144,13 +139,12 @@ def test_aca_expansion_uses_magi_not_countable_income() -> None:
         # but full MAGI 28000 > 15000 threshold.
         labor_income=jnp.array(28000.0),
         capital_income=jnp.array(0.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.asarray(0.0),
         ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
         ssi_ignored_overall=jnp.asarray(20.0),
         ssi_ignored_earned=jnp.asarray(65.0),
         assets=jnp.array(100.0),
-        spousal_income=jnp.int32(0),
         crossed_oamc_threshold=jnp.asarray(False),
         is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,

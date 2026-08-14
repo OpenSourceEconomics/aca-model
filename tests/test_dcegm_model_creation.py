@@ -100,7 +100,7 @@ def test_dcegm_model_slots_broadcast_contract_functions_and_constraint() -> None
     assert "borrowing_constraint" in slots["constraints"]
     for name in ("resources", "savings", "inverse_marginal_utility"):
         assert name in slots["functions"]
-    solver = _build_regimes("dcegm")["retiree_nomc_inelig_canwork"].solver
+    solver = _build_regimes("dcegm")["single_retiree_nomc_inelig_canwork"].solver
     assert isinstance(solver, DCEGM)
     assert isinstance(solver.savings_grid, IrregSpacedGrid)
     savings_points = solver.savings_grid.points
@@ -174,7 +174,9 @@ def test_dcegm_benchmark_model_builds() -> None:
             n_points=BENCHMARK_GRID_CONFIG.n_consumption_dollars_gridpoints
         ),
     )
-    assert isinstance(model.user_regimes["retiree_nomc_inelig_canwork"].solver, DCEGM)
+    assert isinstance(
+        model.user_regimes["single_retiree_nomc_inelig_canwork"].solver, DCEGM
+    )
 
 
 def test_savings_grid_batch_size_follows_grid_config() -> None:

@@ -16,7 +16,6 @@ from lcm.typing import (
     BoolND,
     ContinuousState,
     DiscreteAction,
-    DiscreteState,
     FloatND,
     ScalarBool,
     ScalarFloat,
@@ -37,7 +36,6 @@ class PolicyVariant(Enum):
 
 def mandate_penalty(
     gross_income: FloatND,
-    spousal_income: DiscreteState,
     buy_private: DiscreteAction,
     is_medicaid_eligible: BoolND,
     mandate_schedule: MappingLeaf,
@@ -50,7 +48,7 @@ def mandate_penalty(
     """
     sched = cast("Mapping[str, Any]", mandate_schedule.data)
     is_uninsured = buy_private == BuyPrivate.no
-    exempt = gross_income < sched["exempt_income"][spousal_income]
+    exempt = gross_income < sched["exempt_income"]
     raw = jnp.clip(
         gross_income * sched["income_fraction"],
         sched["min"],
@@ -62,7 +60,6 @@ def mandate_penalty(
 def premium_subsidy(
     hic_premium: FloatND,
     gross_income: FloatND,
-    spousal_income: DiscreteState,
     buy_private: DiscreteAction,
     is_medicaid_eligible: BoolND,
     premium_credit_schedule: MappingLeaf,
@@ -76,21 +73,19 @@ def premium_subsidy(
     so no exchange subsidy applies).
     """
     sched = cast("Mapping[str, Any]", premium_credit_schedule.data)
-    kinks = sched["kinks"]  # [n_kinks, 3]
+    kinks = sched["kinks"]  # [n_kinks]
     frac_income = sched["frac_income"]  # [n_kinks]
 
-    sp_kinks = kinks[:, spousal_income]
-    applicable_rate = jnp.interp(gross_income, sp_kinks, frac_income)
+    applicable_rate = jnp.interp(gross_income, kinks, frac_income)
     subsidy = jnp.maximum(0.0, hic_premium - gross_income * applicable_rate)
 
-    in_range = (gross_income >= sp_kinks[0]) & (gross_income < sp_kinks[-1])
+    in_range = (gross_income >= kinks[0]) & (gross_income < kinks[-1])
     is_insured = buy_private == BuyPrivate.yes
     return jnp.where(is_insured & in_range & ~is_medicaid_eligible, subsidy, 0.0)
 
 
 def cost_sharing(
     gross_income: FloatND,
-    spousal_income: DiscreteState,
     buy_private: DiscreteAction,
     is_medicaid_eligible: BoolND,
     cost_sharing_schedule: MappingLeaf,
@@ -103,9 +98,9 @@ def cost_sharing(
     Medicaid-eligible (Medicaid cost-sharing is handled separately).
     """
     sched = cast("Mapping[str, Any]", cost_sharing_schedule.data)
-    kinks = sched["kinks"]  # [n_kinks, 3]
+    kinks = sched["kinks"]  # [n_kinks]
     factors = sched["factors"]  # [n_kinks + 1]
-    bracket = jnp.searchsorted(kinks[:, spousal_income], gross_income, side="right")
+    bracket = jnp.searchsorted(kinks, gross_income, side="right")
     scale = factors[bracket]
     is_insured = buy_private == BuyPrivate.yes
     return jnp.where(is_insured & ~is_medicaid_eligible, scale, 1.0)
@@ -114,7 +109,6 @@ def cost_sharing(
 def is_medicaid_eligible(
     is_ssi_eligible: BoolND,
     aca_magi: FloatND,
-    spousal_income: DiscreteState,
     crossed_oamc_threshold: ScalarBool,
     is_disabled: BoolND,
     medicaid_schedule: MappingLeaf,
@@ -136,11 +130,7 @@ def is_medicaid_eligible(
     """
     sched = cast("Mapping[str, Any]", medicaid_schedule.data)
     threshold = sched["income_threshold"]
-    expansion = (
-        (~crossed_oamc_threshold)
-        & (~is_disabled)
-        & (aca_magi < threshold[spousal_income])
-    )
+    expansion = (~crossed_oamc_threshold) & (~is_disabled) & (aca_magi < threshold)
     return is_ssi_eligible | expansion
 
 

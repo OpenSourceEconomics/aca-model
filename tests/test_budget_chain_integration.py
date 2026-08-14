@@ -21,10 +21,10 @@ ATOL = 1.0
 # Simplified tax schedules (2 brackets: 0% below standard deduction, 20% above)
 INCOME_TAX_SCHEDULE = MappingLeaf(
     {
-        "brackets_lower": jnp.array([[0.0, 12000.0]]),
-        "brackets_upper": jnp.array([[12000.0, jnp.inf]]),
-        "marginal_rates": jnp.array([[0.0, 0.2]]),
-        "after_tax_at_lower": jnp.array([[0.0, 12000.0]]),
+        "brackets_lower": jnp.array([0.0, 12000.0]),
+        "brackets_upper": jnp.array([12000.0, jnp.inf]),
+        "marginal_rates": jnp.array([0.0, 0.2]),
+        "after_tax_at_lower": jnp.array([0.0, 12000.0]),
     }
 )
 PAYROLL_TAX_SCHEDULE = MappingLeaf(
@@ -37,9 +37,9 @@ PAYROLL_TAX_SCHEDULE = MappingLeaf(
 )
 SS_TAX_SCHEDULE = MappingLeaf(
     {
-        "brackets_lower": jnp.array([[25000.0, 34000.0]]),
-        "brackets_upper": jnp.array([[34000.0, jnp.inf]]),
-        "fraction_considered": jnp.array([[0.5, 0.85]]),
+        "brackets_lower": jnp.array([25000.0, 34000.0]),
+        "brackets_upper": jnp.array([34000.0, jnp.inf]),
+        "fraction_considered": jnp.array([0.5, 0.85]),
         "ben_fraction_prov_income": 0.5,
     }
 )
@@ -61,10 +61,9 @@ def test_working_agent_cash_on_hand() -> None:
         assets=jnp.array(50000.0),
         rate_of_return=jnp.asarray(0.03),
         labor_income=jnp.array(40000.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
-        spousal_income=jnp.int32(0),
         income_tax_schedule=INCOME_TAX_SCHEDULE,
         payroll_tax_schedule=PAYROLL_TAX_SCHEDULE,
         ss_tax_schedule=SS_TAX_SCHEDULE,
@@ -97,10 +96,9 @@ def test_retired_agent_with_pension() -> None:
         assets=jnp.array(200000.0),
         rate_of_return=jnp.asarray(0.03),
         labor_income=jnp.array(0.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         ss_benefit=jnp.array(15000.0),
         pension_benefit=jnp.array(10000.0),
-        spousal_income=jnp.int32(0),
         income_tax_schedule=INCOME_TAX_SCHEDULE,
         payroll_tax_schedule=PAYROLL_TAX_SCHEDULE,
         ss_tax_schedule=SS_TAX_SCHEDULE,

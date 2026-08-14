@@ -26,6 +26,7 @@ from aca_model.baseline.regimes._common import (
     build_regime_probs,
     build_state_transitions,
     build_states,
+    flatten_targets,
     make_active_func,
     make_targets,
     select_ss_benefit,
@@ -35,7 +36,7 @@ from aca_model.baseline.regimes._common import (
 
 def _make_transition_canwork(
     gets_medicare: bool,
-    own: dict[str, int],
+    own: dict[str, dict[str, int]],
 ) -> Callable[..., FloatND]:
     """Create transition for canwork nongroup regimes.
 
@@ -48,18 +49,23 @@ def _make_transition_canwork(
         period: Period,
         labor_supply: DiscreteAction,
         survival_probs: FloatND,
+        marital_probs: FloatND,
     ) -> FloatND:
         sp = survival_probs[period]
         mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
-        target = select_target_for_age(age + 1, mc_next, own)
-        return build_regime_probs(target, sp)
+        return build_regime_probs(
+            target_single=select_target_for_age(age + 1, mc_next, own["single"]),
+            target_married=select_target_for_age(age + 1, mc_next, own["married"]),
+            survival=sp,
+            marital_probs=marital_probs,
+        )
 
     return transition
 
 
 def _make_transition_forcedout(
     gets_medicare: bool,
-    own: dict[str, int],
+    own: dict[str, dict[str, int]],
 ) -> Callable[..., FloatND]:
     """Create transition for forcedout nongroup regimes.
 
@@ -71,9 +77,16 @@ def _make_transition_forcedout(
         age: Age,
         period: Period,
         survival_probs: FloatND,
+        marital_probs: FloatND,
     ) -> FloatND:
-        target = select_target_for_age(age + 1, gets_medicare, own)
-        return build_regime_probs(target, survival_probs[period])
+        return build_regime_probs(
+            target_single=select_target_for_age(age + 1, gets_medicare, own["single"]),
+            target_married=select_target_for_age(
+                age + 1, gets_medicare, own["married"]
+            ),
+            survival=survival_probs[period],
+            marital_probs=marital_probs,
+        )
 
     return transition
 
@@ -177,7 +190,7 @@ def build_regime(
         functions = {**functions, **build_nbegm_functions()}
     return Regime(
         transition=build_granular_regime_transition(
-            transition_func=transition_func, target_ids=own.values()
+            transition_func=transition_func, target_ids=flatten_targets(own)
         ),
         active=make_active_func(spec),
         states=states,

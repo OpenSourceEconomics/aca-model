@@ -49,8 +49,7 @@ class HealthInsuranceState:
 def countable_income(
     labor_income: FloatND,
     capital_income: FloatND,
-    spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     ss_benefit: FloatND,
     pension_benefit: FloatND,
     ssi_ignored_overall: ScalarFloat,
@@ -64,7 +63,7 @@ def countable_income(
     return (
         earned
         + capital_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + ss_benefit
         + pension_benefit
         - ssi_ignored_overall
@@ -74,20 +73,15 @@ def countable_income(
 @lcm.piecewise_affine(
     output="is_ssi_eligible",
     variable="assets",
-    breakpoints=(
-        lcm.affine_breakpoint(
-            threshold="ssi_assets_test", kind="jump", indexed_by="spousal_income"
-        ),
-    ),
+    breakpoints=(lcm.affine_breakpoint(threshold="ssi_assets_test", kind="jump"),),
 )
 def is_ssi_eligible(
     assets: ContinuousState,
     countable_income: FloatND,
-    spousal_income: DiscreteState,
     crossed_oamc_threshold: ScalarBool,
     is_disabled: BoolND,
-    ssi_assets_test: FloatND,
-    ssi_maximum_benefit: FloatND,
+    ssi_assets_test: ScalarFloat,
+    ssi_maximum_benefit: ScalarFloat,
 ) -> BoolND:
     """Check SSI/Medicaid eligibility on the categorical track.
 
@@ -105,8 +99,8 @@ def is_ssi_eligible(
     affine budget across the cliff.
     """
     categorical = crossed_oamc_threshold | is_disabled
-    assets_ok = assets < ssi_assets_test[spousal_income]
-    income_ok = countable_income < ssi_maximum_benefit[spousal_income]
+    assets_ok = assets < ssi_assets_test
+    income_ok = countable_income < ssi_maximum_benefit
     return categorical & assets_ok & income_ok
 
 
@@ -131,8 +125,7 @@ def is_disabled_never() -> BoolND:
 def aca_magi(
     labor_income: FloatND,
     capital_income: FloatND,
-    spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     ss_benefit: FloatND,
     pension_benefit: FloatND,
 ) -> FloatND:
@@ -145,7 +138,7 @@ def aca_magi(
     return (
         labor_income
         + capital_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + ss_benefit
         + pension_benefit
     )
@@ -158,15 +151,13 @@ def aca_magi(
         lcm.affine_breakpoint(
             threshold="ssi_maximum_benefit",
             kind="continuous_kink",
-            indexed_by="spousal_income",
         ),
     ),
 )
 def ssi_benefit(
     countable_income: FloatND,
-    spousal_income: DiscreteState,
     is_ssi_eligible: BoolND,
-    ssi_maximum_benefit: FloatND,
+    ssi_maximum_benefit: ScalarFloat,
 ) -> FloatND:
     """Compute SSI benefit amount.
 
@@ -178,14 +169,14 @@ def ssi_benefit(
     benefit stops offsetting capital income). NBEGM maps the threshold to
     its per-cell asset preimage and splits the partition there.
     """
-    benefit = ssi_maximum_benefit[spousal_income] - countable_income
+    benefit = ssi_maximum_benefit - countable_income
     return jnp.where(is_ssi_eligible, jnp.maximum(0.0, benefit), 0.0)
 
 
 def premium(
     age: Age,
     good_health: IntND,
-    is_married: IntND,
+    is_married: ScalarInt,
     labor_supply: DiscreteAction,
     buy_private: DiscreteAction,
     premium_intercept: ScalarFloat,
@@ -227,7 +218,7 @@ def premium(
 def premium_insured(
     age: Age,
     good_health: IntND,
-    is_married: IntND,
+    is_married: ScalarInt,
     labor_supply: DiscreteAction,
     premium_intercept: ScalarFloat,
     premium_age: ScalarFloat,
@@ -264,7 +255,7 @@ def premium_insured(
 def premium_retired(
     age: Age,
     good_health: IntND,
-    is_married: IntND,
+    is_married: ScalarInt,
     premium_intercept: ScalarFloat,
     premium_age: ScalarFloat,
     premium_age_sq: ScalarFloat,
@@ -449,7 +440,6 @@ def compute_hcc_insurer_table(
 
 def total_costs(
     period: Period,
-    is_married: IntND,
     good_health: IntND,
     log_mean: FloatND,
     log_std: FloatND,
@@ -459,12 +449,13 @@ def total_costs(
 ) -> FloatND:
     """Compute total health care costs from log-normal model.
 
-    ``log_mean`` and ``log_std`` are ``pd.Series`` with ``(age, is_married,
-    good_health)`` MultiIndex, resolved by pylcm via ``derived_categoricals``.
+    ``log_mean`` and ``log_std`` are ``pd.Series`` with an ``(age,
+    good_health)`` MultiIndex, sliced to the regime's marital status at
+    assembly and resolved by pylcm via ``derived_categoricals``.
     """
     std_trans = jnp.sqrt(1.0 - std_xsect_persistent**2)
     return jnp.exp(
-        log_mean[period, is_married, good_health]
-        + log_std[period, is_married, good_health]
+        log_mean[period, good_health]
+        + log_std[period, good_health]
         * (hcc_persistent * std_xsect_persistent + hcc_transitory * std_trans)
     )

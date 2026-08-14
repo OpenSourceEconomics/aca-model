@@ -282,7 +282,7 @@ def test_simulate_pension_adjustment_leaves_next_assets_at_no_adjustment_carry(
     Holds for both the brute-force and the DC-EGM/NBEGM (savings) assets law.
     """
     law, kwargs = _ADJUSTED_ASSETS_LAWS[law_key]
-    functions = build_pension_functions(REGIME_SPECS["tied_nomc_choose_canwork"])
+    functions = build_pension_functions(REGIME_SPECS["single_tied_nomc_choose_canwork"])
     simulate_adjustment = functions["pension_assets_adjustment"].simulate()
 
     combined = concatenate_functions({"next_assets": law}, targets="next_assets")

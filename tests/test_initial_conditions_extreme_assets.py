@@ -113,7 +113,7 @@ def test_extreme_negative_assets_subject_passes_validation() -> None:
         **initial_conditions,
         "assets": jnp.asarray([-1_000_000.0]),
         "regime_id": jnp.asarray(
-            [model.regime_names_to_ids["retiree_nomc_inelig_canwork"]],
+            [model.regime_names_to_ids["single_retiree_nomc_inelig_canwork"]],
             dtype=jnp.int32,
         ),
     }

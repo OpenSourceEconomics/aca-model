@@ -12,21 +12,21 @@ from typing import Any, cast
 import jax.numpy as jnp
 import lcm
 from lcm.params import MappingLeaf
-from lcm.typing import DiscreteState, FloatND, IntND
+from lcm.typing import FloatND, IntND
 
 # Federal income tax bracket edges declared for the NBEGM M1 slice. The
 # progressive tax is continuous and piecewise-affine in `gross_income`, kinking
-# at each finite bracket edge `income_tax_schedule.brackets_upper[spousal_income,
-# k]`; the final edge is the +inf top-bracket sentinel and is not a kink. The
-# decorator is metadata-only — brute and DC-EGM solve identically.
+# at each finite bracket edge `income_tax_schedule.brackets_upper[k]`; the final
+# edge is the +inf top-bracket sentinel and is not a kink. Every schedule is
+# sliced to its regime's marital status at assembly, so the arrays are 1-D here.
+# The decorator is metadata-only — brute and DC-EGM solve identically.
 _N_INCOME_TAX_KINKS = 7
 
 
 def gross_income(
     capital_income: FloatND,
     labor_income: FloatND,
-    spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     taxable_ss_benefit: FloatND,
     pension_benefit: FloatND,
 ) -> FloatND:
@@ -34,7 +34,7 @@ def gross_income(
     return (
         capital_income
         + labor_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + taxable_ss_benefit
         + pension_benefit
     )
@@ -43,8 +43,7 @@ def gross_income(
 def taxable_ss_benefit(
     capital_income: FloatND,
     labor_income: FloatND,
-    spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     ss_benefit: FloatND,
     pension_benefit: FloatND,
     ss_tax_schedule: MappingLeaf,
@@ -58,7 +57,7 @@ def taxable_ss_benefit(
     prov_income = (
         capital_income
         + labor_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + sched["ben_fraction_prov_income"] * ss_benefit
         + pension_benefit
     )
@@ -66,30 +65,20 @@ def taxable_ss_benefit(
     # Tier 1
     tier_1_excess = jnp.maximum(
         0.0,
-        jnp.minimum(prov_income, sched["brackets_upper"][spousal_income, 0])
-        - sched["brackets_lower"][spousal_income, 0],
+        jnp.minimum(prov_income, sched["brackets_upper"][0])
+        - sched["brackets_lower"][0],
     )
-    tier_1 = sched["fraction_considered"][spousal_income, 0] * jnp.minimum(
-        ss_benefit, tier_1_excess
-    )
+    tier_1 = sched["fraction_considered"][0] * jnp.minimum(ss_benefit, tier_1_excess)
 
     # Tier 2
-    tier_2_excess = jnp.maximum(
-        0.0, prov_income - sched["brackets_lower"][spousal_income, 1]
-    )
-    tier_2_raw = (
-        tier_1 + sched["fraction_considered"][spousal_income, 1] * tier_2_excess
-    )
-    tier_2 = jnp.minimum(
-        sched["fraction_considered"][spousal_income, 1] * ss_benefit, tier_2_raw
-    )
+    tier_2_excess = jnp.maximum(0.0, prov_income - sched["brackets_lower"][1])
+    tier_2_raw = tier_1 + sched["fraction_considered"][1] * tier_2_excess
+    tier_2 = jnp.minimum(sched["fraction_considered"][1] * ss_benefit, tier_2_raw)
 
     return jnp.where(
-        prov_income < sched["brackets_lower"][spousal_income, 0],
+        prov_income < sched["brackets_lower"][0],
         0.0,
-        jnp.where(
-            prov_income < sched["brackets_lower"][spousal_income, 1], tier_1, tier_2
-        ),
+        jnp.where(prov_income < sched["brackets_lower"][1], tier_1, tier_2),
     )
 
 
@@ -100,7 +89,6 @@ def taxable_ss_benefit(
         lcm.affine_breakpoint(
             threshold="income_tax_schedule.brackets_upper",
             kind="continuous_kink",
-            indexed_by="spousal_income",
             static_index=k,
         )
         for k in range(_N_INCOME_TAX_KINKS)
@@ -111,7 +99,6 @@ def after_tax_income(
     ss_benefit: FloatND,
     taxable_ss_benefit: FloatND,
     labor_income: FloatND,
-    spousal_income: DiscreteState,
     income_tax_schedule: MappingLeaf,
     payroll_tax_schedule: MappingLeaf,
 ) -> FloatND:
@@ -123,14 +110,12 @@ def after_tax_income(
     sched = cast("Mapping[str, Any]", income_tax_schedule.data)
 
     # Find income tax bracket
-    bracket_id = _find_bracket(gross_income, sched["brackets_upper"][spousal_income])
-    bracket_lower = jnp.maximum(
-        0.0, sched["brackets_lower"][spousal_income, bracket_id]
-    )
-    keep_rate = 1.0 - sched["marginal_rates"][spousal_income, bracket_id]
+    bracket_id = _find_bracket(gross_income, sched["brackets_upper"])
+    bracket_lower = jnp.maximum(0.0, sched["brackets_lower"][bracket_id])
+    keep_rate = 1.0 - sched["marginal_rates"][bracket_id]
 
     ati = (
-        sched["after_tax_at_lower"][spousal_income, bracket_id]
+        sched["after_tax_at_lower"][bracket_id]
         + (gross_income - bracket_lower) * keep_rate
     )
 
@@ -151,13 +136,12 @@ def after_tax_income(
 
 def marginal_rate(
     gross_income: FloatND,
-    spousal_income: DiscreteState,
     income_tax_schedule: MappingLeaf,
 ) -> FloatND:
     """Compute the marginal income tax rate for pension adjustments."""
     sched = cast("Mapping[str, Any]", income_tax_schedule.data)
-    bracket_id = _find_bracket(gross_income, sched["brackets_upper"][spousal_income])
-    return sched["marginal_rates"][spousal_income, bracket_id]
+    bracket_id = _find_bracket(gross_income, sched["brackets_upper"])
+    return sched["marginal_rates"][bracket_id]
 
 
 def _find_bracket(income: FloatND, upper_bounds: FloatND) -> IntND:

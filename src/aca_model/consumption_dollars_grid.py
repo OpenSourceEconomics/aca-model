@@ -102,63 +102,6 @@ def inject_consumption_dollars_points(
     return out
 
 
-def inject_consumption_floor_schedule(
-    *,
-    params: Mapping[str, Any],
-    model: Model,
-) -> dict[str, Any]:
-    """Inject the spousal-indexed floor table into per-regime params.
-
-    Every regime carrying the savings-form `resources` budget reads the
-    declared floor-kink threshold from `consumption_floor_schedule`. The
-    table is derived from the per-iteration `consumption_equiv_floor` and
-    the married equivalence-scale `exponent`, so it is injected alongside
-    the consumption gridpoints rather than frozen into fixed params.
-
-    Args:
-        params: Existing params mapping with `consumption_equiv_floor`.
-            Returned as a new dict; the input is not mutated.
-        model: Model whose `fixed_params` supplies `exponent` and whose
-            regimes determine where the table is required.
-
-    Returns:
-        New params dict with the floor schedule injected.
-
-    """
-    schedule = compute_consumption_floor_schedule(
-        consumption_equiv_floor=jnp.asarray(params["consumption_equiv_floor"]),
-        exponent=jnp.asarray(model.fixed_params["exponent"]),
-    )
-    out: dict[str, Any] = dict(params)
-    for regime_name, regime in model.user_regimes.items():
-        if regime.terminal or "resources" not in regime.functions:
-            continue
-        regime_entry = dict(out.get(regime_name, {}))
-        resources_entry = dict(regime_entry.get("resources", {}))
-        resources_entry["consumption_floor_schedule"] = schedule
-        regime_entry["resources"] = resources_entry
-        out[regime_name] = regime_entry
-    return out
-
-
-def compute_consumption_floor_schedule(
-    *,
-    consumption_equiv_floor: Array,
-    exponent: Array,
-) -> Array:
-    """Return the per-`spousal_income` $-floor table.
-
-    One row per `SpousalIncome` code — `[single, married_no_inc,
-    married_has_inc]` — with the married codes sharing the scaled floor
-    `consumption_equiv_floor * 2 ** exponent`. Equal by construction to
-    `consumption_dollars_floor` evaluated at each code.
-    """
-    married_dollar_floor = consumption_equiv_floor * jnp.asarray(2.0) ** exponent
-    return jnp.stack(
-        [consumption_equiv_floor, married_dollar_floor, married_dollar_floor]
-    )
-
-
 def compute_consumption_dollars_points(
     *,
     consumption_equiv_floor: Array,

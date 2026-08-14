@@ -167,13 +167,15 @@ SS_FRACTION_CONSIDERED = jnp.array(
 )
 SS_BEN_FRACTION_PROV_INCOME = 0.5
 
-# MappingLeaf schedule objects
+# MappingLeaf schedule objects. Marital status is a regime axis, so a regime's
+# schedule carries only its own row; these tests price a single household.
+_SINGLE = 0
 INCOME_TAX_SCHEDULE = MappingLeaf(
     {
-        "brackets_lower": BRACKETS_LOWER,
-        "brackets_upper": BRACKETS_UPPER,
-        "marginal_rates": MARGINAL_RATES,
-        "after_tax_at_lower": AFTER_TAX_AT_LOWER,
+        "brackets_lower": BRACKETS_LOWER[_SINGLE],
+        "brackets_upper": BRACKETS_UPPER[_SINGLE],
+        "marginal_rates": MARGINAL_RATES[_SINGLE],
+        "after_tax_at_lower": AFTER_TAX_AT_LOWER[_SINGLE],
     }
 )
 PAYROLL_TAX_SCHEDULE = MappingLeaf(
@@ -186,9 +188,9 @@ PAYROLL_TAX_SCHEDULE = MappingLeaf(
 )
 SS_TAX_SCHEDULE = MappingLeaf(
     {
-        "brackets_lower": SS_BRACKETS_LOWER,
-        "brackets_upper": SS_BRACKETS_UPPER,
-        "fraction_considered": SS_FRACTION_CONSIDERED,
+        "brackets_lower": SS_BRACKETS_LOWER[_SINGLE],
+        "brackets_upper": SS_BRACKETS_UPPER[_SINGLE],
+        "fraction_considered": SS_FRACTION_CONSIDERED[_SINGLE],
         "ben_fraction_prov_income": SS_BEN_FRACTION_PROV_INCOME,
     }
 )
@@ -221,10 +223,9 @@ def test_taxable_ss_benefit_below_threshold() -> None:
     result = taxes.taxable_ss_benefit(
         capital_income=jnp.array(0.0),
         labor_income=jnp.array(10000.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         ss_benefit=jnp.array(5000.0),
         pension_benefit=jnp.array(0.0),
-        spousal_income=jnp.int32(0),
         ss_tax_schedule=SS_TAX_SCHEDULE,
     )
     # Provisional income = 10000 + 0.5*5000 = 12500, below 25000 threshold
@@ -235,8 +236,7 @@ def test_gross_income_basic() -> None:
     result = taxes.gross_income(
         capital_income=jnp.array(1000.0),
         labor_income=jnp.array(5000.0),
-        spousal_income=jnp.int32(1),
-        spousal_income_amounts=jnp.array([0.0, 2000.0, 20000.0]),
+        spousal_income_amount=jnp.array(2000.0),
         taxable_ss_benefit=jnp.array(500.0),
         pension_benefit=jnp.array(300.0),
     )
@@ -247,8 +247,7 @@ def test_after_tax_income_zero() -> None:
     gi = taxes.gross_income(
         capital_income=jnp.array(0.0),
         labor_income=jnp.array(0.0),
-        spousal_income=jnp.int32(0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         taxable_ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
     )
@@ -257,7 +256,6 @@ def test_after_tax_income_zero() -> None:
         ss_benefit=jnp.array(0.0),
         taxable_ss_benefit=jnp.array(0.0),
         labor_income=jnp.array(0.0),
-        spousal_income=jnp.int32(0),
         income_tax_schedule=INCOME_TAX_SCHEDULE,
         payroll_tax_schedule=PAYROLL_TAX_SCHEDULE,
     )
@@ -269,8 +267,7 @@ def test_after_tax_income_low_bracket() -> None:
     gi = taxes.gross_income(
         capital_income=jnp.array(0.0),
         labor_income=jnp.array(gross),
-        spousal_income=jnp.int32(0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         taxable_ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
     )
@@ -279,7 +276,6 @@ def test_after_tax_income_low_bracket() -> None:
         ss_benefit=jnp.array(0.0),
         taxable_ss_benefit=jnp.array(0.0),
         labor_income=jnp.array(gross),
-        spousal_income=jnp.int32(0),
         income_tax_schedule=INCOME_TAX_SCHEDULE,
         payroll_tax_schedule=PAYROLL_TAX_SCHEDULE,
     )
@@ -293,7 +289,6 @@ def test_after_tax_income_low_bracket() -> None:
 def test_marginal_tax_rate_low_bracket() -> None:
     result = taxes.marginal_rate(
         gross_income=jnp.array(5000.0),
-        spousal_income=jnp.int32(0),
         income_tax_schedule=INCOME_TAX_SCHEDULE,
     )
     # 5000 is in bracket 1 (0-6200), rate = 0.0765
@@ -303,7 +298,6 @@ def test_marginal_tax_rate_low_bracket() -> None:
 def test_marginal_tax_rate_mid_bracket() -> None:
     result = taxes.marginal_rate(
         gross_income=jnp.array(10000.0),
-        spousal_income=jnp.int32(0),
         income_tax_schedule=INCOME_TAX_SCHEDULE,
     )
     # 10000 is in bracket 2 (6200-15275), rate = 0.199

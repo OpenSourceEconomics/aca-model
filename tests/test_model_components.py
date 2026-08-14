@@ -6,13 +6,9 @@ from aca_model.agent import preferences
 from aca_model.environment import social_security
 
 
-def test_equivalence_scale_single() -> None:
-    result = preferences.equivalence_scale(jnp.int32(0), jnp.asarray(0.7))
-    assert jnp.isclose(result, 1.0)
-
-
 def test_equivalence_scale_married() -> None:
-    result = preferences.equivalence_scale(jnp.int32(1), jnp.asarray(0.7))
+    """A married household's scale is `2 ** exponent`; single regimes fix it to 1."""
+    result = preferences.equivalence_scale_married(jnp.asarray(0.7))
     assert jnp.isclose(result, 2.0**0.7)
 
 

@@ -27,8 +27,7 @@ def test_resources_equal_cash_on_hand_plus_transfers() -> None:
     np.testing.assert_allclose(
         assets_and_income.resources(
             cash_on_hand=cash_on_hand,
-            spousal_income=jnp.zeros(cash_on_hand.shape, dtype=jnp.int32),
-            consumption_floor_schedule=jnp.asarray([9_000.0, 18_000.0, 18_000.0]),
+            consumption_dollars_floor=floor,
         ),
         cash_on_hand + transfers,
         atol=1e-9,
@@ -57,8 +56,7 @@ def test_next_assets_from_savings_matches_direct_form() -> None:
     savings = assets_and_income.savings(
         resources=assets_and_income.resources(
             cash_on_hand=cash_on_hand,
-            spousal_income=jnp.zeros(cash_on_hand.shape, dtype=jnp.int32),
-            consumption_floor_schedule=jnp.asarray([9_000.0, 18_000.0, 18_000.0]),
+            consumption_dollars_floor=floor,
         ),
         consumption_dollars=consumption,
     )
@@ -91,8 +89,7 @@ def test_next_assets_when_dead_from_savings_matches_direct_form() -> None:
     savings = assets_and_income.savings(
         resources=assets_and_income.resources(
             cash_on_hand=cash_on_hand,
-            spousal_income=jnp.zeros(cash_on_hand.shape, dtype=jnp.int32),
-            consumption_floor_schedule=jnp.asarray([9_000.0, 18_000.0, 18_000.0]),
+            consumption_dollars_floor=floor,
         ),
         consumption_dollars=consumption,
     )

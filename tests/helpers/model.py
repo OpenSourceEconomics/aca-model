@@ -10,7 +10,6 @@ from lcm import DiscreteGrid, Model
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.model import create_model as _create_aca_model
 from aca_model.agent.health import GoodHealth
-from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model as _create_baseline_model
@@ -19,7 +18,6 @@ from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _DERIVED_CATEGORICALS = {
     "good_health": DiscreteGrid(GoodHealth),
-    "is_married": DiscreteGrid(IsMarried),
     "his": DiscreteGrid(HealthInsuranceState),
     "target_his": DiscreteGrid(HealthInsuranceState),
     "pref_type": DiscreteGrid(BenchmarkPrefType),

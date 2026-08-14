@@ -35,9 +35,10 @@ class LaggedLaborSupply:
 
 @categorical(ordered=False)
 class SpousalIncome:
-    single: ScalarInt
-    married_no_inc: ScalarInt
-    married_has_inc: ScalarInt
+    """Whether a married household's spouse earns. Carried only in `married`."""
+
+    no_inc: ScalarInt
+    has_inc: ScalarInt
 
 
 # Host array, not a module-level JAX array: a device array here would
@@ -98,20 +99,16 @@ def next_lagged_supply(labor_supply: DiscreteAction) -> DiscreteState:
     )
 
 
-@categorical(ordered=True)
-class IsMarried:
-    """Derived categorical for is_married DAG output (0=no, 1=yes)."""
+def spousal_income_amount(
+    spousal_income: DiscreteState,
+    spousal_income_amounts: FloatND,
+) -> FloatND:
+    """Dollars the spouse contributes, at the household's spouse-income code.
 
-    no: ScalarInt
-    yes: ScalarInt
-
-
-def is_married(spousal_income: DiscreteState) -> IntND:
-    """Derive binary married indicator from spousal income category.
-
-    single → 0, married (with or without income) → 1.
+    Single regimes carry no such function: their addend is zero, supplied as a
+    per-regime parameter, so the single side gathers nothing.
     """
-    return jnp.int32(spousal_income > SpousalIncome.single)
+    return spousal_income_amounts[spousal_income]
 
 
 def next_spousal_income(
@@ -119,5 +116,46 @@ def next_spousal_income(
     period: Period,
     spousal_income_trans_probs: FloatND,
 ) -> FloatND:
-    """Stochastic spousal income transition."""
+    """Spouse-income law of a household that stays or becomes married.
+
+    `spousal_income_trans_probs` is the married regimes' slice of the
+    within-marriage conditional, `[period, spousal_income, next]`, so the row
+    conditions on the code the household currently holds.
+    """
     return spousal_income_trans_probs[period, spousal_income]
+
+
+def enter_spousal_income(
+    period: Period,
+    spousal_income_trans_probs: FloatND,
+) -> FloatND:
+    """Spouse-income law of a single household that marries.
+
+    A single household carries no `spousal_income`, so its entry law states the
+    whole distribution over the target's two codes.
+    `spousal_income_trans_probs` is the single regimes' slice of the
+    within-marriage conditional, `[period, next]`.
+    """
+    return spousal_income_trans_probs[period]
+
+
+def marital_probs_married(
+    spousal_income: DiscreteState,
+    period: Period,
+    marital_trans_probs: FloatND,
+) -> FloatND:
+    """Next-period marital distribution of a married household.
+
+    Which spousal-income code the household holds still says how likely the
+    marriage is to end, so the kernel is read at that code rather than at
+    marital status alone.
+    """
+    return marital_trans_probs[period, spousal_income]
+
+
+def marital_probs_single(
+    period: Period,
+    marital_trans_probs: FloatND,
+) -> FloatND:
+    """Next-period marital distribution of a single household."""
+    return marital_trans_probs[period]

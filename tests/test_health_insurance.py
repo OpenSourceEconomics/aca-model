@@ -9,15 +9,14 @@ from aca_model.baseline.health_insurance import BuyPrivate
 
 ATOL = 0.01
 
-SSI_ASSETS_TEST = jnp.array([2000.0, 3000.0, 3000.0])
-SSI_MAX_BENEFIT = jnp.array([8000.0, 12000.0, 12000.0])
+SSI_ASSETS_TEST = jnp.asarray(2000.0)
+SSI_MAX_BENEFIT = jnp.asarray(8000.0)
 
 
 def test_ssi_eligible_assets_too_high() -> None:
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(5000.0),
         countable_income=jnp.array(1000.0),
-        spousal_income=jnp.int32(0),
         crossed_oamc_threshold=jnp.asarray(True),
         is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
@@ -30,7 +29,6 @@ def test_ssi_eligible_income_too_high() -> None:
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(9000.0),
-        spousal_income=jnp.int32(0),
         crossed_oamc_threshold=jnp.asarray(True),
         is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
@@ -44,7 +42,6 @@ def test_ssi_eligible_neither_aged_nor_disabled() -> None:
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
-        spousal_income=jnp.int32(0),
         crossed_oamc_threshold=jnp.asarray(False),
         is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
@@ -58,7 +55,6 @@ def test_ssi_eligible_disabled_under_65_qualifies() -> None:
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
-        spousal_income=jnp.int32(0),
         crossed_oamc_threshold=jnp.asarray(False),
         is_disabled=jnp.asarray(True),
         ssi_assets_test=SSI_ASSETS_TEST,
@@ -71,7 +67,6 @@ def test_ssi_eligible_aged_all_pass() -> None:
     result = health_insurance.is_ssi_eligible(
         assets=jnp.array(1000.0),
         countable_income=jnp.array(1000.0),
-        spousal_income=jnp.int32(0),
         crossed_oamc_threshold=jnp.asarray(True),
         is_disabled=jnp.asarray(False),
         ssi_assets_test=SSI_ASSETS_TEST,
@@ -83,7 +78,6 @@ def test_ssi_eligible_aged_all_pass() -> None:
 def test_ssi_benefit_eligible() -> None:
     result = health_insurance.ssi_benefit(
         countable_income=jnp.array(3000.0),
-        spousal_income=jnp.int32(0),
         is_ssi_eligible=jnp.array(True),
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )
@@ -93,7 +87,6 @@ def test_ssi_benefit_eligible() -> None:
 def test_ssi_benefit_not_eligible() -> None:
     result = health_insurance.ssi_benefit(
         countable_income=jnp.array(3000.0),
-        spousal_income=jnp.int32(0),
         is_ssi_eligible=jnp.array(False),
         ssi_maximum_benefit=SSI_MAX_BENEFIT,
     )

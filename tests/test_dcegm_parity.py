@@ -19,7 +19,6 @@ import pytest
 from lcm import DiscreteGrid, Model
 
 from aca_model.agent.health import GoodHealth
-from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import SolverName, create_model
@@ -80,7 +79,6 @@ def _recorded_noise_floor() -> tuple[float, float, float]:
 
 _DERIVED_CATEGORICALS = {
     "good_health": DiscreteGrid(GoodHealth),
-    "is_married": DiscreteGrid(IsMarried),
     "his": DiscreteGrid(HealthInsuranceState),
     "target_his": DiscreteGrid(HealthInsuranceState),
     "pref_type": DiscreteGrid(BenchmarkPrefType),

@@ -39,13 +39,12 @@ class GridConfig:
     # (`assets`, `aime`, `wage_res`, `hcc_*`) compile to an all-gather
     # of the full V-array per device and are rejected at grid
     # construction. Mutually exclusive with `batch_size>0` on the same
-    # axis (pylcm rejects the combination). `spousal_income_distributed`
-    # routes through `baseline/regimes/_common.py:build_states` to its
-    # inline-built `DiscreteGrid(...)` call.
+    # axis (pylcm rejects the combination). `spousal_income` is not among
+    # them: it lives on the `married` regimes, and sharding is legal only
+    # on model-level states.
     pref_type_distributed: bool = False
-    spousal_income_distributed: bool = False
     # `batch_size` on the inline-constructed discrete state grids —
-    # health, spousal_income, lagged_labor_supply, claimed_ss. These
+    # health, lagged_labor_supply, claimed_ss. These
     # are read in `build_states` via `grids.grid_config`. Setting any
     # of them to `1` puts that axis in a Python-level outer loop within
     # the discrete-states block of the productmap
@@ -54,7 +53,6 @@ class GridConfig:
     # lax.scan layer. Defaults to `0`; production overrides set to `1`
     # to compound the splay across the unsharded discretes.
     n_health_batch_size: int = 0
-    n_spousal_income_batch_size: int = 0
     n_lagged_labor_supply_batch_size: int = 0
     n_claimed_ss_batch_size: int = 0
     # `batch_size` on the `pref_type` discrete grid: chunked vmap stride

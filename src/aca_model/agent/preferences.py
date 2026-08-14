@@ -48,12 +48,13 @@ class BenchmarkPrefType:
     type_1: ScalarInt
 
 
-def equivalence_scale(is_married: IntND, exponent: ScalarFloat) -> FloatND:
-    """Return the equivalence scale for household size adjustment.
+def equivalence_scale_married(exponent: ScalarFloat) -> FloatND:
+    """Return the household-size equivalence scale of a married household.
 
-    Single (is_married=False) → 1.0, married (is_married=True) → 2^exponent.
+    Single regimes carry no such function: their scale is the fixed value
+    one, supplied as a per-regime parameter.
     """
-    return jnp.where(is_married, 2.0**exponent, 1.0)
+    return jnp.asarray(2.0**exponent)
 
 
 def fixed_cost_of_work(

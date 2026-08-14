@@ -34,11 +34,12 @@ from aca_model.baseline.regimes._common import Grids, build_grids
 from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
+from aca_model.environment import taxes
 
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
-_M1_REGIME = "nongroup_nomc_inelig_canwork"
-_BRUTE_REGIME = "retiree_nomc_inelig_canwork"
+_M1_REGIME = "single_nongroup_nomc_inelig_canwork"
+_BRUTE_REGIME = "single_retiree_nomc_inelig_canwork"
 
 
 def _build_regimes(solver: SolverName) -> dict[str, Regime]:
@@ -205,9 +206,8 @@ def test_resources_declares_the_consumption_floor_kink() -> None:
     assert meta.output == "resources"
     assert meta.variable == "cash_on_hand"
     (floor_breakpoint,) = meta.breakpoints
-    assert floor_breakpoint.threshold == "consumption_floor_schedule"
+    assert floor_breakpoint.threshold == "consumption_dollars_floor"
     assert floor_breakpoint.kind == "continuous_kink"
-    assert floor_breakpoint.indexed_by == "spousal_income"
 
 
 def test_is_ssi_eligible_declares_the_asset_test_jump() -> None:
@@ -219,7 +219,6 @@ def test_is_ssi_eligible_declares_the_asset_test_jump() -> None:
     (asset_test,) = meta.breakpoints
     assert asset_test.threshold == "ssi_assets_test"
     assert asset_test.kind == "jump"
-    assert asset_test.indexed_by == "spousal_income"
 
 
 def test_ssi_benefit_declares_the_income_test_kink() -> None:
@@ -231,7 +230,29 @@ def test_ssi_benefit_declares_the_income_test_kink() -> None:
     (income_test,) = meta.breakpoints
     assert income_test.threshold == "ssi_maximum_benefit"
     assert income_test.kind == "continuous_kink"
-    assert income_test.indexed_by == "spousal_income"
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [
+        assets_and_income.resources,
+        health_insurance.is_ssi_eligible,
+        health_insurance.ssi_benefit,
+        taxes.after_tax_income,
+    ],
+)
+def test_no_breakpoint_threshold_is_indexed_by_a_state(declared: object) -> None:
+    """Every breakpoint threshold is a plain name, not a table indexed by a
+    ride-along state.
+
+    Marital status is a regime axis, so a regime's schedules already carry only
+    its own row. An `indexed_by` declaration would name a state the regime does
+    not have, and NBEGM would read the wrong cell of a table that no longer has
+    a marital dimension to index.
+    """
+    meta = declared.__lcm_piecewise_affine__  # ty: ignore[unresolved-attribute]
+    for breakpoint_ in meta.breakpoints:
+        assert breakpoint_.indexed_by is None, breakpoint_.threshold
 
 
 def test_nbegm_keeps_labor_supply_live_when_configured() -> None:

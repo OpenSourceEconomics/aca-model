@@ -38,8 +38,9 @@ from aca_model.config import GridConfig
 
 # NBEGM is a per-regime (not global) solver: it solves one 1-D
 # consumption/savings regime with at most one discrete action, so it attaches
-# only to the M1 vertical-slice regime.
-_NBEGM_REGIME = "nongroup_nomc_inelig_canwork"
+# only to the M1 vertical-slice regime. The single copy is the slice: a married
+# household carries `spousal_income` as a further ride-along state.
+_NBEGM_REGIME = "single_nongroup_nomc_inelig_canwork"
 
 __all__ = [
     "REGIME_SPECS",

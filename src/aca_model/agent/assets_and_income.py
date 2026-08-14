@@ -9,7 +9,6 @@ from lcm.typing import (
     BoolND,
     ContinuousAction,
     ContinuousState,
-    DiscreteState,
     FloatND,
     ScalarFloat,
 )
@@ -130,16 +129,14 @@ def next_assets_when_dead(
     variable="cash_on_hand",
     breakpoints=(
         lcm.affine_breakpoint(
-            threshold="consumption_floor_schedule",
+            threshold="consumption_dollars_floor",
             kind="continuous_kink",
-            indexed_by="spousal_income",
         ),
     ),
 )
 def resources(
     cash_on_hand: FloatND,
-    spousal_income: DiscreteState,
-    consumption_floor_schedule: FloatND,
+    consumption_dollars_floor: FloatND,
 ) -> FloatND:
     """Post-transfer resources out of which consumption is paid (DC-EGM `R`).
 
@@ -148,13 +145,12 @@ def resources(
     `borrowing_constraint`). Non-decreasing in `assets` (flat where the
     floor binds), as the DC-EGM contract requires.
 
-    The floor comes from `consumption_floor_schedule` — the per-household
-    $-floor table indexed by `spousal_income`, equal by construction to
-    `consumption_dollars_floor` — so the kink where the floor stops binding
-    is a declared breakpoint: NBEGM's partition splits each cell at the
-    household's floor instead of extrapolating one affine budget across it.
+    The floor is the regime's own `consumption_dollars_floor`, so the kink
+    where it stops binding is a declared breakpoint: NBEGM's partition splits
+    each cell at the household's floor instead of extrapolating one affine
+    budget across it.
     """
-    return jnp.maximum(cash_on_hand, consumption_floor_schedule[spousal_income])
+    return jnp.maximum(cash_on_hand, consumption_dollars_floor)
 
 
 def savings(

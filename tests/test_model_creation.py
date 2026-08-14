@@ -2,7 +2,6 @@
 
 import inspect
 from collections.abc import Mapping
-from dataclasses import replace
 
 import pytest
 from helpers.model import (  # ty: ignore[unresolved-import]
@@ -53,7 +52,7 @@ def build_regime(name: str):
 
 def test_model_creates_successfully() -> None:
     model = make_baseline_model(n_subjects=1)
-    assert len(model.user_regimes) == 19
+    assert len(model.user_regimes) == 37
     assert model.n_periods == 45
 
 
@@ -75,7 +74,7 @@ def test_non_terminal_regimes_not_terminal() -> None:
 
 
 def test_regime_id_dead_is_last() -> None:
-    assert RegimeId.dead == 18
+    assert RegimeId.dead == 36
 
 
 @pytest.mark.parametrize(
@@ -151,7 +150,7 @@ def test_all_non_terminal_regimes_have_core_states() -> None:
         regime = build_regime(name)
         assert "health" in regime.states
     model_states = build_model_states(_GRIDS)
-    for state_name in ("spousal_income", "assets", "hcc_persistent", "hcc_transitory"):
+    for state_name in ("assets", "aime", "hcc_persistent", "hcc_transitory"):
         assert state_name in model_states
 
 
@@ -247,7 +246,7 @@ def test_pension_wealth_is_not_a_solve_function() -> None:
     Its solve variant supplies the imputed value, so a separate
     `functions["pension_wealth"]` entry would double-define it.
     """
-    regime = build_regime("retiree_nomc_inelig_canwork")
+    regime = build_regime("single_retiree_nomc_inelig_canwork")
     assert "pension_wealth" not in regime.functions
 
 
@@ -257,7 +256,7 @@ def test_pension_assets_adjustment_is_phase_variant() -> None:
     In simulate the true pension wealth is carried directly, so the adjustment
     is zero — a `Phased` function with a zero simulate variant.
     """
-    regime = build_regime("retiree_nomc_inelig_canwork")
+    regime = build_regime("single_retiree_nomc_inelig_canwork")
     adjustment = regime.functions["pension_assets_adjustment"]
     assert isinstance(adjustment, Phased)
     assert adjustment.solve is pensions.assets_adjustment
@@ -283,14 +282,14 @@ def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
 
 def test_aca_model_creates_successfully() -> None:
     model = make_aca_model(n_subjects=1, policy=PolicyVariant.ACA)
-    assert len(model.user_regimes) == 19
+    assert len(model.user_regimes) == 37
     assert model.n_periods == 45
 
 
 def test_aca_nongroup_inelig_has_real_functions() -> None:
     """Nongroup+nomc regimes get real ACA functions under ACA policy."""
     regimes = build_aca_regimes(PolicyVariant.ACA)
-    regime = regimes["nongroup_nomc_inelig_canwork"]
+    regime = regimes["single_nongroup_nomc_inelig_canwork"]
     assert regime.functions["mandate_penalty"] is aca_hi.mandate_penalty
     assert regime.functions["hic_premium_subsidy"] is aca_hi.premium_subsidy
     assert regime.functions["cost_sharing_scale"] is aca_hi.cost_sharing
@@ -302,7 +301,7 @@ def test_aca_nongroup_inelig_has_real_functions() -> None:
 def test_aca_no_mandate_has_no_mandate_function() -> None:
     """ACA_NO_MANDATE: mandate_penalty is a fixed param, not a DAG function."""
     regimes = build_aca_regimes(PolicyVariant.ACA_NO_MANDATE)
-    regime = regimes["nongroup_nomc_inelig_canwork"]
+    regime = regimes["single_nongroup_nomc_inelig_canwork"]
     assert "mandate_penalty" not in regime.functions
     assert regime.functions["hic_premium_subsidy"] is aca_hi.premium_subsidy
     assert regime.functions["cost_sharing_scale"] is aca_hi.cost_sharing
@@ -312,7 +311,7 @@ def test_aca_no_mandate_has_no_mandate_function() -> None:
 def test_aca_other_regimes_have_no_aca_policy_keys() -> None:
     """Non-nongroup regimes have no mandate/subsidy/cost-sharing keys."""
     regimes = build_aca_regimes(PolicyVariant.ACA)
-    regime = regimes["retiree_nomc_inelig_canwork"]
+    regime = regimes["single_retiree_nomc_inelig_canwork"]
     assert "mandate_penalty" not in regime.functions
     assert "hic_premium_subsidy" not in regime.functions
     assert "cost_sharing_scale" not in regime.functions
@@ -324,16 +323,16 @@ def test_aca_other_regimes_have_no_aca_policy_keys() -> None:
 def test_all_policy_variants_create(policy: PolicyVariant) -> None:
     """All policy variants create valid models."""
     model = make_aca_model(n_subjects=1, policy=policy)
-    assert len(model.user_regimes) == 19
+    assert len(model.user_regimes) == 37
 
 
 def test_aca_no_medicaid_expansion_keeps_baseline_medicaid() -> None:
     """ACA_NO_MEDICAID_EXPANSION: baseline Medicaid, but has subsidies + mandate."""
     regimes = build_aca_regimes(PolicyVariant.ACA_NO_MEDICAID_EXPANSION)
-    retiree = regimes["retiree_nomc_inelig_canwork"]
+    retiree = regimes["single_retiree_nomc_inelig_canwork"]
     assert retiree.functions["is_medicaid_eligible"] is not aca_hi.is_medicaid_eligible
 
-    nongroup = regimes["nongroup_nomc_inelig_canwork"]
+    nongroup = regimes["single_nongroup_nomc_inelig_canwork"]
     assert nongroup.functions["mandate_penalty"] is aca_hi.mandate_penalty
     assert nongroup.functions["hic_premium_subsidy"] is aca_hi.premium_subsidy
 
@@ -341,10 +340,10 @@ def test_aca_no_medicaid_expansion_keeps_baseline_medicaid() -> None:
 def test_aca_no_medicaid_expansion_no_mandate() -> None:
     """ACA_NO_MEDICAID_EXPANSION_NO_MANDATE: baseline Medicaid, subsidies, no mandate."""
     regimes = build_aca_regimes(PolicyVariant.ACA_NO_MEDICAID_EXPANSION_NO_MANDATE)
-    retiree = regimes["retiree_nomc_inelig_canwork"]
+    retiree = regimes["single_retiree_nomc_inelig_canwork"]
     assert retiree.functions["is_medicaid_eligible"] is not aca_hi.is_medicaid_eligible
 
-    nongroup = regimes["nongroup_nomc_inelig_canwork"]
+    nongroup = regimes["single_nongroup_nomc_inelig_canwork"]
     assert "mandate_penalty" not in nongroup.functions
     assert nongroup.functions["hic_premium_subsidy"] is aca_hi.premium_subsidy
 
@@ -352,10 +351,10 @@ def test_aca_no_medicaid_expansion_no_mandate() -> None:
 def test_aca_only_medicaid_expansion() -> None:
     """ACA_ONLY_MEDICAID_EXPANSION: Medicaid expansion only, no subsidies/mandate."""
     regimes = build_aca_regimes(PolicyVariant.ACA_ONLY_MEDICAID_EXPANSION)
-    retiree = regimes["retiree_nomc_inelig_canwork"]
+    retiree = regimes["single_retiree_nomc_inelig_canwork"]
     assert retiree.functions["is_medicaid_eligible"] is aca_hi.is_medicaid_eligible
 
-    nongroup = regimes["nongroup_nomc_inelig_canwork"]
+    nongroup = regimes["single_nongroup_nomc_inelig_canwork"]
     assert "mandate_penalty" not in nongroup.functions
     assert "hic_premium_subsidy" not in nongroup.functions
     assert "cost_sharing_scale" not in nongroup.functions
@@ -364,30 +363,24 @@ def test_aca_only_medicaid_expansion() -> None:
 def test_baseline_model_creates() -> None:
     """Baseline model creates successfully without PolicyVariant."""
     model = make_baseline_model(n_subjects=1)
-    assert len(model.user_regimes) == 19
+    assert len(model.user_regimes) == 37
 
 
-@pytest.mark.parametrize(
-    ("config_field", "state_name"),
-    [
-        ("spousal_income_distributed", "spousal_income"),
-    ],
-)
-def test_discrete_state_distributed_flag_propagates_to_model_states(
-    config_field: str, state_name: str
-) -> None:
-    """`GridConfig.<axis>_distributed=True` sets `distributed=True` on the
-    model-level `DiscreteGrid` for that axis (sharding is legal only on
-    model-level states)."""
-    gc = replace(BENCHMARK_GRID_CONFIG, **{config_field: True})
+def test_a_sharded_pref_type_grid_reaches_the_model_level_states() -> None:
+    """A `distributed` `pref_type` grid arrives at the model level intact.
+
+    `pref_type` is the only shardable axis — sharding is legal only on
+    model-level states, and it is the one that remains — so the caller builds
+    the grid with the flag and the model must carry it through unchanged.
+    """
     grids = build_grids(
-        grid_config=gc,
+        grid_config=BENCHMARK_GRID_CONFIG,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType, distributed=True),
     )
     model_states = build_model_states(grids)
-    assert model_states[state_name].distributed is True
+    assert model_states["pref_type"].distributed is True
 
 
 @pytest.mark.parametrize(
@@ -397,10 +390,7 @@ def test_discrete_state_distributed_flag_propagates_to_model_states(
 def test_discrete_state_distributed_flag_defaults_to_false(state_name: str) -> None:
     """`distributed` on inline-built discrete states defaults to `False` so
     configurations that do not opt in see no behaviour change."""
-    if state_name == "spousal_income":
-        grid = build_model_states(_GRIDS)[state_name]
-    else:
-        grid = build_regime("retiree_dimc_choose_canwork").states[state_name]
+    grid = build_regime("married_retiree_dimc_choose_canwork").states[state_name]
     assert grid.distributed is False
 
 
@@ -411,7 +401,7 @@ def test_dead_regime_prunes_unused_broadcast_states() -> None:
     regimes); the other unused broadcast states are pruned by reachability."""
     model = make_baseline_model(n_subjects=1)
     assert model.pruned_variables["dead"] == frozenset(
-        {"aime", "spousal_income", "hcc_persistent", "hcc_transitory"}
+        {"aime", "hcc_persistent", "hcc_transitory"}
     )
     assert set(model.user_regimes["dead"].states) == {"assets", "pref_type"}
 
