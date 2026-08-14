@@ -74,6 +74,9 @@ REFERENCE_FILE = Path(__file__).parent / "data" / "marital_parity_reference.pkl"
 _MARITAL_OF_CODE = ("single", "married", "married")
 _WITHIN_MARRIAGE_OF_CODE = (0, 0, 1)
 
+# The split encoding's within-marriage state, by the label the panel records.
+_WITHIN_MARRIAGE_CODES = {"no_inc": 0, "has_inc": 1}
+
 _DISCRETE_COLUMNS = ("regime_name", "claim_ss", "labor_supply", "buy_private")
 
 # Mass may leak only at the level a float32 probability vector can carry.
@@ -219,13 +222,83 @@ def test_factored_kernels_compose_to_nonnegative_probabilities() -> None:
 
 
 def _source_codes(panel: pd.DataFrame) -> np.ndarray:
-    """Return each row's three-code spousal state, `-1` where the row is dead."""
+    """Return each row's three-code spousal state, `-1` where the row is dead.
+
+    The panel records a discrete state as its category *label*, so the
+    within-marriage code is read by label. A married row whose label is
+    unrecognised raises rather than defaulting: silently reading every married
+    row as one code collapses the two married sources into one and makes the
+    chain look wrong in a way no assertion attributes to this function.
+    """
     names = panel["regime_name"].astype("str")
-    within = np.nan_to_num(
-        pd.to_numeric(panel["spousal_income"], errors="coerce").to_numpy()
-    ).astype(int)
-    codes = np.where(names.str.startswith("married_").to_numpy(), 1 + within, 0)
+    married = names.str.startswith("married_").to_numpy()
+    labels = panel["spousal_income"].astype("str").to_numpy(dtype=object)
+
+    unknown = married & ~np.isin(labels, list(_WITHIN_MARRIAGE_CODES))
+    if unknown.any():
+        msg = (
+            "married rows carry unrecognised `spousal_income` labels "
+            f"{sorted(set(labels[unknown]))}; expected "
+            f"{sorted(_WITHIN_MARRIAGE_CODES)}"
+        )
+        raise ValueError(msg)
+
+    # The default only ever reaches a single row, whose code the `where` below
+    # replaces; every married row is validated above.
+    within = np.array(
+        [_WITHIN_MARRIAGE_CODES.get(label, 0) for label in labels], dtype=int
+    )
+    codes = np.where(married, 1 + within, 0)
     return np.where((names == "dead").to_numpy(), -1, codes)
+
+
+def _panel_fragment(
+    regime_names: list[str], spousal_labels: list[str | None]
+) -> pd.DataFrame:
+    """A panel fragment recording discrete states the way `to_dataframe` does."""
+    return pd.DataFrame(
+        {
+            "regime_name": pd.Categorical(regime_names),
+            "spousal_income": pd.Categorical(
+                spousal_labels, categories=list(_WITHIN_MARRIAGE_CODES)
+            ),
+        }
+    )
+
+
+def test_source_codes_distinguishes_the_two_married_codes() -> None:
+    """A married row's source code follows its `spousal_income` label.
+
+    Reading the label as a number instead collapses both married codes onto
+    one, which silently misstates the chain rather than failing.
+    """
+    panel = _panel_fragment(
+        ["single_retiree_nomc_inelig_canwork"] * 2
+        + ["married_retiree_nomc_inelig_canwork"] * 2
+        + ["dead"],
+        [None, None, "no_inc", "has_inc", None],
+    )
+    np.testing.assert_array_equal(_source_codes(panel), np.array([0, 0, 1, 2, -1]))
+
+
+def test_source_codes_refuses_an_unrecognised_married_label() -> None:
+    """A married row whose `spousal_income` label is not a known code raises."""
+    panel = _panel_fragment(
+        ["married_retiree_nomc_inelig_canwork"],
+        [None],
+    )
+    with pytest.raises(ValueError, match="unrecognised `spousal_income` labels"):
+        _source_codes(panel)
+
+
+def test_labels_treats_two_absent_actions_as_equal() -> None:
+    """An action a regime does not offer compares equal to the same absence.
+
+    `claim_ss` is absent for every subject at the start age, where no regime is
+    SS-eligible, so the encodings agree there by having nothing to disagree on.
+    """
+    absent = pd.Series(pd.Categorical([None, None], categories=["yes", "no"]))
+    assert np.array_equal(_labels(absent), _labels(absent))
 
 
 @pytest.mark.long_running
@@ -310,8 +383,15 @@ _ABSENT = "<absent>"
 
 
 def _labels(values: pd.Series) -> np.ndarray:
-    """Return `values` as comparable string labels, absences included."""
-    return values.fillna(_ABSENT).astype("str").to_numpy(dtype=object)
+    """Return `values` as comparable string labels, absences included.
+
+    Built element-wise rather than with `fillna`, because a discrete column is
+    categorical and `_ABSENT` is not one of its categories.
+    """
+    return np.array(
+        [_ABSENT if pd.isna(value) else str(value) for value in values],
+        dtype=object,
+    )
 
 
 @pytest.mark.long_running
