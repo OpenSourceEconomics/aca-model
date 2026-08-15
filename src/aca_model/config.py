@@ -149,18 +149,11 @@ class GridConfig:
     # value scans it in blocks of that many branches (identical result, per-branch
     # intermediates bounded by one block). Only consulted under `solver="nbegm"`.
     n_nbegm_branch_batch_size: int = 0
-    # Keep `labor_supply` a live discrete action on the M1 regime under NBEGM (the
-    # branch compiler solves each labor level against its own continuation, utility,
-    # and breakpoint partition); `buy_private` stays fixed. `False` fixes both actions
-    # to a single level so the only choice is continuous consumption. Only consulted
-    # under `solver="nbegm"`.
-    #
-    # Requires `nbegm_jump_read="bridged"`. `labor_supply` enters `countable_income`,
-    # which carries the SSI income test, so each labor level puts that breakpoint at a
-    # different liquid level; the one-sided read publishes its cliff limits on a single
-    # query grid shared across branches, which the two cannot both satisfy. Building a
-    # model with live labor under `"one_sided"` raises `RegimeInitializationError`.
-    nbegm_live_labor_supply: bool = False
+    # `labor_supply` enters `countable_income`, which carries the SSI income test, so
+    # each labor level puts that breakpoint at a different liquid level. The one-sided
+    # read publishes its cliff limits on a single query grid shared across branches,
+    # which the two cannot both satisfy, so a regime carrying `labor_supply` builds
+    # only under `nbegm_jump_read="bridged"`.
 
 
 MODEL_CONFIG = ModelConfig()

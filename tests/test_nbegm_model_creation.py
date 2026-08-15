@@ -1,11 +1,16 @@
 """NBEGM solver wiring: `solver="nbegm"` is a per-regime option.
 
 Unlike DC-EGM (a global Euler solver on every living regime), NBEGM solves a
-single 1-D consumption/savings regime with at most one discrete action, so it
-attaches only to the M1 vertical-slice regime `nongroup_nomc_inelig_canwork`;
-every other living regime keeps brute force. The savings-form spec is shared
-with DC-EGM (NBEGM's budget node is `resources`, the post-decision function is
-`savings`).
+single 1-D consumption/savings regime, so it attaches only to the vertical-slice
+regime `nongroup_nomc_inelig_canwork`; every other living regime keeps brute
+force. The savings-form spec is shared with DC-EGM (NBEGM's budget node is
+`resources`, the post-decision function is `savings`).
+
+The regime declares every choice its structure affords — whether to buy
+non-group coverage, and how many hours to work — and the discrete envelope
+branches over the Cartesian product of those grids. The regime is never narrowed
+to fit the solver: a solver that cannot carry a choice refuses the regime rather
+than being handed a model that omits it.
 """
 
 import dataclasses
@@ -41,6 +46,14 @@ _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 _M1_REGIME = "single_nongroup_nomc_inelig_canwork"
 _BRUTE_REGIME = "single_retiree_nomc_inelig_canwork"
 
+# `labor_supply` enters `countable_income`, which carries the SSI income test, so each
+# labor level puts that breakpoint at a different liquid level. The one-sided read
+# publishes its cliff limits on a single query grid shared across branches, which the
+# two cannot both satisfy, so a regime carrying `labor_supply` needs the bridged read.
+_BRIDGED_GRID_CONFIG = dataclasses.replace(
+    BENCHMARK_GRID_CONFIG, nbegm_jump_read="bridged"
+)
+
 
 def _build_regimes(solver: SolverName) -> dict[str, Regime]:
     return build_all_regimes(
@@ -65,7 +78,7 @@ def _build_model_with(solver: SolverName, grid_config: GridConfig) -> Model:
 
 
 def _build_model(solver: SolverName) -> Model:
-    return _build_model_with(solver, BENCHMARK_GRID_CONFIG)
+    return _build_model_with(solver, _BRIDGED_GRID_CONFIG)
 
 
 def _grids() -> Grids:
@@ -121,30 +134,43 @@ def test_build_nbegm_solver_forwards_the_jump_read_mode() -> None:
     assert solver.jump_read == "bridged"
 
 
-def test_nbegm_m1_regime_fixes_buy_private() -> None:
-    """The NBEGM M1 slice drops `buy_private` as an action (fixed to purchase),
-    so the only choice is continuous consumption; the brute M1 regime keeps it."""
+def test_nbegm_m1_regime_declares_the_same_actions_as_brute_force() -> None:
+    """Which solver runs a regime does not change the choices the household has.
+
+    The M1 regime affords a coverage choice and an hours choice, so it declares
+    both under either solver.
+    """
     nbegm_m1 = _build_regimes("nbegm")[_M1_REGIME]
     brute_m1 = _build_regimes("brute_force")[_M1_REGIME]
-    assert "buy_private" not in nbegm_m1.actions
-    assert "buy_private" in brute_m1.actions
+    assert set(nbegm_m1.actions) == set(brute_m1.actions)
 
 
-def test_nbegm_m1_regime_fixes_labor_supply() -> None:
-    """The NBEGM M1 slice drops `labor_supply` as an action (fixed to full-time
-    work), so no discrete action remains and the only choice is continuous
-    consumption; the brute M1 regime keeps `labor_supply`."""
+def test_nbegm_m1_regime_declares_both_discrete_actions() -> None:
+    """The M1 regime's discrete choices are whether to buy non-group coverage and
+    how many hours to work."""
     nbegm_m1 = _build_regimes("nbegm")[_M1_REGIME]
-    brute_m1 = _build_regimes("brute_force")[_M1_REGIME]
-    assert "labor_supply" not in nbegm_m1.actions
-    assert "labor_supply" in brute_m1.actions
+    discrete = {
+        name
+        for name, grid in nbegm_m1.actions.items()
+        if isinstance(grid, DiscreteGrid)
+    }
+    assert discrete == {"buy_private", "labor_supply"}
 
 
-def test_nbegm_m1_regime_has_no_discrete_action() -> None:
-    """With both discrete actions fixed, the NBEGM M1 slice leaves only the
-    continuous consumption choice — no `DiscreteGrid` action remains."""
-    nbegm_m1 = _build_regimes("nbegm")[_M1_REGIME]
-    assert not any(isinstance(grid, DiscreteGrid) for grid in nbegm_m1.actions.values())
+def test_nbegm_model_builds_a_regime_declaring_several_discrete_actions() -> None:
+    """The M1 regime builds under NBEGM with both of its discrete actions live.
+
+    The discrete envelope branches over the Cartesian product of the regime's
+    discrete action grids, so a regime is never narrowed to fit the solver.
+    """
+    model = _build_model("nbegm")
+    nbegm_m1 = model.user_regimes[_M1_REGIME]
+    discrete = {
+        name
+        for name, grid in nbegm_m1.actions.items()
+        if isinstance(grid, DiscreteGrid)
+    }
+    assert discrete == {"buy_private", "labor_supply"}
 
 
 def test_nbegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
@@ -255,66 +281,26 @@ def test_no_breakpoint_threshold_is_indexed_by_a_state(declared: object) -> None
         assert breakpoint_.indexed_by is None, breakpoint_.threshold
 
 
-def test_nbegm_keeps_labor_supply_live_when_configured() -> None:
-    """With `nbegm_live_labor_supply=True`, the M1 regime carries `labor_supply`
-    as a genuine discrete action under NBEGM while `buy_private` stays fixed, so
-    the branch compiler solves the labor choice against the cliffed budget."""
-    grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG, nbegm_live_labor_supply=True
-    )
-    regimes = build_all_regimes(
-        grid_config=grid_config,
-        fixed_params=_FIXED_PARAMS,
-        wage_params=_WAGE_PARAMS,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver="nbegm",
-    )
-    actions = regimes[_M1_REGIME].actions
-    assert "labor_supply" in actions
-    assert "buy_private" not in actions
-
-
-def test_nbegm_live_labor_supply_requires_the_bridged_cliff_read() -> None:
-    """A live `labor_supply` action builds only under `nbegm_jump_read="bridged"`.
+def test_nbegm_labor_supply_requires_the_bridged_cliff_read() -> None:
+    """The M1 regime builds under NBEGM only with `nbegm_jump_read="bridged"`.
 
     `labor_supply` enters `countable_income`, which carries the SSI income test,
     so each labor level puts that breakpoint at a different liquid level. The
     one-sided read publishes its cliff limits on one query grid shared across
     branches, so the two cannot both hold and the build is refused.
     """
-    live_labor = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG, nbegm_live_labor_supply=True
-    )
     with pytest.raises(RegimeInitializationError, match="must not enter any schedule"):
-        _build_model_with(
-            "nbegm", dataclasses.replace(live_labor, nbegm_jump_read="one_sided")
-        )
+        _build_model_with("nbegm", BENCHMARK_GRID_CONFIG)
 
-    bridged = dataclasses.replace(live_labor, nbegm_jump_read="bridged")
-    assert isinstance(_build_model_with("nbegm", bridged), Model)
-
-
-def test_nbegm_fixes_labor_supply_by_default() -> None:
-    """By default NBEGM fixes both discrete actions on the M1 regime, so the
-    only remaining choice is continuous consumption against the cliffed budget."""
-    regimes = _build_regimes("nbegm")
-    actions = regimes[_M1_REGIME].actions
-    assert "labor_supply" not in actions
-    assert "buy_private" not in actions
+    assert isinstance(_build_model_with("nbegm", _BRIDGED_GRID_CONFIG), Model)
 
 
 @pytest.mark.parametrize("policy", list(PolicyVariant))
 def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     """Every ACA policy variant builds a model under NBEGM with the M1 regime on
-    the solver and labor live — the overlay's function swaps compose with the
-    branch compiler's per-regime wiring."""
-    # Live labor requires the bridged cliff read — see
-    # `test_nbegm_live_labor_supply_requires_the_bridged_cliff_read`.
-    grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG,
-        nbegm_live_labor_supply=True,
-        nbegm_jump_read="bridged",
-    )
+    the solver and both discrete choices live — the overlay's function swaps
+    compose with the branch compiler's per-regime wiring."""
+    grid_config = _BRIDGED_GRID_CONFIG
     model = create_aca_model(
         n_subjects=1,
         policy=policy,
@@ -342,17 +328,13 @@ def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
 def test_nbegm_aca_variants_leave_no_free_buy_private_params(
     policy: PolicyVariant,
 ) -> None:
-    """With `buy_private` fixed under the NBEGM M1 slice, no ACA-swapped
-    function may leave `buy_private` as a free parameter — the params template
-    holds no `buy_private` leaves, so solve/simulate never demand a
-    `*__buy_private` entry the pipeline cannot supply."""
-    # Live labor requires the bridged cliff read — see
-    # `test_nbegm_live_labor_supply_requires_the_bridged_cliff_read`.
-    grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG,
-        nbegm_live_labor_supply=True,
-        nbegm_jump_read="bridged",
-    )
+    """`buy_private` is a choice, never a parameter.
+
+    No ACA-swapped function may leave it as a free parameter — the params
+    template holds no `buy_private` leaves, so solve/simulate never demand a
+    `*__buy_private` entry the pipeline cannot supply.
+    """
+    grid_config = _BRIDGED_GRID_CONFIG
     model = create_aca_model(
         n_subjects=1,
         policy=policy,

@@ -403,27 +403,22 @@ def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     return states
 
 
-def build_actions(
-    spec: RegimeSpec,
-    grids: Grids,
-    *,
-    drop_buy_private: bool = False,
-    drop_labor_supply: bool = False,
-) -> dict:
+def build_actions(spec: RegimeSpec, grids: Grids) -> dict:
     """Build the action dict for a non-dead regime.
 
-    The `drop_*` flags fix a discrete action to a single level for the NBEGM
-    M1 vertical slice (its case-piece envelope handles at most one discrete
-    action). The dropped action's former consumers are rebound to the fixed
-    level at the regime builder, so removing it here is the action side of the
-    dags remove-and-fix.
+    Every choice the regime's structure affords is a live action: whether to
+    claim Social Security where claiming is neither impossible nor already
+    forced, how many hours to work where work is still available, and whether
+    to buy non-group coverage before Medicare. Which solver runs the regime
+    does not enter — a solver that cannot carry a choice refuses the regime
+    rather than being handed a narrower one.
     """
     actions: dict = {}
     if spec["ss"] == "choose":
         actions["claim_ss"] = DiscreteGrid(ClaimedSS)
-    if spec["canwork"] == "canwork" and not drop_labor_supply:
+    if spec["canwork"] == "canwork":
         actions["labor_supply"] = DiscreteGrid(LaborSupply)
-    if spec["his"] == "nongroup" and spec["mc"] == "nomc" and not drop_buy_private:
+    if spec["his"] == "nongroup" and spec["mc"] == "nomc":
         actions["buy_private"] = DiscreteGrid(BuyPrivate)
     actions["consumption_dollars"] = grids.consumption_dollars
     return actions

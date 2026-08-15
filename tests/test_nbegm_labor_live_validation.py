@@ -1,15 +1,15 @@
-"""NBEGM solves the M1 regime with a live labor-supply choice, matching brute.
+"""NBEGM solves the M1 regime with its discrete choices live, matching brute.
 
-The M1 regime `nongroup_nomc_inelig_canwork` carries `labor_supply` (5 levels) as a
-genuine discrete action while `buy_private` is fixed. Labor supply feeds the `aime`
-co-state (earnings accrual), the `lagged_labor_supply` co-state, and the leisure term
-in period utility — every branch-dependent channel at once. NBEGM's ride-along
-discrete envelope solves each labor branch against its own continuation and utility;
-the value function must match a brute-force solve on the same state-action space.
+The M1 regime `nongroup_nomc_inelig_canwork` carries `labor_supply` (5 levels) and
+`buy_private` as genuine discrete actions. Labor supply feeds the `aime` co-state
+(earnings accrual), the `lagged_labor_supply` co-state, and the leisure term in period
+utility — every branch-dependent channel at once. NBEGM's ride-along discrete envelope
+solves each branch against its own continuation and utility; the value function must
+match a brute-force solve on the same state-action space.
 
-Both solvers run the full 18-regime model at the benchmark grid with `buy_private`
-fixed and `labor_supply` live, in NBEGM's `"bridged"` cliff-read mode so the
-comparison isolates the solver machinery from the asset-grid read convention.
+Both solvers run the full 18-regime model at the benchmark grid in NBEGM's `"bridged"`
+cliff-read mode, so the comparison isolates the solver machinery from the asset-grid
+read convention.
 """
 
 import dataclasses
@@ -19,51 +19,13 @@ import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
 from lcm import DiscreteGrid
 
-import aca_model.baseline.regimes._nongroup as nongroup_mod
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.model import create_model
 from aca_model.baseline.regimes import SolverName
-from aca_model.baseline.regimes._common import Grids, RegimeSpec
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _M1_REGIME = "single_nongroup_nomc_inelig_canwork"
-
-
-def _is_m1(spec: RegimeSpec) -> bool:
-    return spec["ss"] == "inelig" and spec["mc"] == "nomc"
-
-
-@pytest.fixture
-def m1_labor_live(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep `labor_supply` live and fix only `buy_private` on M1, under every solver.
-
-    The NBEGM wiring fixes both discrete actions on its own; this override keeps
-    labor supply as a genuine action (so the branch compiler solves it) and fixes
-    `buy_private`, applying the same choice to the brute build so both solvers share
-    one state-action space.
-    """
-    original_build_functions = nongroup_mod._build_functions  # noqa: SLF001
-    original_build_actions = nongroup_mod.build_actions
-
-    def build_functions_labor_live(spec: RegimeSpec, **kwargs: bool) -> dict:
-        if _is_m1(spec):
-            return original_build_functions(
-                spec, fix_buy_private=True, fix_labor_supply=False
-            )
-        return original_build_functions(spec, **kwargs)
-
-    def build_actions_labor_live(
-        spec: RegimeSpec, grids: Grids, **kwargs: bool
-    ) -> dict:
-        if _is_m1(spec):
-            return original_build_actions(
-                spec, grids, drop_buy_private=True, drop_labor_supply=False
-            )
-        return original_build_actions(spec, grids, **kwargs)
-
-    monkeypatch.setattr(nongroup_mod, "_build_functions", build_functions_labor_live)
-    monkeypatch.setattr(nongroup_mod, "build_actions", build_actions_labor_live)
 
 
 def _solve_m1(solver: SolverName) -> tuple[dict[int, np.ndarray], int]:
@@ -127,7 +89,6 @@ def _cliff_band_mask(reference: np.ndarray, assets_axis: int) -> np.ndarray:
 
 
 @pytest.mark.long_running
-@pytest.mark.usefixtures("m1_labor_live")
 def test_nbegm_m1_labor_live_agrees_with_brute_split_by_cliff_band() -> None:
     """The M1 value functions agree cell-wise with labor live, gated per region.
 
