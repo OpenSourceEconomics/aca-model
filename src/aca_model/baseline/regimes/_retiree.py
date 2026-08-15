@@ -20,6 +20,7 @@ from aca_model.baseline.regimes._common import (
     build_actions,
     build_common_functions,
     build_granular_regime_transition,
+    build_nbegm_functions,
     build_pension_functions,
     build_regime_probs,
     build_state_transitions,
@@ -133,6 +134,12 @@ def build_regime(
         if egm_solver is None
         else ("nbegm" if nbegm_solver is not None else "dcegm")
     )
+    functions = _build_functions(spec)
+    if nbegm_solver is not None:
+        # NBEGM's solver contract is stated per regime: it reads the budget in
+        # savings form off `resources` and the post-decision node off
+        # `savings`, neither of which the brute-force build needs.
+        functions = {**functions, **build_nbegm_functions()}
     return Regime(
         transition=build_granular_regime_transition(
             transition_func=transition_func, target_ids=(*own.values(), *ng.values())
@@ -141,6 +148,6 @@ def build_regime(
         states=states,
         state_transitions=build_state_transitions(spec, solver=state_solver),
         actions=build_actions(spec, grids),
-        functions=_build_functions(spec),
+        functions=functions,
         **solver_kwargs,
     )

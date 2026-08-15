@@ -1,10 +1,9 @@
-"""NBEGM solver wiring: `solver="nbegm"` is a per-regime option.
+"""NBEGM solver wiring.
 
-Unlike DC-EGM (a global Euler solver on every living regime), NBEGM solves a
-single 1-D consumption/savings regime, so it attaches only to the vertical-slice
-regime `nongroup_nomc_inelig_canwork`; every other living regime keeps brute
-force. The savings-form spec is shared with DC-EGM (NBEGM's budget node is
-`resources`, the post-decision function is `savings`).
+`solver="nbegm"` solves every living regime with NB-EGM, so each of them carries
+the savings-form budget the solver reads: the budget node is `resources` and the
+post-decision function is `savings`, the same spec DC-EGM uses. The `dead` regime
+is terminal and keeps its own solver.
 
 The regime declares every choice its structure affords — whether to buy
 non-group coverage, and how many hours to work — and the discrete envelope
@@ -21,7 +20,7 @@ import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
 from lcm import DiscreteGrid, Model, Regime
 from lcm.exceptions import RegimeInitializationError
-from lcm.solvers import NBEGM, GridSearch
+from lcm.solvers import NBEGM
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.model import create_model as create_aca_model
@@ -89,15 +88,18 @@ def _grids() -> Grids:
     )
 
 
-def test_nbegm_attaches_only_to_the_m1_regime() -> None:
-    """`solver="nbegm"` gives the M1 slice regime a `NBEGM` config and leaves
-    every other living regime on brute force."""
+def test_nbegm_attaches_to_every_living_regime() -> None:
+    """`solver="nbegm"` solves every living regime with NB-EGM.
+
+    A solver that reached only some regimes would leave the rest on brute
+    force while still reporting itself as the model's solver, so the choice of
+    solver would not be visible in the result it produced.
+    """
     regimes = _build_regimes("nbegm")
-    assert isinstance(regimes[_M1_REGIME].solver, NBEGM)
-    for name in REGIME_SPECS:
-        if name == _M1_REGIME:
-            continue
-        assert isinstance(regimes[name].solver, GridSearch), name
+    on_brute_force = [
+        name for name in REGIME_SPECS if not isinstance(regimes[name].solver, NBEGM)
+    ]
+    assert on_brute_force == []
 
 
 def test_build_nbegm_solver_uses_the_savings_form_resources_budget() -> None:
@@ -188,15 +190,20 @@ def test_nbegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
         assert law is expected, target_name
 
 
-def test_nbegm_savings_form_functions_are_scoped_to_the_m1_regime() -> None:
-    """Under NBEGM only the M1 regime carries the savings-form budget functions
-    (`resources`, `savings`); brute regimes keep the cash-on-hand form and carry
-    neither."""
+def test_nbegm_gives_every_living_regime_the_savings_form_budget() -> None:
+    """Under NBEGM every living regime carries `resources` and `savings`.
+
+    They are the solver's budget contract, so a regime NB-EGM solves without
+    them cannot be built at all; a regime it does not solve has no use for
+    them, which is why the brute-force build omits them.
+    """
     model = _build_model("nbegm")
-    m1_functions = model.user_regimes[_M1_REGIME].functions
-    assert "resources" in m1_functions
-    assert "savings" in m1_functions
-    assert "resources" not in model.user_regimes[_BRUTE_REGIME].functions
+    missing = [
+        name
+        for name in REGIME_SPECS
+        if not {"resources", "savings"} <= set(model.user_regimes[name].functions)
+    ]
+    assert missing == []
 
 
 def test_nbegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
