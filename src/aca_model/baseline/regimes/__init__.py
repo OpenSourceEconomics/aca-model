@@ -130,8 +130,11 @@ def build_model_slots(
     constraint, states, and laws of motion shared by all living regimes.
     Both the baseline and the ACA `create_model` consume this — the ACA
     overlay swaps only regime-level functions, so the broadcast slots are
-    policy-invariant. Under DC-EGM the solver-contract functions join the
-    broadcast set and no borrowing constraint is declared.
+    policy-invariant. Under an EGM solver the solver-contract functions join
+    the broadcast set; the borrowing constraint is declared under every
+    solver, because forward simulation re-decides consumption by an argmax
+    over the consumption grid and needs the explicit feasibility mask even
+    when the solve enforces the limit through the savings grid's lower bound.
     """
     grids = build_grids(
         grid_config=grid_config,
