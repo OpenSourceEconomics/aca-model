@@ -30,12 +30,6 @@ from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _M1_REGIME = "nongroup_nomc_inelig_canwork"
 
-_MULTIPLE_DISCRETE_ACTIONS = (
-    "pylcm's ride-along discrete envelope is written over one action's grid and "
-    "refuses a regime declaring several; the M1 regime declares both "
-    "`labor_supply` and `buy_private`."
-)
-
 
 def _solve_m1(solver: SolverName) -> dict[int, np.ndarray]:
     grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, nbegm_jump_read="bridged")
@@ -59,7 +53,6 @@ def _solve_m1(solver: SolverName) -> dict[int, np.ndarray]:
 
 
 @pytest.mark.long_running
-@pytest.mark.xfail(strict=True, reason=_MULTIPLE_DISCRETE_ACTIONS)
 def test_nbegm_m1_value_function_agrees_with_brute_in_the_bulk() -> None:
     """The M1 value functions agree cell-wise away from the cliff tail.
 

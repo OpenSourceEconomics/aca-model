@@ -7,11 +7,10 @@ force. The savings-form spec is shared with DC-EGM (NBEGM's budget node is
 `resources`, the post-decision function is `savings`).
 
 The regime declares every choice its structure affords — whether to buy
-non-group coverage, and how many hours to work. pylcm's ride-along discrete
-envelope is written over a single action's grid and refuses a regime declaring
-more than one, so model build under NBEGM raises until that arity is widened.
-The regime is not narrowed to fit: a solver that cannot carry a choice refuses
-the regime rather than being handed a model that omits it.
+non-group coverage, and how many hours to work — and the discrete envelope
+branches over the Cartesian product of those grids. The regime is never narrowed
+to fit the solver: a solver that cannot carry a choice refuses the regime rather
+than being handed a model that omits it.
 """
 
 import dataclasses
@@ -45,12 +44,6 @@ _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
 _M1_REGIME = "nongroup_nomc_inelig_canwork"
 _BRUTE_REGIME = "retiree_nomc_inelig_canwork"
-
-_MULTIPLE_DISCRETE_ACTIONS = (
-    "pylcm's ride-along discrete envelope is written over one action's grid and "
-    "refuses a regime declaring several; the M1 regime declares both "
-    "`labor_supply` and `buy_private`."
-)
 
 # `labor_supply` enters `countable_income`, which carries the SSI income test, so each
 # labor level puts that breakpoint at a different liquid level. The one-sided read
@@ -163,19 +156,20 @@ def test_nbegm_m1_regime_declares_both_discrete_actions() -> None:
     assert discrete == {"buy_private", "labor_supply"}
 
 
-def test_nbegm_model_build_refuses_a_regime_with_several_discrete_actions() -> None:
-    """Model build under NBEGM refuses the M1 regime, naming its discrete actions.
+def test_nbegm_model_builds_a_regime_declaring_several_discrete_actions() -> None:
+    """The M1 regime builds under NBEGM with both of its discrete actions live.
 
-    The ride-along discrete envelope is written over a single action's grid. The
-    regime is not narrowed to fit it — the refusal is the honest outcome until
-    the envelope carries several actions.
+    The discrete envelope branches over the Cartesian product of the regime's
+    discrete action grids, so a regime is never narrowed to fit the solver.
     """
-    with pytest.raises(
-        RegimeInitializationError, match="exactly one discrete action"
-    ) as excinfo:
-        _build_model("nbegm")
-    assert "labor_supply" in str(excinfo.value)
-    assert "buy_private" in str(excinfo.value)
+    model = _build_model("nbegm")
+    nbegm_m1 = model.user_regimes[_M1_REGIME]
+    discrete = {
+        name
+        for name, grid in nbegm_m1.actions.items()
+        if isinstance(grid, DiscreteGrid)
+    }
+    assert discrete == {"buy_private", "labor_supply"}
 
 
 def test_nbegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
@@ -194,7 +188,6 @@ def test_nbegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
         assert law is expected, target_name
 
 
-@pytest.mark.xfail(strict=True, reason=_MULTIPLE_DISCRETE_ACTIONS)
 def test_nbegm_savings_form_functions_are_scoped_to_the_m1_regime() -> None:
     """Under NBEGM only the M1 regime carries the savings-form budget functions
     (`resources`, `savings`); brute regimes keep the cash-on-hand form and carry
@@ -206,7 +199,6 @@ def test_nbegm_savings_form_functions_are_scoped_to_the_m1_regime() -> None:
     assert "resources" not in model.user_regimes[_BRUTE_REGIME].functions
 
 
-@pytest.mark.xfail(strict=True, reason=_MULTIPLE_DISCRETE_ACTIONS)
 def test_nbegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
     """NBEGM inverts the Euler equation internally, so the M1 regime never
     carries the DC-EGM `inverse_marginal_utility` function (whose
@@ -216,7 +208,6 @@ def test_nbegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
     assert "inverse_marginal_utility" not in model.user_regimes[_M1_REGIME].functions
 
 
-@pytest.mark.xfail(strict=True, reason=_MULTIPLE_DISCRETE_ACTIONS)
 def test_nbegm_m1_regime_keeps_the_borrowing_constraint() -> None:
     """The M1 regime declares the borrowing constraint like every brute regime.
 
@@ -269,7 +260,6 @@ def test_ssi_benefit_declares_the_income_test_kink() -> None:
     assert income_test.indexed_by == "spousal_income"
 
 
-@pytest.mark.xfail(strict=True, reason=_MULTIPLE_DISCRETE_ACTIONS)
 def test_nbegm_labor_supply_requires_the_bridged_cliff_read() -> None:
     """The M1 regime builds under NBEGM only with `nbegm_jump_read="bridged"`.
 
@@ -284,7 +274,6 @@ def test_nbegm_labor_supply_requires_the_bridged_cliff_read() -> None:
     assert isinstance(_build_model_with("nbegm", _BRIDGED_GRID_CONFIG), Model)
 
 
-@pytest.mark.xfail(strict=True, reason=_MULTIPLE_DISCRETE_ACTIONS)
 @pytest.mark.parametrize("policy", list(PolicyVariant))
 def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     """Every ACA policy variant builds a model under NBEGM with the M1 regime on
@@ -314,7 +303,6 @@ def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     assert "labor_supply" in regimes[_M1_REGIME].actions
 
 
-@pytest.mark.xfail(strict=True, reason=_MULTIPLE_DISCRETE_ACTIONS)
 @pytest.mark.parametrize("policy", list(PolicyVariant))
 def test_nbegm_aca_variants_leave_no_free_buy_private_params(
     policy: PolicyVariant,
