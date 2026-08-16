@@ -129,14 +129,14 @@ def next_assets_when_dead(
     variable="cash_on_hand",
     breakpoints=(
         lcm.affine_breakpoint(
-            threshold="consumption_dollars_floor",
+            threshold="consumption_floor_schedule",
             kind="continuous_kink",
         ),
     ),
 )
 def resources(
     cash_on_hand: FloatND,
-    consumption_dollars_floor: FloatND,
+    consumption_floor_schedule: FloatND,
 ) -> FloatND:
     """Post-transfer resources out of which consumption is paid (DC-EGM `R`).
 
@@ -145,12 +145,17 @@ def resources(
     `borrowing_constraint`). Non-decreasing in `assets` (flat where the
     floor binds), as the DC-EGM contract requires.
 
-    The floor is the regime's own `consumption_dollars_floor`, so the kink
-    where it stops binding is a declared breakpoint: NBEGM's partition splits
-    each cell at the household's floor instead of extrapolating one affine
+    The floor arrives as `consumption_floor_schedule`, a parameter rather
+    than a DAG node: NBEGM reads a declared threshold from the solve's params
+    before any DAG runs, so a value the DAG produces would be unreachable.
+    With marital status on the regime axis the floor no longer varies within
+    a regime, so the parameter carries one scalar per regime — equal by
+    construction to that regime's `consumption_dollars_floor`. The kink where
+    the floor stops binding is then a declared breakpoint, and NBEGM's
+    partition splits each cell there instead of extrapolating one affine
     budget across it.
     """
-    return jnp.maximum(cash_on_hand, consumption_dollars_floor)
+    return jnp.maximum(cash_on_hand, consumption_floor_schedule)
 
 
 def savings(

@@ -102,6 +102,70 @@ def inject_consumption_dollars_points(
     return out
 
 
+def inject_consumption_floor_schedule(
+    *,
+    params: Mapping[str, Any],
+    model: Model,
+) -> dict[str, Any]:
+    """Inject each regime's dollar consumption floor as its kink threshold.
+
+    Every regime carrying the savings-form `resources` budget reads its
+    declared floor-kink threshold from `consumption_floor_schedule`. NBEGM
+    resolves a declared threshold against the solve's params before any DAG
+    function runs, so the floor cannot be the `consumption_dollars_floor` DAG
+    node — it is injected here instead, derived from the per-iteration
+    `consumption_equiv_floor` and the married equivalence-scale `exponent`.
+
+    With marital status on the regime axis the floor is constant within a
+    regime, so each regime receives a scalar: `consumption_equiv_floor` in a
+    single regime, its `2 ** exponent` twin in a married one. Marital status
+    is read off the regime itself — only married regimes derive
+    `equivalence_scale` — so no regime-name convention is relied upon.
+
+    Args:
+        params: Existing params mapping with `consumption_equiv_floor`.
+            Returned as a new dict; the input is not mutated.
+        model: Model whose `fixed_params` supplies `exponent` and whose
+            regimes determine where the threshold is required.
+
+    Returns:
+        New params dict with the floor threshold injected per regime.
+
+    """
+    equiv_floor = jnp.asarray(params["consumption_equiv_floor"])
+    married_floor = compute_married_consumption_floor(
+        consumption_equiv_floor=equiv_floor,
+        exponent=jnp.asarray(model.fixed_params["exponent"]),
+    )
+    out: dict[str, Any] = dict(params)
+    for regime_name, regime in model.user_regimes.items():
+        if regime.terminal or "resources" not in regime.functions:
+            continue
+        is_married = "equivalence_scale" in regime.functions
+        regime_entry = dict(out.get(regime_name, {}))
+        resources_entry = dict(regime_entry.get("resources", {}))
+        resources_entry["consumption_floor_schedule"] = (
+            married_floor if is_married else equiv_floor
+        )
+        regime_entry["resources"] = resources_entry
+        out[regime_name] = regime_entry
+    return out
+
+
+def compute_married_consumption_floor(
+    *,
+    consumption_equiv_floor: Array,
+    exponent: Array,
+) -> Array:
+    """Return a married household's dollar consumption floor.
+
+    The equivalence scale of a two-person household is `2 ** exponent`, so
+    the dollar floor is the per-equivalent floor scaled by it. Equal by
+    construction to `consumption_dollars_floor` in a married regime.
+    """
+    return consumption_equiv_floor * jnp.asarray(2.0) ** exponent
+
+
 def compute_consumption_dollars_points(
     *,
     consumption_equiv_floor: Array,

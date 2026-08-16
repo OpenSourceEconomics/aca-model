@@ -14,6 +14,8 @@ happens to reach the interval partition.
 """
 
 import dataclasses
+from collections.abc import Mapping
+from typing import Any
 
 import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
@@ -57,32 +59,20 @@ def _declared_threshold_keys() -> set[str]:
     return keys
 
 
-# `resources` names its kink threshold `consumption_dollars_floor`, which every
-# living regime supplies as a DAG function rather than as a parameter, so the
-# key NBEGM looks up does not exist. A solve only notices where it reaches the
-# interval partition — the production grid does, the benchmark grid does not.
-_KNOWN_UNSUPPLIED = pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "`resources` declares threshold='consumption_dollars_floor', which is a "
-        "DAG function in every living regime, not a parameter. NBEGM looks up "
-        "`resources__consumption_dollars_floor` in the solve's params and finds "
-        "nothing."
-    ),
-)
+def _supplied_threshold_keys(params: Mapping[str, Any]) -> set[str]:
+    """Return the `<function>__<param>` keys the params supply, per regime.
 
-
-def _threshold_params() -> list:
-    return [
-        pytest.param(
-            key,
-            marks=[_KNOWN_UNSUPPLIED]
-            if key == "resources__consumption_dollars_floor"
-            else [],
-            id=key,
-        )
-        for key in sorted(_declared_threshold_keys())
-    ]
+    pylcm nests params as regime → function → parameter, and forms a
+    breakpoint's lookup key by joining the middle two levels.
+    """
+    keys = set()
+    for regime_entry in params.values():
+        if not isinstance(regime_entry, Mapping):
+            continue
+        for func_name, func_entry in regime_entry.items():
+            if isinstance(func_entry, Mapping):
+                keys |= {f"{func_name}__{name}" for name in func_entry}
+    return keys
 
 
 def test_a_schedule_declares_at_least_one_breakpoint() -> None:
@@ -90,7 +80,7 @@ def test_a_schedule_declares_at_least_one_breakpoint() -> None:
     assert _declared_threshold_keys()
 
 
-@pytest.mark.parametrize("key", _threshold_params())
+@pytest.mark.parametrize("key", sorted(_declared_threshold_keys()))
 def test_every_declared_threshold_is_a_supplied_parameter(key: str) -> None:
     """Each `<output>__<threshold>` key is present in some regime's params.
 
@@ -99,9 +89,4 @@ def test_every_declared_threshold_is_a_supplied_parameter(key: str) -> None:
     only once a solve reaches the interval partition.
     """
     _, _, params = get_benchmark_params(model=_nbegm_model())
-    supplied = set()
-    for value in params.values():
-        if isinstance(value, dict):
-            supplied |= {str(name) for name in value}
-    supplied |= {str(name) for name in params}
-    assert key in supplied
+    assert key in _supplied_threshold_keys(params)

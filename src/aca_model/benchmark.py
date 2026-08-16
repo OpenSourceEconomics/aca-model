@@ -40,6 +40,7 @@ from aca_model.config import BENCHMARK_GRID_CONFIG
 from aca_model.consumption_dollars_grid import (
     compute_consumption_dollars_points,
     inject_consumption_dollars_points,
+    inject_consumption_floor_schedule,
 )
 
 _PARAMS_FILE = (
@@ -127,6 +128,7 @@ def get_benchmark_params(
             model=model,
             max_consumption_dollars=max_consumption_dollars,
         )
+        params = inject_consumption_floor_schedule(params=params, model=model)
     return fixed_params, wage_params, params
 
 

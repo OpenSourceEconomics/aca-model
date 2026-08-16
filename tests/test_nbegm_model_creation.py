@@ -239,7 +239,7 @@ def test_resources_declares_the_consumption_floor_kink() -> None:
     assert meta.output == "resources"
     assert meta.variable == "cash_on_hand"
     (floor_breakpoint,) = meta.breakpoints
-    assert floor_breakpoint.threshold == "consumption_dollars_floor"
+    assert floor_breakpoint.threshold == "consumption_floor_schedule"
     assert floor_breakpoint.kind == "continuous_kink"
 
 
