@@ -40,11 +40,6 @@ def build_nbegm_solver(grids: Grids) -> NBEGM:
         continuous_state="assets",
         budget_target="resources",
         post_decision_function="savings",
-        # The budget DAG mixes scalar- and array-annotated parameters (tax
-        # tables, threshold schedules) that the build-time derivative probes
-        # cannot synthesize, so affinity/constancy is asserted here and
-        # validated by the full-model brute-agreement gates.
-        probe_failure="assume_declared",
         # Splay the child stochastic-node expectation per the grid config: `0` (the
         # default) reads the whole node mesh in one pass on a memory-rich device; a
         # positive value loops it in blocks to fit a tighter budget (a CPU run).
