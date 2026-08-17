@@ -26,7 +26,6 @@ def build_all_regimes(
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
-    consumption_dollars_points: tuple[float, ...] | None = None,
 ) -> dict[str, Regime]:
     """Build all 37 regimes with ACA policy overrides."""
     regimes = baseline_build_all_regimes(
@@ -35,7 +34,6 @@ def build_all_regimes(
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
         solver=solver,
-        consumption_dollars_points=consumption_dollars_points,
     )
     result = {}
     for name, regime in regimes.items():

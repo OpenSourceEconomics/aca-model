@@ -102,7 +102,7 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     policy interpolated across sparse asset nodes overshoots the exact
     simulated budget by one action-grid cell. That is brute-force
     coarse-grid interpolation noise (the same low-resolution unreliability
-    the DC-EGM oracle comparisons exclude), and it disappears at
+    the EGM oracle comparisons exclude), and it disappears at
     production asset resolution — it is not a feasibility regression.
 
     Such overshoot rows are NOT the consumption-floor segment, and

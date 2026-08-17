@@ -1,17 +1,16 @@
-"""DC-EGM building blocks: resources, savings, the savings-form assets laws,
-and the CES inverse marginal utility.
+"""The post-decision budget: resources, savings, and the savings-form laws.
 
-These functions re-express the existing budget identity in post-decision
-(savings) form — algebraically identical to the brute-force spec — and
-provide the analytical `(u')⁻¹` the Euler inversion needs.
+NB-EGM reads the budget in post-decision (savings) form. These functions
+re-express the brute-force budget identity in that form and are algebraically
+identical to it, which is what makes a solver swap a solver swap rather than a
+change of model.
 """
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
-from aca_model.agent import assets_and_income, preferences
+from aca_model.agent import assets_and_income
 
 jax.config.update("jax_enable_x64", True)
 
@@ -100,38 +99,3 @@ def test_next_assets_when_dead_from_savings_matches_direct_form() -> None:
         expected,
         atol=1e-9,
     )
-
-
-@pytest.mark.parametrize("coefficient_rra", [0.7, 1.0, 1.5, 3.2])
-def test_inverse_marginal_utility_inverts_du_dc(coefficient_rra: float) -> None:
-    """`(u')⁻¹(u'(c)) == c` where `u'` is the autodiff derivative of `u_alive`
-    with respect to consumption dollars."""
-    consumption = jnp.asarray(27_500.0)
-    leisure = jnp.asarray(0.62)
-    equivalence_scale = jnp.asarray(1.34)
-    consumption_weight = jnp.asarray(0.55)
-    rra = jnp.asarray(coefficient_rra)
-    scale = jnp.asarray(140.0)
-
-    def utility_of_consumption(consumption_dollars: jnp.ndarray) -> jnp.ndarray:
-        return preferences.u_alive(
-            consumption_equiv=preferences.consumption_equiv(
-                consumption_dollars=consumption_dollars,
-                equivalence_scale=equivalence_scale,
-            ),
-            leisure=leisure,
-            consumption_weight=consumption_weight,
-            coefficient_rra=rra,
-            utility_scale_factor=scale,
-        )
-
-    marginal = jax.grad(utility_of_consumption)(consumption)
-    recovered = preferences.inverse_marginal_utility(
-        marginal_continuation=marginal,
-        leisure=leisure,
-        equivalence_scale=equivalence_scale,
-        consumption_weight=consumption_weight,
-        coefficient_rra=rra,
-        utility_scale_factor=scale,
-    )
-    np.testing.assert_allclose(recovered, consumption, rtol=1e-9)

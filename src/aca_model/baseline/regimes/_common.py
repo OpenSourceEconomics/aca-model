@@ -42,7 +42,7 @@ from aca_model.config import MODEL_CONFIG, GridConfig
 from aca_model.environment import pensions, social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
-SolverName = Literal["brute_force", "dcegm", "nbegm"]
+SolverName = Literal["brute_force", "nbegm"]
 
 
 @categorical(ordered=False)
@@ -187,7 +187,6 @@ def build_grids(
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
-    consumption_dollars_points: tuple[float, ...] | None = None,
 ) -> Grids:
     """Build continuous-state/action grids from a `GridConfig`.
 
@@ -202,9 +201,8 @@ def build_grids(
     time (reconstructed from `wage_bias_coeffs_*`), not a fixed one;
     the grid floor must still be known at build time.
 
-    `consumption_dollars_points` fixes the consumption action grid at
-    construction (the DC-EGM kernel needs it then); `None` keeps the
-    runtime-points grid completed per iteration via params injection.
+    The consumption action grid carries runtime points, completed per
+    iteration via params injection.
     """
     # Unit-variance standardised shocks: the total_costs / wage
     # formulas rescale these by fixed_params-level std parameters
@@ -240,10 +238,8 @@ def build_grids(
         ),
         aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
         pension_wealth=_PENSION_WEALTH_GRID,
-        consumption_dollars=(
-            IrregSpacedGrid(n_points=grid_config.n_consumption_dollars_gridpoints)
-            if consumption_dollars_points is None
-            else IrregSpacedGrid(points=consumption_dollars_points)
+        consumption_dollars=IrregSpacedGrid(
+            n_points=grid_config.n_consumption_dollars_gridpoints
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
@@ -500,7 +496,7 @@ _DEAD_KEEPS = frozenset(
 )
 
 
-def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
+def build_dead_regime() -> Regime:
     """Build the terminal dead regime.
 
     Everything `dead` carries arrives via the model-level broadcast:
@@ -512,17 +508,14 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
       inputs (e.g. `pension_benefit`) don't surface as params in the dead
       template.
     - constraints: the borrowing constraint is masked — `dead` has no
-      consumption action. (Under DC-EGM no constraint is broadcast, so
-      there is nothing to mask.)
+      consumption action.
     - `pension_wealth` is masked explicitly: a carried state is rejected in
       terminal regimes before pruning could drop it.
     """
     function_masks = {
-        name: None
-        for name in build_model_functions(solver=solver)
-        if name not in _DEAD_KEEPS
+        name: None for name in build_model_functions() if name not in _DEAD_KEEPS
     }
-    constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
+    constraint_masks = dict.fromkeys(build_model_constraints())
     return Regime(
         transition=None,
         functions={"utility": preferences.bequest, **function_masks},
@@ -554,7 +547,7 @@ def _select_leisure(spec: RegimeSpec) -> Callable[..., Any]:
     return preferences.leisure_canwork_retiree_or_nongroup
 
 
-def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
+def build_model_functions() -> dict:
     """Build the model-level functions broadcast into every regime.
 
     Contains exactly the functions that are identical across all 36 living
@@ -562,17 +555,11 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     selections (`good_health`, `leisure`, …) and overlay-swapped names
     (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`) stay regime-level
     in `build_common_functions`. The `dead` regime masks every entry the
-    bequest DAG does not read (see `build_dead_regime`). Under DC-EGM the
-    solver-contract functions join the broadcast set.
+    bequest DAG does not read (see `build_dead_regime`). NBEGM's
+    solver-contract functions are regime-level, not broadcast: broadcasting
+    them would force every brute regime to supply the solver's inputs.
     """
     functions: dict = {}
-    if solver == "dcegm":
-        # DC-EGM solves every living regime, so the solver-contract functions are
-        # broadcast model-wide. NBEGM solves only the M1 regime, which carries
-        # them at regime level (see `_nongroup.build_regime`); broadcasting them
-        # would force every brute regime to supply the solver's
-        # `marginal_continuation`.
-        functions |= build_dcegm_functions()
     functions["total_health_costs"] = health_insurance.total_costs
     functions["oop_costs"] = health_insurance.oop_with_medicaid
     functions["capital_income"] = assets_and_income.capital_income
@@ -610,26 +597,12 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     return functions
 
 
-def build_dcegm_functions() -> dict:
-    """Build the regime functions the DC-EGM contract requires.
-
-    Invariant across all living regimes, so they join the model-level
-    broadcast; `dead` masks them like the other broadcast functions.
-    """
-    return {
-        "resources": assets_and_income.resources,
-        "savings": assets_and_income.savings,
-        "inverse_marginal_utility": preferences.inverse_marginal_utility,
-    }
-
-
 def build_nbegm_functions() -> dict:
     """Build the regime functions the NBEGM solver-contract requires.
 
     NBEGM inverts the Euler equation internally (CRRA from the utility
-    parameters), so unlike DC-EGM it needs only the savings-form budget
-    (`resources`) and the post-decision savings node — not
-    `inverse_marginal_utility`.
+    parameters), so it needs only the savings-form budget (`resources`) and
+    the post-decision savings node.
     """
     return {
         "resources": assets_and_income.resources,
@@ -637,24 +610,16 @@ def build_nbegm_functions() -> dict:
     }
 
 
-def build_model_constraints(*, solver: SolverName) -> dict:
+def build_model_constraints() -> dict:
     """Build the model-level constraints broadcast into every regime.
 
     `dead` masks the borrowing constraint — it has no consumption action.
-    Which solvers carry it follows from what each one will accept:
-
-    - `brute_force` needs it; the argmax over the consumption grid has no
-      other notion of the budget.
-    - `nbegm` carries it too. The solve enforces the borrowing limit
-      through the savings grid's lower bound, but forward simulation
-      re-decides consumption by an argmax over the consumption grid and
-      needs the explicit feasibility mask.
-    - `dcegm` refuses it: pylcm rejects any DC-EGM constraint reaching the
-      continuous state or action, enforcing the budget identity and the
-      borrowing limit intrinsically instead.
+    Every solver carries it. Brute force has no other notion of the budget,
+    and NBEGM enforces the borrowing limit through the savings grid's lower
+    bound during the solve but still needs the explicit mask for forward
+    simulation, which re-decides consumption by an argmax over the
+    consumption grid.
     """
-    if solver == "dcegm":
-        return {}
     return {"borrowing_constraint": assets_and_income.borrowing_constraint}
 
 
@@ -960,7 +925,7 @@ def build_state_transitions(
     Contains only the spec-dependent laws; uniform laws for the broadcast
     states live at the model level (`build_model_state_transitions`).
     `assets` and `aime` are broadcast states whose laws differ per spec,
-    so the laws stay here. Under DC-EGM the assets laws take their
+    so the laws stay here. Under NB-EGM the assets laws take their
     post-decision (savings) form.
     """
     transitions: dict = {}
@@ -1033,9 +998,9 @@ def _build_per_target_regime_assets(
     pull in the `next_aime`-dependent imputation chain — `dead` has no
     `aime` state and pylcm cannot resolve `next_aime` there. Non-dead
     targets use the full `next_assets` with the pension correction.
-    Under DC-EGM both laws take their post-decision (savings) form.
+    Under NB-EGM both laws take their post-decision (savings) form.
     """
-    if solver in ("dcegm", "nbegm"):
+    if solver == "nbegm":
         living_law = assets_and_income.next_assets_from_savings
         dead_law = assets_and_income.next_assets_when_dead_from_savings
     else:

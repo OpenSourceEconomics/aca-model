@@ -19,7 +19,7 @@ from lcm.typing import FloatND, IntND
 # at each finite bracket edge `income_tax_schedule.brackets_upper[k]`; the final
 # edge is the +inf top-bracket sentinel and is not a kink. Every schedule is
 # sliced to its regime's marital status at assembly, so the arrays are 1-D here.
-# The decorator is metadata-only — brute and DC-EGM solve identically.
+# The decorator is metadata-only — brute and NB-EGM solve identically.
 _N_INCOME_TAX_KINKS = 7
 
 

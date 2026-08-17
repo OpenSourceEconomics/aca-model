@@ -1,7 +1,7 @@
 """Baseline regime construction package.
 
-Builds the 18-regime model decomposition programmatically from four
-structural dimensions: HIS x Medicare x SS x Work.
+Builds the 36-regime model decomposition programmatically from five
+structural dimensions: Marital x HIS x Medicare x SS x Work.
 
 Pre-65 regimes (mc=nomc/dimc) use HealthWithDisability (3-state).
 Post-65 regimes (mc=oamc) use Health (2-state).
@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import DiscreteGrid, Regime
-from lcm.solvers import DCEGM, NBEGM
+from lcm.solvers import NBEGM
 from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import _nongroup as nongroup
@@ -32,7 +32,6 @@ from aca_model.baseline.regimes._common import (
     build_model_state_transitions,
     build_model_states,
 )
-from aca_model.baseline.regimes._dcegm import build_dcegm_solver
 from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.config import GridConfig
 
@@ -58,21 +57,18 @@ def build_regime(
     name: str,
     grids: Grids,
     *,
-    dcegm_solver: DCEGM | None = None,
     nbegm_solver: NBEGM | None = None,
 ) -> Regime:
     """Build a single baseline Regime object for the given regime name."""
     if name == "dead":
-        return build_dead_regime(
-            solver="brute_force" if dcegm_solver is None else "dcegm"
-        )
+        return build_dead_regime()
 
     spec = REGIME_SPECS[name]
     builder = _HIS_BUILDERS.get(spec["his"])
     if builder is None:
         msg = f"Unknown HIS type: {spec['his']}"
         raise ValueError(msg)
-    return builder(name, grids, dcegm_solver=dcegm_solver, nbegm_solver=nbegm_solver)
+    return builder(name, grids, nbegm_solver=nbegm_solver)
 
 
 def build_all_regimes(
@@ -82,37 +78,28 @@ def build_all_regimes(
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
-    consumption_dollars_points: tuple[float, ...] | None = None,
 ) -> dict[str, Regime]:
-    """Build all 19 baseline regimes (18 non-terminal + dead).
+    """Build all 37 baseline regimes (36 non-terminal + dead).
 
     `fixed_params` carries the PIA bends for the AIME piecewise grid;
     `wage_params` sizes the assets-floor to `-max_annual_labor_income`;
     `pref_type_grid` selects the pref-type cardinality (production
     `DiscreteGrid(PrefType)` or the benchmark's 2-type variant);
-    `solver` selects brute force or DC-EGM for every living regime
-    (`dead` is terminal and keeps the default);
-    `consumption_dollars_points` fixes the consumption action grid at
-    construction (required under DC-EGM).
+    `solver` selects brute force or NB-EGM for every living regime
+    (`dead` is terminal and keeps the default).
     """
     grids = build_grids(
         grid_config=grid_config,
         fixed_params=fixed_params,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
-        consumption_dollars_points=consumption_dollars_points,
     )
-    dcegm_solver = build_dcegm_solver(grids) if solver == "dcegm" else None
     nbegm_solver = build_nbegm_solver(grids) if solver == "nbegm" else None
-    regimes = {}
-    for name in REGIME_SPECS:
-        regimes[name] = build_regime(
-            name,
-            grids,
-            dcegm_solver=dcegm_solver,
-            nbegm_solver=nbegm_solver,
-        )
-    regimes["dead"] = build_dead_regime(solver=solver)
+    regimes = {
+        name: build_regime(name, grids, nbegm_solver=nbegm_solver)
+        for name in REGIME_SPECS
+    }
+    regimes["dead"] = build_dead_regime()
     return regimes
 
 
@@ -122,7 +109,6 @@ def build_model_slots(
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
-    solver: SolverName = "brute_force",
 ) -> dict[str, Any]:
     """Build the model-level regime slots broadcast into every regime.
 
@@ -130,12 +116,10 @@ def build_model_slots(
     constraint, states, and laws of motion shared by all living regimes.
     Both the baseline and the ACA `create_model` consume this — the ACA
     overlay swaps only regime-level functions, so the broadcast slots are
-    policy-invariant. Under an EGM solver the solver-contract functions join
-    the broadcast set. The borrowing constraint is declared under brute force
-    and NB-EGM — forward simulation re-decides consumption by an argmax over
-    the consumption grid and needs the explicit feasibility mask — but not
-    under DC-EGM, which refuses a constraint reaching the continuous state or
-    action and enforces the budget identity and borrowing limit intrinsically.
+    policy-invariant, and identical under every solver: NB-EGM's
+    solver-contract functions are regime-level, and the borrowing constraint
+    is declared throughout — forward simulation re-decides consumption by an
+    argmax over the consumption grid and needs the explicit feasibility mask.
     """
     grids = build_grids(
         grid_config=grid_config,
@@ -144,8 +128,8 @@ def build_model_slots(
         pref_type_grid=pref_type_grid,
     )
     return {
-        "functions": build_model_functions(solver=solver),
-        "constraints": build_model_constraints(solver=solver),
+        "functions": build_model_functions(),
+        "constraints": build_model_constraints(),
         "states": build_model_states(grids),
         "state_transitions": build_model_state_transitions(),
     }

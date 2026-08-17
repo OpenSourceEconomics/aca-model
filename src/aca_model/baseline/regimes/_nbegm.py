@@ -1,15 +1,18 @@
-"""NBEGM solver configuration for the ACA M1 vertical-slice regime.
+"""NBEGM solver configuration for the ACA regimes.
 
-NBEGM is the case-piece endogenous-grid solver for a single 1-D
-consumption/savings regime whose budget is split by institutional breakpoints
-on a derived monotone income quantity. It shares DC-EGM's post-decision
-(savings) spec — consumption is recovered from `resources = max(cash_on_hand,
-floor)`, the assets laws are in savings form, the borrowing constraint is the
-savings grid's lower bound — but solves only one regime with at most one
-discrete action, so it attaches per regime rather than globally. The
-function-level rewiring is shared with DC-EGM (`build_dcegm_functions`, the
-savings-form assets laws in `_common`); this module holds only the solver
-config.
+NBEGM is the case-piece endogenous-grid solver for a 1-D consumption/savings
+regime whose budget is split by institutional breakpoints on a derived
+monotone income quantity. It takes the post-decision (savings) spec:
+consumption is recovered from `resources = max(cash_on_hand, floor)`, the
+assets laws are in savings form, and the borrowing limit is the savings grid's
+lower bound during the solve. The discrete envelope branches over the Cartesian
+product of a regime's discrete action grids, so a regime is never narrowed to
+fit the solver.
+
+The config attaches per regime rather than model-wide, so the contract
+functions (`build_nbegm_functions`) stay regime-level too — broadcasting them
+would force every brute regime to supply the solver's inputs. This module holds
+only the solver config; the savings-form assets laws live in `_common`.
 """
 
 from lcm import IrregSpacedGrid
@@ -21,11 +24,10 @@ from aca_model.baseline.regimes._common import Grids
 def build_nbegm_solver(grids: Grids) -> NBEGM:
     """Build the per-regime NBEGM configuration.
 
-    The savings grid mirrors DC-EGM's: lower bound 0 (the borrowing constraint
-    in post-decision form), upper bound the assets span, cubically clustered
-    toward the constraint. The budget node is `resources` (post-floor
-    cash-on-hand) and the post-decision function is `savings`, matching the
-    shared savings-form spec.
+    The savings grid runs from 0 (the borrowing constraint in post-decision
+    form) to the assets span, cubically clustered toward the constraint where
+    the value function curves hardest. The budget node is `resources`
+    (post-floor cash-on-hand) and the post-decision function is `savings`.
     """
     n_points = grids.grid_config.n_savings_gridpoints
     _fail_if_too_few_savings_gridpoints(n_points)

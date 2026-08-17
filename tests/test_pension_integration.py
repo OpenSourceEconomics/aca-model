@@ -248,7 +248,7 @@ def _solve_phase_adjustment_across_his_change() -> jnp.ndarray:
 # Both assets laws that carry `pension_assets_adjustment`, with inputs chosen so
 # the no-adjustment baseline is 18000 either way (savings = cash + transfers −
 # consumption = 20000; 20000 − 2000 oop = 18000). `next_assets` is the brute-force
-# law; `next_assets_from_savings` is the post-decision (DC-EGM / NBEGM) form.
+# law; `next_assets_from_savings` is the post-decision (NB-EGM) form.
 _ADJUSTED_ASSETS_LAWS = {
     "brute": (
         assets_and_income.next_assets,
@@ -279,7 +279,7 @@ def test_simulate_pension_adjustment_leaves_next_assets_at_no_adjustment_carry(
     The agent holds `assets = 18000` after consumption and OOP; the
     simulate-phase `pension_assets_adjustment` contributes exactly zero, so
     the pension balance is carried as a state rather than reconciled twice.
-    Holds for both the brute-force and the DC-EGM/NBEGM (savings) assets law.
+    Holds for both the brute-force and the NB-EGM (savings) assets law.
     """
     law, kwargs = _ADJUSTED_ASSETS_LAWS[law_key]
     functions = build_pension_functions(REGIME_SPECS["single_tied_nomc_choose_canwork"])
@@ -300,7 +300,7 @@ def test_reenabling_pension_adjustment_in_simulate_inflates_next_assets(
     This is the failure the `simulate=zero` wiring prevents. The solve-phase
     adjustment is what re-enabling would inject; feeding it into the assets
     law shifts assets away from the true-balance carry by exactly that credit.
-    Holds for both the brute-force and the DC-EGM/NBEGM (savings) assets law.
+    Holds for both the brute-force and the NB-EGM (savings) assets law.
     """
     law, kwargs = _ADJUSTED_ASSETS_LAWS[law_key]
     solve_adjustment = _solve_phase_adjustment_across_his_change()

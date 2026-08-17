@@ -78,7 +78,7 @@ def inject_consumption_dollars_points(
             )
             raise ValueError(msg)
         if isinstance(grid, IrregSpacedGrid) and not grid.pass_points_at_runtime:
-            # Construction-time points (the DC-EGM path) — nothing to inject.
+            # Construction-time points — nothing to inject.
             continue
         if not isinstance(grid, IrregSpacedGrid):
             msg = (

@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 from lcm import Regime
-from lcm.solvers import DCEGM, NBEGM
+from lcm.solvers import NBEGM
 from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
 
 from aca_model.agent.labor_market import LaborSupply
@@ -130,7 +130,6 @@ def build_regime(
     name: str,
     grids: Grids,
     *,
-    dcegm_solver: DCEGM | None = None,
     nbegm_solver: NBEGM | None = None,
 ) -> Regime:
     """Build a retiree regime."""
@@ -145,13 +144,8 @@ def build_regime(
 
     states = build_states(spec, grids)
 
-    egm_solver = dcegm_solver if dcegm_solver is not None else nbegm_solver
-    solver_kwargs: dict = {} if egm_solver is None else {"solver": egm_solver}
-    state_solver = (
-        "brute_force"
-        if egm_solver is None
-        else ("nbegm" if nbegm_solver is not None else "dcegm")
-    )
+    solver_kwargs: dict = {} if nbegm_solver is None else {"solver": nbegm_solver}
+    state_solver = "brute_force" if nbegm_solver is None else "nbegm"
     functions = _build_functions(spec)
     if nbegm_solver is not None:
         # NBEGM's solver contract is stated per regime: it reads the budget in

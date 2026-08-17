@@ -2,8 +2,8 @@
 
 `solver="nbegm"` solves every living regime with NB-EGM, so each of them carries
 the savings-form budget the solver reads: the budget node is `resources` and the
-post-decision function is `savings`, the same spec DC-EGM uses. The `dead` regime
-is terminal and keeps its own solver.
+post-decision function is `savings`. The `dead` regime is terminal and keeps
+its own solver.
 
 The regime declares every choice its structure affords — whether to buy
 non-group coverage, and how many hours to work — and the discrete envelope
@@ -105,7 +105,7 @@ def test_nbegm_attaches_to_every_living_regime() -> None:
 
 def test_build_nbegm_solver_uses_the_savings_form_resources_budget() -> None:
     """The NBEGM config inverts against `resources` in post-decision savings
-    form, matching the DC-EGM contract the regime is rewired into."""
+    form, matching the post-decision contract the regime is rewired into."""
     solver = build_nbegm_solver(_grids())
     assert isinstance(solver, NBEGM)
     assert solver.budget_target == "resources"
@@ -176,8 +176,8 @@ def test_nbegm_model_builds_a_regime_declaring_several_discrete_actions() -> Non
 
 
 def test_nbegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
-    """The M1 regime under NBEGM consumes the post-decision assets laws, like
-    DC-EGM; the other (brute) regimes keep the cash-on-hand form."""
+    """Under NBEGM a regime consumes the post-decision assets laws; under brute
+    force it keeps the cash-on-hand form."""
     regimes = _build_regimes("nbegm")
     assets_laws = cast(
         "Mapping[str, object]", regimes[_M1_REGIME].state_transitions["assets"]
@@ -205,15 +205,6 @@ def test_nbegm_gives_every_living_regime_the_savings_form_budget() -> None:
         if not {"resources", "savings"} <= set(model.user_regimes[name].functions)
     ]
     assert missing == []
-
-
-def test_nbegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
-    """NBEGM inverts the Euler equation internally, so the M1 regime never
-    carries the DC-EGM `inverse_marginal_utility` function (whose
-    solver-supplied `marginal_continuation` would otherwise be a required
-    parameter)."""
-    model = _build_model("nbegm")
-    assert "inverse_marginal_utility" not in model.user_regimes[_M1_REGIME].functions
 
 
 def test_nbegm_m1_regime_keeps_the_borrowing_constraint() -> None:

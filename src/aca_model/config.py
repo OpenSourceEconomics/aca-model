@@ -70,26 +70,26 @@ class GridConfig:
     # on hardware where the ACA-overlay per-cell DAG blows the kernel's
     # compile-time working set past device HBM.
     n_wage_res_batch_size: int = 0
-    # Number of nodes on the DC-EGM savings grid (the post-decision endogenous
+    # Number of nodes on the NBEGM savings grid (the post-decision endogenous
     # grid), cubically clustered toward the borrowing constraint. Drives the
     # padded-grid dimension the egm_step kernel carries, so it scales both the
     # rolling carry and the gather mesh roughly linearly — the dominant lever on
-    # DC-EGM device memory. Only consulted under `solver="dcegm"`.
+    # EGM device memory. Only consulted under `solver="nbegm"`.
     n_savings_gridpoints: int = 200
-    # `batch_size` on the DC-EGM savings grid (the post-decision endogenous
+    # `batch_size` on the NBEGM savings grid (the post-decision endogenous
     # grid). pylcm splays the per-savings-node continuation into `lax.map`
     # blocks of this size, shrinking the binding `egm_step` working buffer by
     # roughly the block factor while the upper envelope still runs on the full
     # gathered grid (value function unchanged). `0` keeps the whole grid in one
-    # kernel. Only consulted under `solver="dcegm"`.
+    # kernel. Only consulted under `solver="nbegm"`.
     n_savings_batch_size: int = 0
-    # `batch_size` on the DC-EGM child stochastic-node expectation (the
-    # process-state mesh the egm_step kernel sums over). pylcm splays that
-    # expectation into `lax.map` blocks of this size, collapsing the gather
-    # buffer's node axis by roughly the block factor (value function
-    # unchanged) — the grid-independent lever for the residual egm_step
-    # transient that savings-batching leaves behind. `0` evaluates the whole
-    # mesh in one kernel. Only consulted under `solver="dcegm"`.
+    # `batch_size` on the EGM child stochastic-node expectation (the process-state
+    # mesh the egm_step kernel sums over). pylcm splays that expectation into
+    # `lax.map` blocks of this size, collapsing the gather buffer's node axis by
+    # roughly the block factor (value function unchanged) — the grid-independent
+    # lever for the residual egm_step transient that savings-batching leaves
+    # behind. `0` evaluates the whole mesh in one kernel. Only consulted under
+    # `solver="nbegm"`.
     n_stochastic_node_batch_size: int = 0
     # Block size for splaying the NBEGM continuation's child stochastic-node
     # expectation (health, health-cost shocks, the wage residual). `0` reads the

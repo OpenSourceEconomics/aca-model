@@ -138,12 +138,12 @@ def resources(
     cash_on_hand: FloatND,
     consumption_floor_schedule: FloatND,
 ) -> FloatND:
-    """Post-transfer resources out of which consumption is paid (DC-EGM `R`).
+    """Post-transfer resources out of which consumption is paid (the EGM `R`).
 
     Algebraically `cash_on_hand + transfers`; the `max` form is preferred
     because the additive form rounds to `floor + ε` at extreme cash (see
     `borrowing_constraint`). Non-decreasing in `assets` (flat where the
-    floor binds), as the DC-EGM contract requires.
+    floor binds), as the EGM contract requires.
 
     The floor arrives as `consumption_floor_schedule`, a parameter rather
     than a DAG node: NBEGM reads a declared threshold from the solve's params
@@ -162,11 +162,11 @@ def savings(
     resources: FloatND,
     consumption_dollars: ContinuousAction,
 ) -> FloatND:
-    """End-of-period savings (the DC-EGM post-decision state).
+    """End-of-period savings (the EGM post-decision state).
 
     `savings >= 0` encodes the borrowing constraint
     `consumption_dollars <= max(cash_on_hand, floor)` via the savings
-    grid's lower bound, so no explicit constraint is declared under DC-EGM.
+    grid's lower bound during an NB-EGM solve.
     """
     return resources - consumption_dollars
 
