@@ -84,12 +84,17 @@ def test_dcegm_assets_laws_take_the_savings_form() -> None:
             assert law is expected, (name, target_name)
 
 
-def test_dcegm_model_slots_broadcast_contract_functions_and_constraint() -> None:
+def test_dcegm_model_slots_broadcast_contract_functions_without_the_constraint() -> (
+    None
+):
     """The DC-EGM slots broadcast `resources`/`savings`/
-    `inverse_marginal_utility` and keep the borrowing constraint: the EGM
-    solve enforces the limit through the savings grid's lower bound, but
-    forward simulation re-decides consumption by an argmax over the
-    consumption grid and needs the explicit feasibility mask."""
+    `inverse_marginal_utility` and declare no borrowing constraint.
+
+    DC-EGM enforces the budget identity and the borrowing limit through the
+    savings grid's lower bound, and pylcm rejects any DC-EGM constraint
+    reaching the continuous state or action, so declaring one makes the
+    model unbuildable.
+    """
     slots = build_model_slots(
         grid_config=BENCHMARK_GRID_CONFIG,
         fixed_params=_FIXED_PARAMS,
@@ -97,7 +102,7 @@ def test_dcegm_model_slots_broadcast_contract_functions_and_constraint() -> None
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver="dcegm",
     )
-    assert "borrowing_constraint" in slots["constraints"]
+    assert "borrowing_constraint" not in slots["constraints"]
     for name in ("resources", "savings", "inverse_marginal_utility"):
         assert name in slots["functions"]
     solver = _build_regimes("dcegm")["single_retiree_nomc_inelig_canwork"].solver
@@ -143,24 +148,12 @@ def test_benchmark_consumption_points_pin_both_floors() -> None:
     np.testing.assert_allclose(points[:2], [floor, floor * 2.0**exponent], rtol=1e-12)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "pylcm's DC-EGM contract does not yet admit the ACA budget: the "
-        "assets law reaches `assets` outside the post-decision function — "
-        "through `oop_costs` (Medicaid eligibility → `countable_income` → "
-        "`capital_income`) and `pension_assets_adjustment` "
-        "(`marginal_tax_rate` → `gross_income` → `capital_income`). "
-        "Fixes land upstream in pylcm, not here."
-    ),
-)
 def test_dcegm_benchmark_model_builds() -> None:
     """The benchmark model accepts `solver="dcegm"` end to end.
 
-    The acceptance criterion for the upstream DC-EGM stack: once pylcm's
-    contract admits the ACA budget chains, this builds without error. The
-    construction-time consumption points are supplied so the build reaches
-    the upstream limitation rather than the missing-points guard.
+    The construction-time consumption points are supplied, since DC-EGM
+    fixes its consumption action grid at construction rather than reading
+    runtime points.
     """
     model = create_model(
         n_subjects=1,
@@ -243,3 +236,23 @@ def test_dcegm_savings_grid_rejects_too_few_points() -> None:
             pref_type_grid=DiscreteGrid(BenchmarkPrefType),
             solver="dcegm",
         )
+
+
+@pytest.mark.parametrize("solver", ["brute_force", "nbegm"])
+def test_non_dcegm_solvers_keep_the_borrowing_constraint(solver: SolverName) -> None:
+    """Only DC-EGM drops the borrowing constraint.
+
+    Forward simulation re-decides consumption by an argmax over the
+    consumption grid, so a solver that leaves that argmax unmasked lets
+    floor-region subjects pick the grid's top consumption. DC-EGM is exempt
+    only because it enforces the budget intrinsically and refuses the
+    declaration outright.
+    """
+    slots = build_model_slots(
+        grid_config=BENCHMARK_GRID_CONFIG,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        solver=solver,
+    )
+    assert "borrowing_constraint" in slots["constraints"]

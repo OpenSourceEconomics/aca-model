@@ -131,10 +131,11 @@ def build_model_slots(
     Both the baseline and the ACA `create_model` consume this — the ACA
     overlay swaps only regime-level functions, so the broadcast slots are
     policy-invariant. Under an EGM solver the solver-contract functions join
-    the broadcast set; the borrowing constraint is declared under every
-    solver, because forward simulation re-decides consumption by an argmax
-    over the consumption grid and needs the explicit feasibility mask even
-    when the solve enforces the limit through the savings grid's lower bound.
+    the broadcast set. The borrowing constraint is declared under brute force
+    and NB-EGM — forward simulation re-decides consumption by an argmax over
+    the consumption grid and needs the explicit feasibility mask — but not
+    under DC-EGM, which refuses a constraint reaching the continuous state or
+    action and enforces the budget identity and borrowing limit intrinsically.
     """
     grids = build_grids(
         grid_config=grid_config,
@@ -144,7 +145,7 @@ def build_model_slots(
     )
     return {
         "functions": build_model_functions(solver=solver),
-        "constraints": build_model_constraints(),
+        "constraints": build_model_constraints(solver=solver),
         "states": build_model_states(grids),
         "state_transitions": build_model_state_transitions(),
     }

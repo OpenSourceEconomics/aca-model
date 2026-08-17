@@ -522,7 +522,7 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
         for name in build_model_functions(solver=solver)
         if name not in _DEAD_KEEPS
     }
-    constraint_masks = dict.fromkeys(build_model_constraints())
+    constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
     return Regime(
         transition=None,
         functions={"utility": preferences.bequest, **function_masks},
@@ -637,15 +637,24 @@ def build_nbegm_functions() -> dict:
     }
 
 
-def build_model_constraints() -> dict:
+def build_model_constraints(*, solver: SolverName) -> dict:
     """Build the model-level constraints broadcast into every regime.
 
     `dead` masks the borrowing constraint — it has no consumption action.
-    The constraint is broadcast under every solver: an EGM solve (DC-EGM or
-    NBEGM) enforces the borrowing limit through the savings grid's lower
-    bound, but forward simulation re-decides consumption by an argmax over
-    the consumption grid and needs the explicit feasibility mask.
+    Which solvers carry it follows from what each one will accept:
+
+    - `brute_force` needs it; the argmax over the consumption grid has no
+      other notion of the budget.
+    - `nbegm` carries it too. The solve enforces the borrowing limit
+      through the savings grid's lower bound, but forward simulation
+      re-decides consumption by an argmax over the consumption grid and
+      needs the explicit feasibility mask.
+    - `dcegm` refuses it: pylcm rejects any DC-EGM constraint reaching the
+      continuous state or action, enforcing the budget identity and the
+      borrowing limit intrinsically instead.
     """
+    if solver == "dcegm":
+        return {}
     return {"borrowing_constraint": assets_and_income.borrowing_constraint}
 
 

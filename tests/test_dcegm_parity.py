@@ -4,13 +4,12 @@ Tolerances are pre-registered from the brute-force leg's own precision: the
 panel distance between solving at the parity grid and at a doubled
 consumption grid is the resolution-noise floor, and any DC-EGM deviation is
 judged against it. `test_brute_noise_floor_holds` re-derives the floor and
-pins the recorded constants; the DC-EGM legs ride the same non-strict xfail
-as `test_dcegm_benchmark_model_builds` until pylcm's DC-EGM contract admits
-the ACA budget chains.
+pins the recorded constants; the DC-EGM legs ride a non-strict xfail while
+the DC-EGM solve does not fit in memory at the parity grid.
 
-All tests here solve the 19-regime model twice and are `long_running`; run
-them via `pytest -m long_running` (compile cost dominates on CPU — they are
-sized for the GPU leg of the acceptance run).
+All tests here solve the whole model twice and are `long_running`; run them
+via `pytest -m long_running` (compile cost dominates on CPU — they are sized
+for the GPU leg of the acceptance run).
 """
 
 import numpy as np
@@ -86,16 +85,16 @@ _DERIVED_CATEGORICALS = {
 
 _DISCRETE_COLUMNS = ("regime_name", "claim_ss", "labor_supply", "buy_private")
 
-_XFAIL_UNTIL_DCEGM_ADMITS_THE_ACA_BUDGET = pytest.mark.xfail(
+_XFAIL_UNTIL_THE_DCEGM_SOLVE_FITS = pytest.mark.xfail(
     strict=False,
     reason=(
-        "pylcm's DC-EGM contract does not admit the ACA budget: the assets "
-        "law reaches `assets` outside the post-decision function — through "
-        "`oop_costs` (Medicaid eligibility → `countable_income` → "
-        "`capital_income`) and `pension_assets_adjustment` "
-        "(`marginal_tax_rate` → `gross_income` → `capital_income`). Flips "
-        "with `test_dcegm_benchmark_model_builds`; the fixes land upstream "
-        "in pylcm, not here."
+        "The DC-EGM solve exhausts memory on the parity grid: measured at "
+        "830 GiB in one allocation, against a state space of 8 assets x 3 "
+        "aime x 16 consumption. The savings grid defaults to 200 points "
+        "with `n_savings_batch_size=0`, so the post-decision continuation "
+        "spans the whole mesh in one kernel; whether splaying it is enough "
+        "is the open question. The model itself builds — see "
+        "`test_dcegm_benchmark_model_builds`."
     ),
 )
 
@@ -209,7 +208,7 @@ def test_brute_noise_floor_holds() -> None:
 
 
 @pytest.mark.long_running
-@_XFAIL_UNTIL_DCEGM_ADMITS_THE_ACA_BUDGET
+@_XFAIL_UNTIL_THE_DCEGM_SOLVE_FITS
 def test_dcegm_panel_within_brute_noise_floor() -> None:
     """The DC-EGM seeded panel deviates from brute force by no more than
     brute force deviates from its own doubled-consumption reference."""
@@ -227,7 +226,7 @@ def test_dcegm_panel_within_brute_noise_floor() -> None:
 
 
 @pytest.mark.long_running
-@_XFAIL_UNTIL_DCEGM_ADMITS_THE_ACA_BUDGET
+@_XFAIL_UNTIL_THE_DCEGM_SOLVE_FITS
 def test_dcegm_solves_the_parity_model() -> None:
     """`solver="dcegm"` solves the parity-grid model: every active
     (regime, period) cell carries a finite value-function array."""
