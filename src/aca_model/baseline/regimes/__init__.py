@@ -131,7 +131,7 @@ def build_model_slots(
     Both the baseline and the ACA `create_model` consume this — the ACA
     overlay swaps only regime-level functions, so the broadcast slots are
     policy-invariant. Under DC-EGM the solver-contract functions join the
-    broadcast set and no borrowing constraint is declared.
+    broadcast set; the borrowing constraint is declared under every solver.
     """
     grids = build_grids(
         grid_config=grid_config,

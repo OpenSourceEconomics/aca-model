@@ -567,8 +567,8 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
       inputs (e.g. `pension_benefit`) don't surface as params in the dead
       template.
     - constraints: the borrowing constraint is masked — `dead` has no
-      consumption action. (Under DC-EGM no constraint is broadcast, so
-      there is nothing to mask.)
+      consumption action. It is broadcast under every solver, so there is
+      always exactly one mask to apply.
     - `pension_wealth` is masked explicitly: a carried state is rejected in
       terminal regimes before pruning could drop it.
     """
