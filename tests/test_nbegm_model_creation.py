@@ -18,7 +18,13 @@ from typing import cast
 
 import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
-from lcm import DiscreteGrid, Model, Regime
+from lcm import (
+    ConsumptionSavingsRegime,
+    DiscreteGrid,
+    LiquidMargin,
+    Model,
+    Regime,
+)
 from lcm.exceptions import RegimeInitializationError
 from lcm.solvers import NBEGM
 
@@ -88,6 +94,13 @@ def _grids() -> Grids:
     )
 
 
+def _liquid_margins(regimes: Mapping[str, Regime]) -> set[LiquidMargin]:
+    """Return the liquid margin every living regime declares."""
+    return {
+        cast("ConsumptionSavingsRegime", regimes[name]).liquid for name in REGIME_SPECS
+    }
+
+
 def test_nbegm_attaches_to_every_living_regime() -> None:
     """`solver="nbegm"` solves every living regime with NB-EGM.
 
@@ -102,20 +115,24 @@ def test_nbegm_attaches_to_every_living_regime() -> None:
     assert on_brute_force == []
 
 
-def test_build_nbegm_solver_uses_the_savings_form_resources_budget() -> None:
-    """The NBEGM config inverts against `resources` in post-decision savings
+def test_nbegm_regimes_declare_the_savings_form_resources_budget() -> None:
+    """Every NB-EGM regime inverts against `resources` in post-decision savings
     form, matching the DC-EGM contract the regime is rewired into."""
-    solver = build_nbegm_solver(_grids())
-    assert isinstance(solver, NBEGM)
-    assert solver.budget_target == "resources"
-    assert solver.post_decision_function == "savings"
+    declared = {
+        (margin.resources, margin.post_decision_state)
+        for margin in _liquid_margins(_build_regimes("nbegm"))
+    }
+    assert declared == {("resources", "savings")}
 
 
-def test_build_nbegm_solver_names_assets_as_the_euler_axis() -> None:
-    """`assets` is the liquid (Euler) axis; `aime` and the stochastic shock grids
-    ride along, so the solver names the Euler axis explicitly."""
-    solver = build_nbegm_solver(_grids())
-    assert solver.continuous_state == "assets"
+def test_nbegm_regimes_declare_assets_as_the_liquid_euler_axis() -> None:
+    """`assets` paid down by `consumption_dollars` is the liquid margin of every
+    NB-EGM regime; `aime` and the stochastic shock grids ride along."""
+    declared = {
+        (margin.state, margin.action)
+        for margin in _liquid_margins(_build_regimes("nbegm"))
+    }
+    assert declared == {("assets", "consumption_dollars")}
 
 
 def test_build_nbegm_solver_forwards_the_jump_read_mode() -> None:

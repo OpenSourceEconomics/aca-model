@@ -13,9 +13,11 @@ from typing import Any, Literal, TypedDict
 import jax.numpy as jnp
 import numpy as np
 from lcm import (
+    ConsumptionSavingsRegime,
     DiscreteGrid,
     IrregSpacedGrid,
     LinSpacedGrid,
+    LiquidMargin,
     MarkovTransition,
     NormalIIDProcess,
     Phased,
@@ -26,6 +28,7 @@ from lcm import (
     categorical,
     fixed_transition,
 )
+from lcm.solvers import OneMarginSolver
 from lcm.typing import BoolND, FloatND, IntND, RegimeName, ScalarInt, UserParams
 
 from aca_model.agent import (
@@ -43,6 +46,34 @@ from aca_model.environment import pensions, social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
 SolverName = Literal["brute_force", "dcegm", "nbegm"]
+
+# The liquid Euler margin every EGM-solved ACA regime shares. `resources` is
+# post-transfer cash-on-hand (`max(cash_on_hand, floor)`) and `savings` is the
+# post-decision assets node; both are supplied by the savings-form rewiring in
+# `build_dcegm_functions` / `build_nbegm_functions`, so the margin is
+# declarable only on a regime that carries them.
+ACA_LIQUID_MARGIN = LiquidMargin(
+    state="assets",
+    action="consumption_dollars",
+    resources="resources",
+    post_decision_state="savings",
+)
+
+
+def build_alive_regime(
+    *, egm_solver: OneMarginSolver | None, **regime_kwargs: Any
+) -> Regime:
+    """Build one alive regime, declaring the liquid margin when EGM solves it.
+
+    A brute-force regime has no `resources` or `savings` node to name, so it
+    stays a plain `Regime`. An EGM-solved regime owns the four margin names
+    and hands them to the solver, which takes numerical configuration only.
+    """
+    if egm_solver is None:
+        return Regime(**regime_kwargs)
+    return ConsumptionSavingsRegime(
+        solver=egm_solver, liquid=ACA_LIQUID_MARGIN, **regime_kwargs
+    )
 
 
 @categorical(ordered=False)

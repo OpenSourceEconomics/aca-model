@@ -12,7 +12,13 @@ from typing import cast
 import numpy as np
 import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
-from lcm import DiscreteGrid, IrregSpacedGrid, Model, Regime
+from lcm import (
+    ConsumptionSavingsRegime,
+    DiscreteGrid,
+    IrregSpacedGrid,
+    Model,
+    Regime,
+)
 from lcm.solvers import DCEGM
 
 from aca_model.agent import assets_and_income
@@ -56,14 +62,15 @@ def _build_model(solver: SolverName) -> Model:
 
 
 def test_every_living_regime_gets_the_dcegm_solver() -> None:
-    """`solver="dcegm"` attaches a `DCEGM` config with assets as the Euler
-    state to every living regime; the terminal regime keeps the default."""
+    """`solver="dcegm"` attaches a `DCEGM` config to every living regime, each
+    declaring `assets` as its liquid margin; the terminal regime keeps the
+    default."""
     regimes = _build_regimes("dcegm")
     for name in REGIME_SPECS:
-        solver = regimes[name].solver
-        assert isinstance(solver, DCEGM), name
-        assert solver.continuous_state == "assets"
-        assert solver.continuous_action == "consumption_dollars"
+        regime = cast("ConsumptionSavingsRegime", regimes[name])
+        assert isinstance(regime.solver, DCEGM), name
+        assert regime.liquid.state == "assets", name
+        assert regime.liquid.action == "consumption_dollars", name
     assert not isinstance(regimes["dead"].solver, DCEGM)
 
 

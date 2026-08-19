@@ -23,9 +23,9 @@ def build_nbegm_solver(grids: Grids) -> NBEGM:
 
     The savings grid mirrors DC-EGM's: lower bound 0 (the borrowing constraint
     in post-decision form), upper bound the assets span, cubically clustered
-    toward the constraint. The budget node is `resources` (post-floor
-    cash-on-hand) and the post-decision function is `savings`, matching the
-    shared savings-form spec.
+    toward the constraint. Which DAG nodes play the liquid roles is the
+    regime's declaration (`ACA_LIQUID_MARGIN`), not the solver's; this config
+    carries numerical settings only.
     """
     n_points = grids.grid_config.n_savings_gridpoints
     _fail_if_too_few_savings_gridpoints(n_points)
@@ -37,9 +37,6 @@ def build_nbegm_solver(grids: Grids) -> NBEGM:
     )
     return NBEGM(
         savings_grid=savings_grid,
-        continuous_state="assets",
-        budget_target="resources",
-        post_decision_function="savings",
         # Splay the child stochastic-node expectation per the grid config: `0` (the
         # default) reads the whole node mesh in one pass on a memory-rich device; a
         # positive value loops it in blocks to fit a tighter budget (a CPU run).

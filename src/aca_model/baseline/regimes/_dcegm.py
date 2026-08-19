@@ -35,10 +35,6 @@ def build_dcegm_solver(grids: Grids) -> DCEGM:
         batch_size=grids.grid_config.n_savings_batch_size,
     )
     return DCEGM(
-        continuous_state="assets",
-        continuous_action="consumption_dollars",
-        resources="resources",
-        post_decision_function="savings",
         savings_grid=savings_grid,
         stochastic_node_batch_size=grids.grid_config.n_stochastic_node_batch_size,
     )
