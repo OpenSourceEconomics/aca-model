@@ -153,12 +153,19 @@ def test_benchmark_consumption_points_pin_both_floors() -> None:
 @pytest.mark.xfail(
     strict=False,
     reason=(
-        "pylcm's DC-EGM contract does not yet admit the ACA budget: the "
-        "assets law reaches `assets` outside the post-decision function — "
-        "through `oop_costs` (Medicaid eligibility → `countable_income` → "
-        "`capital_income`) and `pension_assets_adjustment` "
-        "(`marginal_tax_rate` → `gross_income` → `capital_income`). "
-        "Fixes land upstream in pylcm, not here."
+        "Two independent blockers, both upstream in pylcm. The one that "
+        "fires first: DC-EGM refuses the broadcast `borrowing_constraint` "
+        "because it reads the continuous `assets` and `consumption_dollars`, "
+        "while the solver enforces the borrowing limit through the savings "
+        "grid's lower bound instead. The model declares it under every "
+        "solver because forward simulation re-decides consumption by an "
+        "argmax over the consumption grid and needs the explicit mask, so "
+        "the two requirements conflict and neither side can drop its half "
+        "alone. Behind it: the assets law reaches `assets` outside the "
+        "post-decision function — through `oop_costs` (Medicaid eligibility "
+        "→ `countable_income` → `capital_income`) and "
+        "`pension_assets_adjustment` (`marginal_tax_rate` → `gross_income` "
+        "→ `capital_income`)."
     ),
 )
 def test_dcegm_benchmark_model_builds() -> None:
