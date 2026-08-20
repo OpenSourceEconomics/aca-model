@@ -27,6 +27,7 @@ from lcm import (
     RouwenhorstAR1Process,
     categorical,
     fixed_transition,
+    post_decision_lower_bound,
 )
 from lcm.solvers import OneMarginSolver
 from lcm.typing import BoolND, FloatND, IntND, RegimeName, ScalarInt, UserParams
@@ -577,7 +578,7 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
         for name in build_model_functions(solver=solver)
         if name not in _DEAD_KEEPS
     }
-    constraint_masks = dict.fromkeys(build_model_constraints())
+    constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
     return Regime(
         transition=None,
         functions={"utility": preferences.bequest, **function_masks},
@@ -693,16 +694,21 @@ def build_nbegm_functions() -> dict:
     }
 
 
-def build_model_constraints() -> dict:
+def build_model_constraints(*, solver: SolverName) -> dict:
     """Build the model-level constraints broadcast into every regime.
 
     `dead` masks the borrowing constraint — it has no consumption action.
-    The constraint is broadcast under every solver: an EGM solve (DC-EGM or
-    NBEGM) enforces the borrowing limit through the savings grid's lower
-    bound, but forward simulation re-decides consumption by an argmax over
-    the consumption grid and needs the explicit feasibility mask.
+    Grid search evaluates the action-level predicate directly. An EGM-family
+    solve proves the equivalent post-decision lower bound from its savings
+    grid, while forward simulation receives the solver's intrinsic budget
+    mask over the consumption grid.
     """
-    return {"borrowing_constraint": assets_and_income.borrowing_constraint}
+    borrowing_constraint = (
+        assets_and_income.borrowing_constraint
+        if solver == "brute_force"
+        else post_decision_lower_bound(margin=ACA_LIQUID_MARGIN, lower=0.0)
+    )
+    return {"borrowing_constraint": borrowing_constraint}
 
 
 def build_model_states(grids: Grids) -> dict:

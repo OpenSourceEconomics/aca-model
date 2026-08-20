@@ -141,7 +141,7 @@ def build_model_slots(
     )
     return {
         "functions": build_model_functions(solver=solver),
-        "constraints": build_model_constraints(),
+        "constraints": build_model_constraints(solver=solver),
         "states": build_model_states(grids),
         "state_transitions": build_model_state_transitions(),
     }

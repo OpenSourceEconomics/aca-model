@@ -150,32 +150,8 @@ def test_benchmark_consumption_points_pin_both_floors() -> None:
     np.testing.assert_allclose(points[:2], [floor, floor * 2.0**exponent], rtol=1e-12)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "Two independent blockers, both upstream in pylcm. The one that "
-        "fires first: DC-EGM refuses the broadcast `borrowing_constraint` "
-        "because it reads the continuous `assets` and `consumption_dollars`, "
-        "while the solver enforces the borrowing limit through the savings "
-        "grid's lower bound instead. The model declares it under every "
-        "solver because forward simulation re-decides consumption by an "
-        "argmax over the consumption grid and needs the explicit mask, so "
-        "the two requirements conflict and neither side can drop its half "
-        "alone. Behind it: the assets law reaches `assets` outside the "
-        "post-decision function — through `oop_costs` (Medicaid eligibility "
-        "→ `countable_income` → `capital_income`) and "
-        "`pension_assets_adjustment` (`marginal_tax_rate` → `gross_income` "
-        "→ `capital_income`)."
-    ),
-)
 def test_dcegm_benchmark_model_builds() -> None:
-    """The benchmark model accepts `solver="dcegm"` end to end.
-
-    The acceptance criterion for the upstream DC-EGM stack: once pylcm's
-    contract admits the ACA budget chains, this builds without error. The
-    construction-time consumption points are supplied so the build reaches
-    the upstream limitation rather than the missing-points guard.
-    """
+    """The benchmark model accepts `solver="dcegm"` end to end."""
     model = create_model(
         n_subjects=1,
         fixed_params=_FIXED_PARAMS,
