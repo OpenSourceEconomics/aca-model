@@ -18,13 +18,8 @@ from typing import cast
 
 import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
-from lcm import (
-    ConsumptionSavingsRegime,
-    DiscreteGrid,
-    LiquidMargin,
-    Model,
-    Regime,
-)
+from lcm import DiscreteGrid, Model, Regime
+from lcm.consumption_savings_regime import ConsumptionSavingsRegime, LiquidMargin
 from lcm.exceptions import RegimeInitializationError
 from lcm.solvers import NBEGM
 

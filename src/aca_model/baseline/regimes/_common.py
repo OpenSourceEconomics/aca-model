@@ -13,20 +13,22 @@ from typing import Any, Literal, TypedDict
 import jax.numpy as jnp
 import numpy as np
 from lcm import (
-    ConsumptionSavingsRegime,
     DiscreteGrid,
+    GridBreakpoint,
     IrregSpacedGrid,
     LinSpacedGrid,
-    LiquidMargin,
     MarkovTransition,
     NormalIIDProcess,
     Phased,
-    PiecewiseGridSegment,
     PiecewiseLinSpacedGrid,
     Regime,
     RouwenhorstAR1Process,
     categorical,
     fixed_transition,
+)
+from lcm.consumption_savings_regime import (
+    ConsumptionSavingsRegime,
+    LiquidMargin,
     post_decision_lower_bound,
 )
 from lcm.solvers import OneMarginSolver
@@ -372,22 +374,16 @@ def _build_aime_grid(
     total is fixed by the PIA structure (`sum(_AIME_PIECE_N_POINTS)`).
     """
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
-    segments = (
-        PiecewiseGridSegment(
-            interval=f"[{kinks[0]}, {kinks[1]})", n_points=_AIME_PIECE_N_POINTS[0]
-        ),
-        PiecewiseGridSegment(
-            interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]
-        ),
-        PiecewiseGridSegment(
-            interval=f"[{kinks[2]}, {kinks[3]})", n_points=_AIME_PIECE_N_POINTS[2]
-        ),
-        PiecewiseGridSegment(
-            interval=f"[{kinks[3]}, {kinks[4]}]", n_points=_AIME_PIECE_N_POINTS[3]
-        ),
-    )
     return PiecewiseLinSpacedGrid(
-        segments=segments, batch_size=grid_config.n_aime_batch_size
+        start=kinks[0],
+        stop=kinks[4],
+        breakpoints=(
+            GridBreakpoint(value=kinks[1]),
+            GridBreakpoint(value=kinks[2]),
+            GridBreakpoint(value=kinks[3]),
+        ),
+        points_per_segment=_AIME_PIECE_N_POINTS,
+        batch_size=grid_config.n_aime_batch_size,
     )
 
 

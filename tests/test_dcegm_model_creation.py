@@ -12,13 +12,8 @@ from typing import cast
 import numpy as np
 import pytest
 from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
-from lcm import (
-    ConsumptionSavingsRegime,
-    DiscreteGrid,
-    IrregSpacedGrid,
-    Model,
-    Regime,
-)
+from lcm import DiscreteGrid, IrregSpacedGrid, Model, Regime
+from lcm.consumption_savings_regime import ConsumptionSavingsRegime
 from lcm.solvers import DCEGM
 
 from aca_model.agent import assets_and_income

@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from lcm import DiscreteGrid
+from lcm import DiscreteGrid, GridBreakpoint, PiecewiseLinSpacedGrid
 
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.benchmark import (
@@ -10,6 +10,20 @@ from aca_model.benchmark import (
     get_benchmark_initial_conditions,
     get_benchmark_params,
 )
+
+
+def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
+    """The frozen benchmark model constructs with breakpoint-first AIME grids."""
+    model = create_benchmark_model(
+        n_subjects=1,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
+
+    aime = model.user_regimes["retiree_nomc_inelig_canwork"].states["aime"]
+    assert isinstance(aime, PiecewiseLinSpacedGrid)
+    assert all(isinstance(point, GridBreakpoint) for point in aime.breakpoints)
+    assert all(point.owner == "right" for point in aime.breakpoints)
+    assert aime.n_points == sum(aime.points_per_segment)
 
 
 @pytest.mark.long_running
