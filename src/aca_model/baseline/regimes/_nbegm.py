@@ -50,12 +50,20 @@ def build_nbegm_solver(grids: Grids) -> NBEGM:
         # "certified" is exact and can abstain, "ordinary" reads in the working
         # format at a fraction of the cost.
         envelope_arithmetic=grids.grid_config.nbegm_envelope_arithmetic,
+        # Stream continuation intervals, or let the active byte planner choose
+        # when the configured width is zero.
+        interval_batch_size=grids.grid_config.n_nbegm_interval_batch_size,
         # Stream both ride-along cores over ride-cell blocks per the grid config;
         # `0` vmaps the whole flattened mesh at once.
         cell_block_size=grids.grid_config.n_nbegm_cell_block_size,
         # Stream the discrete-action branch axis in blocks per the grid config;
         # `0` runs the whole axis in one vectorized pass.
         branch_batch_size=grids.grid_config.n_nbegm_branch_batch_size,
+        # Compile-only per-device memory preflight; None preserves the legacy
+        # manual block path.
+        max_device_workspace_bytes=(
+            grids.grid_config.n_nbegm_max_device_workspace_bytes
+        ),
         # Cliff-read mode: exact one-sided limits (default) or the fast bridged
         # read for inner estimation loops (see `GridConfig.nbegm_jump_read`).
         jump_read=grids.grid_config.nbegm_jump_read,

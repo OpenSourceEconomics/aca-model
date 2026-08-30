@@ -107,6 +107,14 @@ class GridConfig:
     # either way — the knob trades peak device memory against a sequential scan.
     # Only consulted under `solver="nbegm"`.
     n_nbegm_envelope_segment_block_size: int = 0
+    # Compiled batch width for the liquid-interval axis. With an active byte
+    # budget, 0 lets the planner choose up to the full axis; a positive value
+    # caps it. Only consulted under `solver="nbegm"`.
+    n_nbegm_interval_batch_size: int = 0
+    # Authoritative busiest-device workspace budget. None preserves manual
+    # blocks; a positive value activates compile-only continuation/envelope
+    # planning before backward induction. Only consulted under `solver="nbegm"`.
+    n_nbegm_max_device_workspace_bytes: int | None = None
     # Which arithmetic decides ownership in the merged upper envelope:
     # - "certified" (default) — candidates are compared in double-double precision
     #   and no winner is published where none is separated, so the reported owner is

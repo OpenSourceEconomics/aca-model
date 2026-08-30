@@ -352,3 +352,29 @@ def test_nbegm_aca_variants_leave_no_free_buy_private_params(
         if isinstance(params, dict) and "buy_private" in params
     ]
     assert offenders == [], offenders
+
+
+def test_nbegm_workspace_budget_and_all_streaming_axes_are_forwarded() -> None:
+    """ACA exposes every planner axis and the positive per-device byte budget."""
+    grid_config = dataclasses.replace(
+        BENCHMARK_GRID_CONFIG,
+        n_nbegm_stochastic_node_batch_size=2,
+        n_nbegm_envelope_segment_block_size=3,
+        n_nbegm_interval_batch_size=4,
+        n_nbegm_cell_block_size=5,
+        n_nbegm_branch_batch_size=6,
+        n_nbegm_max_device_workspace_bytes=72 * 1024**3,
+    )
+    grids = build_grids(
+        grid_config=grid_config,
+        fixed_params=_FIXED_PARAMS,
+        wage_params=_WAGE_PARAMS,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
+    solver = build_nbegm_solver(grids)
+    assert solver.stochastic_node_batch_size == 2
+    assert solver.envelope_segment_block_size == 3
+    assert solver.interval_batch_size == 4
+    assert solver.cell_block_size == 5
+    assert solver.branch_batch_size == 6
+    assert solver.max_device_workspace_bytes == 72 * 1024**3
