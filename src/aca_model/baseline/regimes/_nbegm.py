@@ -12,6 +12,8 @@ savings-form assets laws in `_common`); this module holds only the solver
 config.
 """
 
+import dataclasses
+
 from lcm import IrregSpacedGrid
 from lcm.solvers import NBEGM
 
@@ -35,7 +37,7 @@ def build_nbegm_solver(grids: Grids) -> NBEGM:
         points=tuple(savings_stop * (i / (n_points - 1)) ** 3 for i in range(n_points)),
         batch_size=grids.grid_config.n_savings_batch_size,
     )
-    return NBEGM(
+    solver = NBEGM(
         savings_grid=savings_grid,
         # Splay the child stochastic-node expectation per the grid config: `0` (the
         # default) reads the whole node mesh in one pass on a memory-rich device; a
@@ -59,15 +61,22 @@ def build_nbegm_solver(grids: Grids) -> NBEGM:
         # Stream the discrete-action branch axis in blocks per the grid config;
         # `0` runs the whole axis in one vectorized pass.
         branch_batch_size=grids.grid_config.n_nbegm_branch_batch_size,
-        # Compile-only per-device memory preflight; None preserves the legacy
-        # manual block path.
-        max_device_workspace_bytes=(
-            grids.grid_config.n_nbegm_max_device_workspace_bytes
-        ),
         # Cliff-read mode: exact one-sided limits (default) or the fast bridged
         # read for inner estimation loops (see `GridConfig.nbegm_jump_read`).
         jump_read=grids.grid_config.nbegm_jump_read,
     )
+    budget = grids.grid_config.n_nbegm_max_device_workspace_bytes
+    if budget is None:
+        return solver
+
+    fields = {field.name for field in dataclasses.fields(NBEGM)}
+    if "max_device_workspace_bytes" not in fields:
+        msg = (
+            "GridConfig.n_nbegm_max_device_workspace_bytes requires a pylcm "
+            "build with the experimental NB-EGM workspace planner."
+        )
+        raise RuntimeError(msg)
+    return dataclasses.replace(solver, max_device_workspace_bytes=budget)
 
 
 def _fail_if_too_few_savings_gridpoints(n_savings_gridpoints: int) -> None:
