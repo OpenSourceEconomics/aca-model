@@ -47,7 +47,7 @@ def _solve_m1(solver: SolverName) -> dict[int, np.ndarray]:
     solution = model.solve(params=params, log_level="off")
     return {
         period: np.asarray(regimes[_M1_REGIME])
-        for period, regimes in solution.items()
+        for period, regimes in solution.values.items()
         if _M1_REGIME in regimes
     }
 

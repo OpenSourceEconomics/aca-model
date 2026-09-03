@@ -58,7 +58,7 @@ def _solve_m1(solver: SolverName) -> tuple[dict[int, np.ndarray], int]:
     ).index("assets")
     return {
         period: np.asarray(regimes[_M1_REGIME])
-        for period, regimes in solution.items()
+        for period, regimes in solution.values.items()
         if _M1_REGIME in regimes
     }, assets_axis
 

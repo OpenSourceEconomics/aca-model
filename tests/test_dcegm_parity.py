@@ -134,7 +134,6 @@ def _seeded_panel(model: Model) -> pd.DataFrame:
     result = model.simulate(
         params=params,
         initial_conditions=initial_conditions,
-        period_to_regime_to_V_arr=None,
         log_level="off",
     )
     df = result.to_dataframe()
@@ -235,7 +234,7 @@ def test_dcegm_solves_the_parity_model() -> None:
     (regime, period) cell carries a finite value-function array."""
     model = _make_model(solver="dcegm", grid_config=PARITY_GRID_CONFIG)
     _, _, params = get_benchmark_params(model=model)
-    period_to_regime_to_v = model.solve(params=params, log_level="off")
-    for regime_to_v in period_to_regime_to_v.values():
+    solution = model.solve(params=params, log_level="off")
+    for regime_to_v in solution.values.values():
         for v_arr in regime_to_v.values():
             assert bool(np.isfinite(np.asarray(v_arr)).any())

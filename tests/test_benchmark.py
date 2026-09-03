@@ -41,7 +41,6 @@ def test_benchmark_model_simulates_end_to_end() -> None:
     result = model.simulate(
         params=params,
         initial_conditions=initial_conditions,
-        period_to_regime_to_V_arr=None,
         log_level="off",
     )
 
@@ -76,7 +75,6 @@ def test_benchmark_panel_exposes_hic_premium_and_wage_targets() -> None:
     result = model.simulate(
         params=params,
         initial_conditions=initial_conditions,
-        period_to_regime_to_V_arr=None,
         log_level="off",
     )
 
@@ -139,7 +137,6 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     result = model.simulate(
         params=params,
         initial_conditions=initial_conditions,
-        period_to_regime_to_V_arr=None,
         log_level="off",
     )
 
