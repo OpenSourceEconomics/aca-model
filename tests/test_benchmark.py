@@ -2,7 +2,14 @@
 
 import numpy as np
 import pytest
-from lcm import DiscreteGrid, GridBreakpoint, PiecewiseLinSpacedGrid
+from lcm import (
+    DiscreteGrid,
+    GridBreakpoint,
+    IrregSpacedGrid,
+    LinSpacedGrid,
+    PiecewiseLinSpacedGrid,
+    RouwenhorstAR1Process,
+)
 
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.benchmark import (
@@ -13,7 +20,7 @@ from aca_model.benchmark import (
 
 
 def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
-    """The frozen benchmark model constructs with breakpoint-first AIME grids."""
+    """The frozen benchmark preserves its state and action grid extents."""
     model = create_benchmark_model(
         n_subjects=1,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
@@ -23,7 +30,22 @@ def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
     assert isinstance(aime, PiecewiseLinSpacedGrid)
     assert all(isinstance(point, GridBreakpoint) for point in aime.breakpoints)
     assert all(point.owner == "right" for point in aime.breakpoints)
-    assert aime.n_points == sum(aime.points_per_segment)
+    assert aime.n_points == 38
+    regime = model.user_regimes["retiree_nomc_inelig_canwork"]
+    assert len(model.user_regimes) == 19
+    assert model.n_periods == 45
+    assets = regime.states["assets"]
+    wage_res = regime.states["log_ft_wage_res"]
+    pref_type = regime.states["pref_type"]
+    consumption = regime.actions["consumption_dollars"]
+    assert isinstance(assets, LinSpacedGrid)
+    assert isinstance(wage_res, RouwenhorstAR1Process)
+    assert isinstance(pref_type, DiscreteGrid)
+    assert isinstance(consumption, IrregSpacedGrid)
+    assert assets.n_points == 3
+    assert wage_res.n_points == 3
+    assert len(pref_type.categories) == 2
+    assert consumption.n_points == 5
 
 
 @pytest.mark.long_running

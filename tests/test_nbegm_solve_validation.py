@@ -19,7 +19,7 @@ import dataclasses
 
 import numpy as np
 import pytest
-from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
+from helpers.model import _DERIVED_CATEGORICALS
 from lcm import DiscreteGrid
 
 from aca_model.agent.preferences import BenchmarkPrefType

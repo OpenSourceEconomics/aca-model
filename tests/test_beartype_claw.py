@@ -12,7 +12,7 @@ The test calls a real model-builder with one argument of the wrong type; the
 
 import pytest
 from beartype.roar import BeartypeCallHintViolation
-from helpers.model import make_baseline_model  # ty: ignore[unresolved-import]
+from helpers.model import make_baseline_model
 
 
 def test_claw_checks_aca_model() -> None:
@@ -22,4 +22,4 @@ def test_claw_checks_aca_model() -> None:
     by the claw before the value reaches pylcm's own `Model` perimeter.
     """
     with pytest.raises(BeartypeCallHintViolation):
-        make_baseline_model(n_subjects="not an int")
+        make_baseline_model(n_subjects="not an int")  # ty: ignore[invalid-argument-type]

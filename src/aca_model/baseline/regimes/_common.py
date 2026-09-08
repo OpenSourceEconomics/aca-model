@@ -237,10 +237,7 @@ class Grids:
     hcc_transitory: Any
     pref_type: DiscreteGrid
     grid_config: GridConfig
-    """The originating `GridConfig`. Exposed on `Grids` so `build_states`
-    can read per-axis `batch_size` settings for the discrete states it
-    constructs inline (health, spousal_income, lagged_labor_supply,
-    claimed_ss) without changing the `build_states`/`build_regime` API."""
+    """Grid sizes and numerical settings used to construct each solver."""
 
 
 # AIME piecewise grid: number of points per segment between the PIA
@@ -304,7 +301,6 @@ def build_grids(
         rho=_WAGE_RHO,
         sigma=(1.0 - _WAGE_RHO**2) ** 0.5,
         mu=0.0,
-        batch_size=grid_config.n_wage_res_batch_size,
     )
     hcc_persistent = get_hcc_persistent_shock(grid_config=grid_config)
     hcc_transitory = NormalIIDProcess(
@@ -323,9 +319,8 @@ def build_grids(
             start=assets_start,
             stop=500_000.0,
             n_points=grid_config.n_assets_gridpoints,
-            batch_size=grid_config.n_assets_batch_size,
         ),
-        aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
+        aime=_build_aime_grid(fixed_params=fixed_params),
         pension_wealth=_PENSION_WEALTH_GRID,
         consumption_dollars=(
             IrregSpacedGrid(n_points=grid_config.n_consumption_dollars_gridpoints)
@@ -361,9 +356,7 @@ def get_hcc_persistent_grid_points(*, grid_config: GridConfig) -> FloatND:
     return get_hcc_persistent_shock(grid_config=grid_config).to_jax()
 
 
-def _build_aime_grid(
-    *, grid_config: GridConfig, fixed_params: UserParams
-) -> PiecewiseLinSpacedGrid:
+def _build_aime_grid(*, fixed_params: UserParams) -> PiecewiseLinSpacedGrid:
     """Return the AIME grid.
 
     The grid is piecewise-linspaced with breakpoints at the PIA bends
@@ -383,7 +376,6 @@ def _build_aime_grid(
             GridBreakpoint(value=kinks[3]),
         ),
         points_per_segment=_AIME_PIECE_N_POINTS,
-        batch_size=grid_config.n_aime_batch_size,
     )
 
 
@@ -460,24 +452,20 @@ def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     living regime are broadcast from the model level (`build_model_states`).
     """
     can_work = spec["canwork"] == "canwork"
-    gc = grids.grid_config
 
     states: dict = {}
     states["health"] = DiscreteGrid(
         Health if spec["mc"] == "oamc" else HealthWithDisability,
-        batch_size=gc.n_health_batch_size,
     )
     if can_work:
         states["log_ft_wage_res"] = grids.wage_res
     if can_work and spec["his"] != "tied":
         states["lagged_labor_supply"] = DiscreteGrid(
             LaggedLaborSupply,
-            batch_size=gc.n_lagged_labor_supply_batch_size,
         )
     if spec["ss"] == "choose":
         states["claimed_ss"] = DiscreteGrid(
             ClaimedSS,
-            batch_size=gc.n_claimed_ss_batch_size,
         )
     return states
 
@@ -712,10 +700,9 @@ def build_model_states(grids: Grids) -> dict:
 
     These are the states every living regime carries with an identical grid.
     pylcm prunes them per regime by DAG reachability, so `dead` keeps only
-    `assets` and `pref_type` (the bequest DAG). `spousal_income` carries the
-    `distributed` flag — sharding is legal only on model-level states.
+    `assets` and `pref_type` (the bequest DAG). Placement is configured
+    separately through the model execution policy.
     """
-    gc = grids.grid_config
     return {
         "assets": grids.assets,
         "aime": grids.aime,
@@ -727,8 +714,6 @@ def build_model_states(grids: Grids) -> dict:
         "hcc_transitory": grids.hcc_transitory,
         "spousal_income": DiscreteGrid(
             SpousalIncome,
-            batch_size=gc.n_spousal_income_batch_size,
-            distributed=gc.spousal_income_distributed,
         ),
         "pref_type": grids.pref_type,
     }

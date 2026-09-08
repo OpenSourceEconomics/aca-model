@@ -16,8 +16,8 @@ import dataclasses
 
 import numpy as np
 import pytest
-from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
-from lcm import DiscreteGrid
+from helpers.model import _DERIVED_CATEGORICALS
+from lcm import DiscreteGrid, ExecutionConfig
 
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.model import create_model
@@ -29,16 +29,11 @@ _M1_REGIME = "nongroup_nomc_inelig_canwork"
 
 
 def _solve_m1(solver: SolverName) -> tuple[dict[int, np.ndarray], int]:
-    # The CPU XLA backend does not fuse the ride-cell fan-out and materialises the
-    # whole flattened ride mesh at once, so a full-model solve needs hundreds of GiB on
-    # host even at a tiny asset grid. `n_nbegm_cell_block_size` streams the mesh in
-    # blocks (identical result) to bound the peak to the GPU's few-GiB footprint; the
-    # live-labor branch axis makes this essential on CPU. A coarser savings grid keeps
-    # the check quick. On GPU the whole-mesh vmap stays small, so production sets 0.
+    # A bounded ride-cell width limits continuation fan-out on CPU.
+    # Savings resolution is shared by both numerical comparison arms.
     grid_config = dataclasses.replace(
         BENCHMARK_GRID_CONFIG,
         nbegm_jump_read="bridged",
-        n_nbegm_cell_block_size=32,
         n_savings_gridpoints=50,
     )
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
@@ -50,6 +45,9 @@ def _solve_m1(solver: SolverName) -> tuple[dict[int, np.ndarray], int]:
         grid_config=grid_config,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver=solver,
+        execution_config=ExecutionConfig(
+            axis_widths={"cell": 32} if solver == "nbegm" else {}
+        ),
     )
     _, _, params = get_benchmark_params(model=model)
     solution = model.solve(params=params, log_level="off")

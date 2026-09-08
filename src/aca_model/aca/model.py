@@ -7,7 +7,7 @@ function overrides on top of baseline regimes.
 from collections.abc import Mapping
 from typing import Any
 
-from lcm import AgeGrid, DiscreteGrid, Model
+from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, Model
 from lcm.typing import UserParams
 
 from aca_model.aca import PolicyVariant
@@ -15,6 +15,7 @@ from aca_model.aca.regimes import build_all_regimes
 from aca_model.baseline.model import _fail_if_dcegm_without_consumption_points
 from aca_model.baseline.regimes import RegimeId, SolverName, build_model_slots
 from aca_model.config import MODEL_CONFIG, GridConfig
+from aca_model.execution import execution_config_for_devices
 
 
 def create_model(
@@ -28,6 +29,7 @@ def create_model(
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
     consumption_dollars_points: tuple[float, ...] | None = None,
+    execution_config: ExecutionConfig | None = None,
 ) -> Model:
     """Create an ACA policy variant model.
 
@@ -53,6 +55,9 @@ def create_model(
         consumption_dollars_points: Construction-time consumption action
             gridpoints; required under DC-EGM. See
             `aca_model.baseline.model.create_model`.
+        execution_config: Explicit hardware-local policy forwarded unchanged.
+            None uses the smallest selected accelerator allocator limit as the
+            device-memory budget; CPU construction remains unbudgeted.
 
     Returns:
         pylcm Model.
@@ -92,6 +97,11 @@ def create_model(
         description=f"Structural retirement model ({policy.name})",
         fixed_params=fixed_params,
         derived_categoricals=derived_categoricals,
+        execution_config=(
+            execution_config_for_devices()
+            if execution_config is None
+            else execution_config
+        ),
         n_subjects=n_subjects,
         **model_slots,
     )

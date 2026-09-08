@@ -29,7 +29,7 @@ import cloudpickle
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
-from lcm import DiscreteGrid, Model
+from lcm import DiscreteGrid, ExecutionConfig, Model
 
 from aca_model.agent.health import GoodHealth
 from aca_model.agent.labor_market import IsMarried
@@ -73,19 +73,21 @@ def create_benchmark_model(
     *,
     n_subjects: int,
     pref_type_grid: DiscreteGrid,
+    execution_config: ExecutionConfig | None = None,
 ) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 
-    The benchmark uses a 2-type `BenchmarkPrefType`. No `batch_size != 0`
-    on any grid (continuous grids inherit
-    `BENCHMARK_GRID_CONFIG.n_assets_batch_size = 0` and
-    `n_aime_batch_size = 0`).
+    The benchmark uses a 2-type `BenchmarkPrefType`. Grids describe economic
+    outcomes; the execution policy selects devices and program widths.
 
     Args:
         n_subjects: Forwarded to `lcm.Model(n_subjects=...)`. When set, the
             first matching `simulate(...)` call AOT-compiles all simulate
             functions for that batch shape.
         pref_type_grid: Pref-type grid; pass `DiscreteGrid(BenchmarkPrefType)`.
+        execution_config: Explicit hardware-local policy forwarded unchanged.
+            None uses the smallest selected accelerator allocator limit as the
+            device-memory budget; CPU construction remains unbudgeted.
     """
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return create_model(
@@ -94,6 +96,7 @@ def create_benchmark_model(
         wage_params=wage_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
         pref_type_grid=pref_type_grid,
+        execution_config=execution_config,
         n_subjects=n_subjects,
     )
 

@@ -11,7 +11,7 @@ from typing import cast
 
 import numpy as np
 import pytest
-from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
+from helpers.model import _DERIVED_CATEGORICALS
 from lcm import DiscreteGrid, IrregSpacedGrid, Model, Regime
 from lcm.consumption_savings_regime import ConsumptionSavingsRegime
 from lcm.solvers import DCEGM
@@ -160,42 +160,6 @@ def test_dcegm_benchmark_model_builds() -> None:
         ),
     )
     assert isinstance(model.user_regimes["retiree_nomc_inelig_canwork"].solver, DCEGM)
-
-
-def test_savings_grid_batch_size_follows_grid_config() -> None:
-    """`GridConfig.n_savings_batch_size` sets the `batch_size` on every
-    living regime's DC-EGM savings grid, so the post-decision continuation
-    splays into `lax.map` blocks of that width."""
-    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, n_savings_batch_size=50)
-    regimes = build_all_regimes(
-        grid_config=grid_config,
-        fixed_params=_FIXED_PARAMS,
-        wage_params=_WAGE_PARAMS,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver="dcegm",
-    )
-    for name in REGIME_SPECS:
-        solver = cast("DCEGM", regimes[name].solver)
-        assert solver.savings_grid.batch_size == 50, name
-
-
-def test_stochastic_node_batch_size_follows_grid_config() -> None:
-    """`GridConfig.n_stochastic_node_batch_size` sets `stochastic_node_batch_size`
-    on every living regime's DC-EGM solver, so the child stochastic-node
-    expectation splays into `lax.map` blocks of that width."""
-    grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG, n_stochastic_node_batch_size=7
-    )
-    regimes = build_all_regimes(
-        grid_config=grid_config,
-        fixed_params=_FIXED_PARAMS,
-        wage_params=_WAGE_PARAMS,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver="dcegm",
-    )
-    for name in REGIME_SPECS:
-        solver = cast("DCEGM", regimes[name].solver)
-        assert solver.stochastic_node_batch_size == 7, name
 
 
 def test_savings_grid_length_follows_grid_config() -> None:

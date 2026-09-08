@@ -17,7 +17,7 @@ from collections.abc import Mapping
 from typing import cast
 
 import pytest
-from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
+from helpers.model import _DERIVED_CATEGORICALS
 from lcm import DiscreteGrid, Model, Regime
 from lcm.consumption_savings_regime import ConsumptionSavingsRegime, LiquidMargin
 from lcm.exceptions import RegimeInitializationError
@@ -352,44 +352,3 @@ def test_nbegm_aca_variants_leave_no_free_buy_private_params(
         if isinstance(params, dict) and "buy_private" in params
     ]
     assert offenders == [], offenders
-
-
-def test_nbegm_all_streaming_axes_are_forwarded() -> None:
-    """ACA forwards every streaming axis supported by pylcm."""
-    grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG,
-        n_nbegm_stochastic_node_batch_size=2,
-        n_nbegm_envelope_segment_block_size=3,
-        n_nbegm_interval_batch_size=4,
-        n_nbegm_cell_block_size=5,
-        n_nbegm_branch_batch_size=6,
-    )
-    grids = build_grids(
-        grid_config=grid_config,
-        fixed_params=_FIXED_PARAMS,
-        wage_params=_WAGE_PARAMS,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-    )
-    solver = build_nbegm_solver(grids)
-    assert solver.stochastic_node_batch_size == 2
-    assert solver.envelope_segment_block_size == 3
-    assert solver.interval_batch_size == 4
-    assert solver.cell_block_size == 5
-    assert solver.branch_batch_size == 6
-
-
-def test_nbegm_workspace_budget_requires_the_experimental_planner() -> None:
-    """A planner budget is refused when pylcm has no workspace planner."""
-    grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG,
-        n_nbegm_max_device_workspace_bytes=72 * 1024**3,
-    )
-    grids = build_grids(
-        grid_config=grid_config,
-        fixed_params=_FIXED_PARAMS,
-        wage_params=_WAGE_PARAMS,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-    )
-
-    with pytest.raises(RuntimeError, match="experimental NB-EGM workspace planner"):
-        build_nbegm_solver(grids)
