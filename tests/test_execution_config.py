@@ -25,7 +25,6 @@ def _factory(kind):
     if kind == "benchmark":
         return partial(
             create_benchmark_model,
-            n_subjects=1,
             pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         )
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
@@ -36,7 +35,6 @@ def _factory(kind):
     )
     return partial(
         factory,
-        n_subjects=1,
         fixed_params=fixed_params,
         wage_params=wage_params,
         derived_categoricals={
@@ -115,3 +113,10 @@ def test_factory_supplies_the_requested_or_measured_budget(
     monkeypatch.setattr(aca_model_module, "Model", observe_pylcm_constructor)
     with pytest.raises(ConstructionObservedError):
         factory(execution_config=requested_policy)
+
+
+@pytest.mark.parametrize("kind", ["baseline", "aca", "benchmark"])
+def test_factory_rejects_construction_subject_count(kind):
+    """Population size is supplied by initial conditions, not model construction."""
+    with pytest.raises(TypeError, match="n_subjects"):
+        _factory(kind)(n_subjects=1)

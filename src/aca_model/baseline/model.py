@@ -5,7 +5,7 @@ represents pre-ACA rules (no individual mandate, no ACA subsidies).
 
 Usage:
     from aca_model.baseline.model import create_model
-    model = create_model(n_subjects=..., fixed_params=..., wage_params=..., ...)
+    model = create_model(fixed_params=..., wage_params=..., ...)
     params = get_default_params()
     V = model.solve(params)
 """
@@ -28,7 +28,6 @@ from aca_model.execution import execution_config_for_devices
 
 def create_model(
     *,
-    n_subjects: int,
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     derived_categoricals: Mapping[str, DiscreteGrid],
@@ -41,7 +40,6 @@ def create_model(
     """Create the baseline structural retirement model.
 
     Args:
-        n_subjects: Forwarded to `lcm.Model(n_subjects=...)`.
         fixed_params: Parameters to fix at model creation time. Fixed
             params are partialled into compiled functions and removed
             from the params template. Pass data-derived constants here;
@@ -116,7 +114,6 @@ def create_model(
             if execution_config is None
             else execution_config
         ),
-        n_subjects=n_subjects,
         **model_slots,
     )
 

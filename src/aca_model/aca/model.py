@@ -20,7 +20,6 @@ from aca_model.execution import execution_config_for_devices
 
 def create_model(
     *,
-    n_subjects: int,
     policy: PolicyVariant,
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
@@ -34,7 +33,6 @@ def create_model(
     """Create an ACA policy variant model.
 
     Args:
-        n_subjects: Forwarded to `lcm.Model(n_subjects=...)`.
         policy: Which ACA policy combination to apply (e.g.
             `PolicyVariant.ACA`).
         fixed_params: Parameters to fix at model creation time. Pass
@@ -102,6 +100,5 @@ def create_model(
             if execution_config is None
             else execution_config
         ),
-        n_subjects=n_subjects,
         **model_slots,
     )

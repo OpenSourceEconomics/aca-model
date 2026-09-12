@@ -46,7 +46,6 @@ def _build_regimes(solver: SolverName) -> dict[str, Regime]:
 
 def _build_model(solver: SolverName) -> Model:
     return create_model(
-        n_subjects=1,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,
@@ -124,7 +123,6 @@ def test_dcegm_requires_construction_time_consumption_points() -> None:
     at model construction, so the runtime-injection path cannot be used."""
     with pytest.raises(ValueError, match="consumption_dollars_points"):
         create_model(
-            n_subjects=1,
             fixed_params=_FIXED_PARAMS,
             wage_params=_WAGE_PARAMS,
             derived_categoricals=_DERIVED_CATEGORICALS,
@@ -148,7 +146,6 @@ def test_benchmark_consumption_points_pin_both_floors() -> None:
 def test_dcegm_benchmark_model_builds() -> None:
     """The benchmark model accepts `solver="dcegm"` end to end."""
     model = create_model(
-        n_subjects=1,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,

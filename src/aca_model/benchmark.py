@@ -71,7 +71,6 @@ _INITIAL_REGIMES = (
 
 def create_benchmark_model(
     *,
-    n_subjects: int,
     pref_type_grid: DiscreteGrid,
     execution_config: ExecutionConfig | None = None,
 ) -> Model:
@@ -81,9 +80,6 @@ def create_benchmark_model(
     outcomes; the execution policy selects devices and program widths.
 
     Args:
-        n_subjects: Forwarded to `lcm.Model(n_subjects=...)`. When set, the
-            first matching `simulate(...)` call AOT-compiles all simulate
-            functions for that batch shape.
         pref_type_grid: Pref-type grid; pass `DiscreteGrid(BenchmarkPrefType)`.
         execution_config: Explicit hardware-local policy forwarded unchanged.
             None uses the smallest selected accelerator allocator limit as the
@@ -97,7 +93,6 @@ def create_benchmark_model(
         derived_categoricals=_DERIVED_CATEGORICALS,
         pref_type_grid=pref_type_grid,
         execution_config=execution_config,
-        n_subjects=n_subjects,
     )
 
 

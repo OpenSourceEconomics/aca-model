@@ -66,7 +66,6 @@ def _build_regimes(solver: SolverName) -> dict[str, Regime]:
 
 def _build_model_with(solver: SolverName, grid_config: GridConfig) -> Model:
     return create_model(
-        n_subjects=1,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,
@@ -300,7 +299,6 @@ def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     compose with the branch compiler's per-regime wiring."""
     grid_config = _BRIDGED_GRID_CONFIG
     model = create_aca_model(
-        n_subjects=1,
         policy=policy,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
@@ -334,7 +332,6 @@ def test_nbegm_aca_variants_leave_no_free_buy_private_params(
     """
     grid_config = _BRIDGED_GRID_CONFIG
     model = create_aca_model(
-        n_subjects=1,
         policy=policy,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,

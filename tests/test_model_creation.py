@@ -51,24 +51,24 @@ def build_regime(name: str):
 
 
 def test_model_creates_successfully() -> None:
-    model = make_baseline_model(n_subjects=1)
+    model = make_baseline_model()
     assert len(model.user_regimes) == 19
     assert model.n_periods == 45
 
 
 def test_model_age_range() -> None:
-    model = make_baseline_model(n_subjects=1)
+    model = make_baseline_model()
     assert model.ages.values[0] == 51.0
     assert model.ages.values[-1] == 95.0
 
 
 def test_dead_regime_is_terminal() -> None:
-    model = make_baseline_model(n_subjects=1)
+    model = make_baseline_model()
     assert model.user_regimes["dead"].terminal
 
 
 def test_non_terminal_regimes_not_terminal() -> None:
-    model = make_baseline_model(n_subjects=1)
+    model = make_baseline_model()
     for name in REGIME_SPECS:
         assert not model.user_regimes[name].terminal
 
@@ -233,7 +233,7 @@ def test_all_non_terminal_regimes_carry_pension_wealth_as_carried_state() -> Non
         build_model_state_transitions()["pension_wealth"]
         is pensions.wealth_next_before_adjustment
     )
-    model = make_baseline_model(n_subjects=1)
+    model = make_baseline_model()
     for name in REGIME_SPECS:
         assert isinstance(model.user_regimes[name].states["pension_wealth"], Phased), (
             name
@@ -281,7 +281,7 @@ def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
 
 
 def test_aca_model_creates_successfully() -> None:
-    model = make_aca_model(n_subjects=1, policy=PolicyVariant.ACA)
+    model = make_aca_model(policy=PolicyVariant.ACA)
     assert len(model.user_regimes) == 19
     assert model.n_periods == 45
 
@@ -322,7 +322,7 @@ def test_aca_other_regimes_have_no_aca_policy_keys() -> None:
 @pytest.mark.parametrize("policy", list(PolicyVariant))
 def test_all_policy_variants_create(policy: PolicyVariant) -> None:
     """All policy variants create valid models."""
-    model = make_aca_model(n_subjects=1, policy=policy)
+    model = make_aca_model(policy=policy)
     assert len(model.user_regimes) == 19
 
 
@@ -362,7 +362,7 @@ def test_aca_only_medicaid_expansion() -> None:
 
 def test_baseline_model_creates() -> None:
     """Baseline model creates successfully without PolicyVariant."""
-    model = make_baseline_model(n_subjects=1)
+    model = make_baseline_model()
     assert len(model.user_regimes) == 19
 
 
@@ -371,7 +371,7 @@ def test_dead_regime_prunes_unused_broadcast_states() -> None:
     `dead` keeps only what the bequest DAG reads (`assets`, `pref_type`).
     `pension_wealth` is masked (carried states are illegal in terminal
     regimes); the other unused broadcast states are pruned by reachability."""
-    model = make_baseline_model(n_subjects=1)
+    model = make_baseline_model()
     assert model.pruned_variables["dead"] == frozenset(
         {"aime", "spousal_income", "hcc_persistent", "hcc_transitory"}
     )
@@ -381,6 +381,6 @@ def test_dead_regime_prunes_unused_broadcast_states() -> None:
 def test_living_regimes_keep_every_broadcast_state() -> None:
     """Every model-level state is read by each living regime's DAG, so
     pruning removes nothing outside `dead`."""
-    model = make_baseline_model(n_subjects=1)
+    model = make_baseline_model()
     for name in REGIME_SPECS:
         assert model.pruned_variables[name] == frozenset()

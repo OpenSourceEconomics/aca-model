@@ -12,14 +12,15 @@ The test calls a real model-builder with one argument of the wrong type; the
 
 import pytest
 from beartype.roar import BeartypeCallHintViolation
-from helpers.model import make_baseline_model
+
+from aca_model.benchmark import create_benchmark_model
 
 
 def test_claw_checks_aca_model() -> None:
     """An ill-typed argument to an `aca_model` function is rejected by beartype.
 
-    `create_model` annotates `n_subjects` as `int`; passing a string is caught
-    by the claw before the value reaches pylcm's own `Model` perimeter.
+    The benchmark factory requires a DiscreteGrid for preference types.
+    Invalid types are rejected before model construction.
     """
     with pytest.raises(BeartypeCallHintViolation):
-        make_baseline_model(n_subjects="not an int")  # ty: ignore[invalid-argument-type]
+        create_benchmark_model(pref_type_grid="not a grid")  # ty: ignore[invalid-argument-type]

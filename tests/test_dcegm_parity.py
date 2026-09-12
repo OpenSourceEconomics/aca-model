@@ -114,7 +114,6 @@ def _make_model(*, solver: SolverName, grid_config: GridConfig) -> Model:
         else None
     )
     return create_model(
-        n_subjects=N_SUBJECTS,
         fixed_params=fixed_params,
         wage_params=wage_params,
         derived_categoricals=_DERIVED_CATEGORICALS,

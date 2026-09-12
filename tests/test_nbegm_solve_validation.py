@@ -35,7 +35,6 @@ def _solve_m1(solver: SolverName) -> dict[int, np.ndarray]:
     grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, nbegm_jump_read="bridged")
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     model = create_model(
-        n_subjects=1,
         fixed_params=fixed_params,
         wage_params=wage_params,
         derived_categoricals=_DERIVED_CATEGORICALS,

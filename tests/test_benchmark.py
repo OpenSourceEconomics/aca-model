@@ -22,7 +22,6 @@ from aca_model.benchmark import (
 def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
     """The frozen benchmark preserves its state and action grid extents."""
     model = create_benchmark_model(
-        n_subjects=1,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
 
@@ -52,7 +51,6 @@ def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
 def test_benchmark_model_simulates_end_to_end() -> None:
     n_subjects = 20
     model = create_benchmark_model(
-        n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
     _, _, params = get_benchmark_params(model=model)
@@ -86,7 +84,6 @@ def test_benchmark_panel_exposes_hic_premium_and_wage_targets() -> None:
     """
     n_subjects = 20
     model = create_benchmark_model(
-        n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
     _, _, params = get_benchmark_params(model=model)
@@ -148,7 +145,6 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     """
     n_subjects = 4
     model = create_benchmark_model(
-        n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
     _, _, params = get_benchmark_params(model=model)
@@ -172,3 +168,19 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
         f"borrowing_constraint violated on {int((slack < 0).sum())} row(s); "
         f"min slack = {slack.min():.6g}"
     )
+
+
+def test_initial_conditions_choose_population_size_after_model_construction() -> None:
+    """One model supports reproducible initial conditions with different row counts."""
+    model = create_benchmark_model(pref_type_grid=DiscreteGrid(BenchmarkPrefType))
+    small = get_benchmark_initial_conditions(model=model, n_subjects=2, seed=17)
+    repeated = get_benchmark_initial_conditions(model=model, n_subjects=2, seed=17)
+    large = get_benchmark_initial_conditions(model=model, n_subjects=5, seed=17)
+
+    assert small.keys() == repeated.keys() == large.keys()
+    for name, values in small.items():
+        assert values.shape == (2,)
+        assert large[name].shape == (5,)
+        np.testing.assert_array_equal(values, repeated[name])
+    np.testing.assert_array_equal(small["age"], [51.0, 51.0])
+    np.testing.assert_array_equal(small["claimed_ss"], [0, 0])

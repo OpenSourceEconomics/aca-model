@@ -26,11 +26,10 @@ _DERIVED_CATEGORICALS = {
 }
 
 
-def make_baseline_model(*, n_subjects: int) -> Model:
+def make_baseline_model() -> Model:
     """Baseline model on `BENCHMARK_GRID_CONFIG` with the benchmark snapshot params."""
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return _create_baseline_model(
-        n_subjects=n_subjects,
         fixed_params=fixed_params,
         wage_params=wage_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
@@ -39,11 +38,10 @@ def make_baseline_model(*, n_subjects: int) -> Model:
     )
 
 
-def make_aca_model(*, n_subjects: int, policy: PolicyVariant) -> Model:
+def make_aca_model(*, policy: PolicyVariant) -> Model:
     """ACA model on `BENCHMARK_GRID_CONFIG` with the benchmark snapshot params."""
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return _create_aca_model(
-        n_subjects=n_subjects,
         policy=policy,
         fixed_params=fixed_params,
         wage_params=wage_params,
