@@ -30,12 +30,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pylcm from feat/nb-egm
-        # This slice depends on the NB-EGM solver, which lives on pylcm's
-        # feat/nb-egm branch; revert to @main once that branch merges.
+      - name: Install pylcm at the revision aca-dev pins
+        # Pinned by commit so a deleted or rewritten branch cannot break the
+        # install; move it together with the aca-dev pylcm submodule pointer.
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@feat/nb-egm"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@7e8e4c223a63a07725015ebdd5af84cd9092cee2"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest
