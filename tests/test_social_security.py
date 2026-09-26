@@ -6,7 +6,7 @@ Parameter values from French & Jones (2011) Appendix C.
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from helpers.social_security import (  # ty: ignore[unresolved-import]
+from helpers.social_security import (
     compute_di_dropout_scale,
     compute_pia_table,
 )

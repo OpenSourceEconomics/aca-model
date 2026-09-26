@@ -11,8 +11,9 @@ from typing import cast
 
 import numpy as np
 import pytest
-from helpers.model import _DERIVED_CATEGORICALS  # ty: ignore[unresolved-import]
+from helpers.model import _DERIVED_CATEGORICALS
 from lcm import DiscreteGrid, IrregSpacedGrid, Model, Regime
+from lcm.consumption_savings_regime import ConsumptionSavingsRegime
 from lcm.solvers import DCEGM
 
 from aca_model.agent import assets_and_income
@@ -45,7 +46,6 @@ def _build_regimes(solver: SolverName) -> dict[str, Regime]:
 
 def _build_model(solver: SolverName) -> Model:
     return create_model(
-        n_subjects=1,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,
@@ -56,14 +56,15 @@ def _build_model(solver: SolverName) -> Model:
 
 
 def test_every_living_regime_gets_the_dcegm_solver() -> None:
-    """`solver="dcegm"` attaches a `DCEGM` config with assets as the Euler
-    state to every living regime; the terminal regime keeps the default."""
+    """`solver="dcegm"` attaches a `DCEGM` config to every living regime, each
+    declaring `assets` as its liquid margin; the terminal regime keeps the
+    default."""
     regimes = _build_regimes("dcegm")
     for name in REGIME_SPECS:
-        solver = regimes[name].solver
-        assert isinstance(solver, DCEGM), name
-        assert solver.continuous_state == "assets"
-        assert solver.continuous_action == "consumption_dollars"
+        regime = cast("ConsumptionSavingsRegime", regimes[name])
+        assert isinstance(regime.solver, DCEGM), name
+        assert regime.liquid.state == "assets", name
+        assert regime.liquid.action == "consumption_dollars", name
     assert not isinstance(regimes["dead"].solver, DCEGM)
 
 
@@ -122,7 +123,6 @@ def test_dcegm_requires_construction_time_consumption_points() -> None:
     at model construction, so the runtime-injection path cannot be used."""
     with pytest.raises(ValueError, match="consumption_dollars_points"):
         create_model(
-            n_subjects=1,
             fixed_params=_FIXED_PARAMS,
             wage_params=_WAGE_PARAMS,
             derived_categoricals=_DERIVED_CATEGORICALS,
@@ -143,27 +143,9 @@ def test_benchmark_consumption_points_pin_both_floors() -> None:
     np.testing.assert_allclose(points[:2], [floor, floor * 2.0**exponent], rtol=1e-12)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "pylcm's DC-EGM contract does not yet admit the ACA budget: the "
-        "assets law reaches `assets` outside the post-decision function — "
-        "through `oop_costs` (Medicaid eligibility → `countable_income` → "
-        "`capital_income`) and `pension_assets_adjustment` "
-        "(`marginal_tax_rate` → `gross_income` → `capital_income`). "
-        "Fixes land upstream in pylcm, not here."
-    ),
-)
 def test_dcegm_benchmark_model_builds() -> None:
-    """The benchmark model accepts `solver="dcegm"` end to end.
-
-    The acceptance criterion for the upstream DC-EGM stack: once pylcm's
-    contract admits the ACA budget chains, this builds without error. The
-    construction-time consumption points are supplied so the build reaches
-    the upstream limitation rather than the missing-points guard.
-    """
+    """The benchmark model accepts `solver="dcegm"` end to end."""
     model = create_model(
-        n_subjects=1,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,
@@ -175,42 +157,6 @@ def test_dcegm_benchmark_model_builds() -> None:
         ),
     )
     assert isinstance(model.user_regimes["retiree_nomc_inelig_canwork"].solver, DCEGM)
-
-
-def test_savings_grid_batch_size_follows_grid_config() -> None:
-    """`GridConfig.n_savings_batch_size` sets the `batch_size` on every
-    living regime's DC-EGM savings grid, so the post-decision continuation
-    splays into `lax.map` blocks of that width."""
-    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, n_savings_batch_size=50)
-    regimes = build_all_regimes(
-        grid_config=grid_config,
-        fixed_params=_FIXED_PARAMS,
-        wage_params=_WAGE_PARAMS,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver="dcegm",
-    )
-    for name in REGIME_SPECS:
-        solver = cast("DCEGM", regimes[name].solver)
-        assert solver.savings_grid.batch_size == 50, name
-
-
-def test_stochastic_node_batch_size_follows_grid_config() -> None:
-    """`GridConfig.n_stochastic_node_batch_size` sets `stochastic_node_batch_size`
-    on every living regime's DC-EGM solver, so the child stochastic-node
-    expectation splays into `lax.map` blocks of that width."""
-    grid_config = dataclasses.replace(
-        BENCHMARK_GRID_CONFIG, n_stochastic_node_batch_size=7
-    )
-    regimes = build_all_regimes(
-        grid_config=grid_config,
-        fixed_params=_FIXED_PARAMS,
-        wage_params=_WAGE_PARAMS,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver="dcegm",
-    )
-    for name in REGIME_SPECS:
-        solver = cast("DCEGM", regimes[name].solver)
-        assert solver.stochastic_node_batch_size == 7, name
 
 
 def test_savings_grid_length_follows_grid_config() -> None:

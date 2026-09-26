@@ -5,7 +5,7 @@ represents pre-ACA rules (no individual mandate, no ACA subsidies).
 
 Usage:
     from aca_model.baseline.model import create_model
-    model = create_model(n_subjects=..., fixed_params=..., wage_params=..., ...)
+    model = create_model(fixed_params=..., wage_params=..., ...)
     params = get_default_params()
     V = model.solve(params)
 """
@@ -13,7 +13,7 @@ Usage:
 from collections.abc import Mapping
 from typing import Any
 
-from lcm import AgeGrid, DiscreteGrid, Model
+from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, Model
 from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import (
@@ -23,11 +23,11 @@ from aca_model.baseline.regimes import (
     build_model_slots,
 )
 from aca_model.config import MODEL_CONFIG, GridConfig
+from aca_model.execution import execution_config_for_devices
 
 
 def create_model(
     *,
-    n_subjects: int,
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     derived_categoricals: Mapping[str, DiscreteGrid],
@@ -35,11 +35,11 @@ def create_model(
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
     consumption_dollars_points: tuple[float, ...] | None = None,
+    execution_config: ExecutionConfig | None = None,
 ) -> Model:
     """Create the baseline structural retirement model.
 
     Args:
-        n_subjects: Forwarded to `lcm.Model(n_subjects=...)`.
         fixed_params: Parameters to fix at model creation time. Fixed
             params are partialled into compiled functions and removed
             from the params template. Pass data-derived constants here;
@@ -69,6 +69,9 @@ def create_model(
             continuous-action grid at model construction); `None` keeps
             the runtime-points grid completed per iteration via
             `inject_consumption_dollars_points`.
+        execution_config: Explicit hardware-local policy forwarded unchanged.
+            None uses the smallest selected accelerator allocator limit as the
+            device-memory budget; CPU construction remains unbudgeted.
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
@@ -106,7 +109,11 @@ def create_model(
         description="Baseline structural retirement model (pre-ACA)",
         fixed_params=fixed_params,
         derived_categoricals=derived_categoricals,
-        n_subjects=n_subjects,
+        execution_config=(
+            execution_config_for_devices()
+            if execution_config is None
+            else execution_config
+        ),
         **model_slots,
     )
 

@@ -36,11 +36,6 @@ from aca_model.baseline.regimes._dcegm import build_dcegm_solver
 from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.config import GridConfig
 
-# NBEGM is a per-regime (not global) solver: it solves one 1-D
-# consumption/savings regime with at most one discrete action, so it attaches
-# only to the M1 vertical-slice regime.
-_NBEGM_REGIME = "nongroup_nomc_inelig_canwork"
-
 __all__ = [
     "REGIME_SPECS",
     "RegimeId",
@@ -115,7 +110,7 @@ def build_all_regimes(
             name,
             grids,
             dcegm_solver=dcegm_solver,
-            nbegm_solver=nbegm_solver if name == _NBEGM_REGIME else None,
+            nbegm_solver=nbegm_solver,
         )
     regimes["dead"] = build_dead_regime(solver=solver)
     return regimes
@@ -136,7 +131,7 @@ def build_model_slots(
     Both the baseline and the ACA `create_model` consume this — the ACA
     overlay swaps only regime-level functions, so the broadcast slots are
     policy-invariant. Under DC-EGM the solver-contract functions join the
-    broadcast set and no borrowing constraint is declared.
+    broadcast set; the borrowing constraint is declared under every solver.
     """
     grids = build_grids(
         grid_config=grid_config,
@@ -146,7 +141,7 @@ def build_model_slots(
     )
     return {
         "functions": build_model_functions(solver=solver),
-        "constraints": build_model_constraints(),
+        "constraints": build_model_constraints(solver=solver),
         "states": build_model_states(grids),
         "state_transitions": build_model_state_transitions(),
     }

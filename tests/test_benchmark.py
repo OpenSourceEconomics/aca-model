@@ -2,7 +2,14 @@
 
 import numpy as np
 import pytest
-from lcm import DiscreteGrid
+from lcm import (
+    DiscreteGrid,
+    GridBreakpoint,
+    IrregSpacedGrid,
+    LinSpacedGrid,
+    PiecewiseLinSpacedGrid,
+    RouwenhorstAR1Process,
+)
 
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.benchmark import (
@@ -12,11 +19,38 @@ from aca_model.benchmark import (
 )
 
 
+def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
+    """The frozen benchmark preserves its state and action grid extents."""
+    model = create_benchmark_model(
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
+
+    aime = model.user_regimes["retiree_nomc_inelig_canwork"].states["aime"]
+    assert isinstance(aime, PiecewiseLinSpacedGrid)
+    assert all(isinstance(point, GridBreakpoint) for point in aime.breakpoints)
+    assert all(point.owner == "right" for point in aime.breakpoints)
+    assert aime.n_points == 38
+    regime = model.user_regimes["retiree_nomc_inelig_canwork"]
+    assert len(model.user_regimes) == 19
+    assert model.n_periods == 45
+    assets = regime.states["assets"]
+    wage_res = regime.states["log_ft_wage_res"]
+    pref_type = regime.states["pref_type"]
+    consumption = regime.actions["consumption_dollars"]
+    assert isinstance(assets, LinSpacedGrid)
+    assert isinstance(wage_res, RouwenhorstAR1Process)
+    assert isinstance(pref_type, DiscreteGrid)
+    assert isinstance(consumption, IrregSpacedGrid)
+    assert assets.n_points == 3
+    assert wage_res.n_points == 3
+    assert len(pref_type.categories) == 2
+    assert consumption.n_points == 5
+
+
 @pytest.mark.long_running
 def test_benchmark_model_simulates_end_to_end() -> None:
     n_subjects = 20
     model = create_benchmark_model(
-        n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
     _, _, params = get_benchmark_params(model=model)
@@ -27,7 +61,6 @@ def test_benchmark_model_simulates_end_to_end() -> None:
     result = model.simulate(
         params=params,
         initial_conditions=initial_conditions,
-        period_to_regime_to_V_arr=None,
         log_level="off",
     )
 
@@ -51,7 +84,6 @@ def test_benchmark_panel_exposes_hic_premium_and_wage_targets() -> None:
     """
     n_subjects = 20
     model = create_benchmark_model(
-        n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
     _, _, params = get_benchmark_params(model=model)
@@ -62,7 +94,6 @@ def test_benchmark_panel_exposes_hic_premium_and_wage_targets() -> None:
     result = model.simulate(
         params=params,
         initial_conditions=initial_conditions,
-        period_to_regime_to_V_arr=None,
         log_level="off",
     )
 
@@ -114,7 +145,6 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     """
     n_subjects = 4
     model = create_benchmark_model(
-        n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
     _, _, params = get_benchmark_params(model=model)
@@ -125,7 +155,6 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     result = model.simulate(
         params=params,
         initial_conditions=initial_conditions,
-        period_to_regime_to_V_arr=None,
         log_level="off",
     )
 
@@ -139,3 +168,19 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
         f"borrowing_constraint violated on {int((slack < 0).sum())} row(s); "
         f"min slack = {slack.min():.6g}"
     )
+
+
+def test_initial_conditions_choose_population_size_after_model_construction() -> None:
+    """One model supports reproducible initial conditions with different row counts."""
+    model = create_benchmark_model(pref_type_grid=DiscreteGrid(BenchmarkPrefType))
+    small = get_benchmark_initial_conditions(model=model, n_subjects=2, seed=17)
+    repeated = get_benchmark_initial_conditions(model=model, n_subjects=2, seed=17)
+    large = get_benchmark_initial_conditions(model=model, n_subjects=5, seed=17)
+
+    assert small.keys() == repeated.keys() == large.keys()
+    for name, values in small.items():
+        assert values.shape == (2,)
+        assert large[name].shape == (5,)
+        np.testing.assert_array_equal(values, repeated[name])
+    np.testing.assert_array_equal(small["age"], [51.0, 51.0])
+    np.testing.assert_array_equal(small["claimed_ss"], [0, 0])

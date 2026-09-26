@@ -1,6 +1,13 @@
+import os
+
 import jax
 
-jax.config.update("jax_enable_x64", True)
+_x64_requested = os.environ.get("ACA_JAX_ENABLE_X64", "1").lower() not in {
+    "0",
+    "false",
+    "no",
+}
+jax.config.update("jax_enable_x64", _x64_requested)
 
 # Import lcm before installing the claw so its `_jaxtyping_patch` (picklable
 # jaxtyping sentinel) and `MappingProxyType` pytree registration are in place.
