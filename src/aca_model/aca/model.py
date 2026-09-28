@@ -8,13 +8,13 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, Model
-from lcm.typing import UserParams
+from lcm.typing import InitialRegimes, UserParams
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
 from aca_model.baseline.model import _fail_if_dcegm_without_consumption_points
 from aca_model.baseline.regimes import RegimeId, SolverName, build_model_slots
-from aca_model.config import MODEL_CONFIG, GridConfig
+from aca_model.config import MODEL_AGES, GridConfig
 from aca_model.execution import execution_config_for_devices
 
 
@@ -29,6 +29,7 @@ def create_model(
     solver: SolverName = "brute_force",
     consumption_dollars_points: tuple[float, ...] | None = None,
     execution_config: ExecutionConfig | None = None,
+    initial_regimes: InitialRegimes | None = None,
 ) -> Model:
     """Create an ACA policy variant model.
 
@@ -53,6 +54,9 @@ def create_model(
         consumption_dollars_points: Construction-time consumption action
             gridpoints; required under DC-EGM. See
             `aca_model.baseline.model.create_model`.
+        initial_regimes: Optional simulation-entry contract, not a solve-domain
+            restriction. None permits every covered node; an empty mapping makes
+            the model solve-only. Empirical starting pairs stay in the data/recipe.
         execution_config: Explicit hardware-local policy forwarded unchanged.
             None uses the smallest selected accelerator allocator limit as the
             device-memory budget; CPU construction remains unbudgeted.
@@ -61,11 +65,7 @@ def create_model(
         pylcm Model.
 
     """
-    ages = AgeGrid(
-        start=MODEL_CONFIG.start_age,
-        stop=MODEL_CONFIG.end_age - 1,
-        step="Y",
-    )
+    ages = AgeGrid(exact_values=MODEL_AGES)
     _fail_if_dcegm_without_consumption_points(
         solver=solver, consumption_dollars_points=consumption_dollars_points
     )
@@ -90,6 +90,7 @@ def create_model(
 
     return Model(
         regimes=regimes,
+        initial_regimes=initial_regimes,
         ages=ages,
         regime_id_class=RegimeId,
         description=f"Structural retirement model ({policy.name})",

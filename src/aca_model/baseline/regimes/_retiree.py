@@ -20,14 +20,14 @@ from aca_model.baseline.regimes._common import (
     build_actions,
     build_alive_regime,
     build_common_functions,
-    build_granular_regime_transition,
     build_nbegm_functions,
     build_pension_functions,
     build_regime_probs,
+    build_scheduled_regime_transition,
     build_state_transitions,
     build_states,
-    make_active_func,
     make_targets,
+    next_model_age,
     select_ss_benefit,
     select_target_for_age,
 )
@@ -51,8 +51,9 @@ def _make_transition_canwork(
         is_medicaid_eligible: BoolND,
         survival_probs: FloatND,
     ) -> FloatND:
+        del age  # Keep the legacy signature; period owns the clock lookup.
         sp = survival_probs[period]
-        next_age = age + 1
+        next_age = next_model_age(period)
         mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
         target = select_target_for_age(next_age, mc_next, own)
         # Medicaid eligibility overrides to nongroup
@@ -79,8 +80,9 @@ def _make_transition_forcedout(
         is_medicaid_eligible: BoolND,
         survival_probs: FloatND,
     ) -> FloatND:
+        del age  # Keep the legacy signature; period owns the clock lookup.
         sp = survival_probs[period]
-        next_age = age + 1
+        next_age = next_model_age(period)
         target = select_target_for_age(next_age, gets_medicare, own)
         ng_ssi = select_target_for_age(next_age, gets_medicare, ng)
         target = jnp.where(is_medicaid_eligible, ng_ssi, target)
@@ -142,10 +144,9 @@ def build_regime(
         functions = {**functions, **build_nbegm_functions()}
     return build_alive_regime(
         egm_solver=egm_solver,
-        transition=build_granular_regime_transition(
-            transition_func=transition_func, target_ids=(*own.values(), *ng.values())
+        regime_transitions=build_scheduled_regime_transition(
+            spec=spec, transition_func=transition_func, target_groups=(own, ng)
         ),
-        active=make_active_func(spec),
         states=states,
         state_transitions=build_state_transitions(spec, solver=state_solver),
         actions=build_actions(spec, grids),

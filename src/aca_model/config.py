@@ -45,6 +45,9 @@ class GridConfig:
 
 
 MODEL_CONFIG = ModelConfig()
+# ACA is calibrated annually. Keep the exact clock on the host until Model build;
+# importing a task or regime builder must not initialize a JAX device allocator.
+MODEL_AGES: tuple[int, ...] = tuple(range(MODEL_CONFIG.start_age, MODEL_CONFIG.end_age))
 GRID_CONFIG = GridConfig()
 
 BENCHMARK_GRID_CONFIG = GridConfig(

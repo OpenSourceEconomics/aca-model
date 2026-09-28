@@ -5,6 +5,7 @@ build_common_functions. No policy logic, no HIS-specific conditionals.
 """
 
 import functools
+import itertools
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -13,6 +14,8 @@ from typing import Any, Literal, TypedDict
 import jax.numpy as jnp
 import numpy as np
 from lcm import (
+    AgeRange,
+    ByAge,
     DiscreteGrid,
     GridBreakpoint,
     IrregSpacedGrid,
@@ -32,7 +35,7 @@ from lcm.consumption_savings_regime import (
     post_decision_lower_bound,
 )
 from lcm.solvers import OneMarginSolver
-from lcm.typing import BoolND, FloatND, IntND, RegimeName, ScalarInt, UserParams
+from lcm.typing import BoolND, FloatND, IntND, Period, RegimeName, ScalarInt, UserParams
 
 from aca_model.agent import (
     assets_and_income,
@@ -44,7 +47,7 @@ from aca_model.agent.health import Health, HealthWithDisability
 from aca_model.agent.labor_market import LaborSupply, LaggedLaborSupply, SpousalIncome
 from aca_model.baseline import health_insurance
 from aca_model.baseline.health_insurance import BuyPrivate
-from aca_model.config import MODEL_CONFIG, GridConfig
+from aca_model.config import MODEL_AGES, MODEL_CONFIG, GridConfig
 from aca_model.environment import pensions, social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
@@ -414,35 +417,100 @@ def _compute_max_annual_labor_income(
     )
 
 
-_ACTIVE_PREDICATES: dict[tuple[str, str, str], Callable[..., Any]] = {
-    ("nomc", "inelig", "canwork"): lambda age: age < config.ss_early_age,
-    ("dimc", "inelig", "canwork"): lambda age: age < config.ss_early_age,
-    ("nomc", "choose", "canwork"): lambda age: (
-        (age >= config.ss_early_age) & (age < config.medicare_age)
+# Structural stage data, shared by scheduled support and the numerical router.
+# Intervals select existing grid points, not integer-year ranges.
+_AGE_STAGES = (
+    (AgeRange(config.start_age, config.ss_early_age), ("nomc_inelig", "dimc_inelig")),
+    (
+        AgeRange(config.ss_early_age, config.medicare_age),
+        ("nomc_choose", "dimc_choose"),
     ),
-    ("dimc", "choose", "canwork"): lambda age: (
-        (age >= config.ss_early_age) & (age < config.medicare_age)
+    (AgeRange(config.medicare_age, config.ss_forced_age), ("forced_choose",) * 2),
+    (
+        AgeRange(config.ss_forced_age, config.work_forced_out_age),
+        ("forced_forced",) * 2,
     ),
-    ("oamc", "choose", "canwork"): lambda age: (
-        (age >= config.medicare_age) & (age < config.ss_forced_age)
-    ),
-    ("oamc", "forced", "canwork"): lambda age: (
-        (age >= config.ss_forced_age) & (age < config.work_forced_out_age)
-    ),
-    ("oamc", "forced", "forcedout"): lambda age: (
-        (age >= config.work_forced_out_age) & (age < config.end_age - 1)
-    ),
+    (AgeRange(config.work_forced_out_age, MODEL_AGES[-1]), ("forcedout",) * 2),
+)
+_STAGE_KEY = {
+    ("nomc", "inelig", "canwork"): "nomc_inelig",
+    ("dimc", "inelig", "canwork"): "dimc_inelig",
+    ("nomc", "choose", "canwork"): "nomc_choose",
+    ("dimc", "choose", "canwork"): "dimc_choose",
+    ("oamc", "choose", "canwork"): "forced_choose",
+    ("oamc", "forced", "canwork"): "forced_forced",
+    ("oamc", "forced", "forcedout"): "forcedout",
 }
+# Dynamic JAX period lookup and construction-time schedule use the same clock.
+_NEXT_AGES = np.asarray([float(a) for a in MODEL_AGES[1:]])
 
 
-def make_active_func(spec: RegimeSpec) -> Callable[..., Any]:
-    """Return the age predicate for a regime spec."""
-    key = (spec["mc"], spec["ss"], spec["canwork"])
-    predicate = _ACTIVE_PREDICATES.get(key)
-    if predicate is None:
-        msg = f"Unknown regime spec: {spec}"
-        raise ValueError(msg)
-    return predicate
+def transition_ages(spec: RegimeSpec) -> tuple[int, ...]:
+    """Exact source coordinates at which the template declares its law."""
+    key = _STAGE_KEY.get((spec["mc"], spec["ss"], spec["canwork"]))
+    for interval, branches in _AGE_STAGES:
+        if key in branches:
+            return tuple(
+                age for age in MODEL_AGES if interval.start <= age < interval.stop
+            )
+    raise ValueError(f"Unknown regime spec: {spec}")
+
+
+def next_model_age(period: Period) -> FloatND:
+    """Advance by one grid position, never by an assumed number of years.
+
+    Only covered nonterminal source periods call this function; no clipping
+    or extrapolation of invalid period indices is part of the contract.
+    This does not by itself recalibrate ACA to a different period length.
+    """
+    return jnp.asarray(_NEXT_AGES)[period]
+
+
+def _target_pair(next_age: int, group: dict[str, int]) -> tuple[int, int]:
+    if next_age == MODEL_AGES[-1]:
+        return (int(RegimeId.dead),) * 2
+    for interval, branches in _AGE_STAGES:
+        if interval.start <= next_age < interval.stop:
+            return group[branches[0]], group[branches[1]]
+    raise ValueError(f"Next age {next_age} is outside the declared stages")
+
+
+def build_scheduled_regime_transition(
+    *,
+    spec: RegimeSpec,
+    transition_func: Callable[..., FloatND],
+    target_groups: tuple[dict[str, int], ...],
+) -> ByAge:
+    """Schedule support while sharing the original numerical law and cells.
+
+    Unlike the first proposal, no boundary-specific numeric closure is made.
+    Parameter paths and global regime-code order stay unchanged. Only declared
+    target subsets vary; upstream may still need distinct continuation kernels
+    when destination schemas differ, so this is not a compile-time claim.
+    """
+    branches = (0,) if spec["mc"] == "nomc" else (0, 1)
+    grouped: dict[tuple[int, ...], list[int]] = {}
+    next_age_by_age = dict(itertools.pairwise(MODEL_AGES))
+    for age in transition_ages(spec):
+        next_age = next_age_by_age[age]
+        pairs = tuple(_target_pair(next_age, group) for group in target_groups)
+        supported_ids = {pair[branch] for pair in pairs for branch in branches}
+        target_ids = tuple(sorted(supported_ids | {int(RegimeId.dead)}))
+        grouped.setdefault(target_ids, []).append(age)
+    all_ids = {i for target_ids in grouped for i in target_ids}
+    # One probability-cell wrapper per target, reused at every applicable age.
+    cells = build_granular_regime_transition(
+        transition_func=transition_func, target_ids=all_ids
+    )
+    id_to_name = {
+        int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
+    }
+    return ByAge(
+        {
+            tuple(source_ages): {id_to_name[i]: cells[id_to_name[i]] for i in ids}
+            for ids, source_ages in grouped.items()
+        }
+    )
 
 
 def build_states(spec: RegimeSpec, grids: Grids) -> dict:
@@ -564,11 +632,10 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
     }
     constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
     return Regime(
-        transition=None,
+        regime_transitions=None,
         functions={"utility": preferences.bequest, **function_masks},
         constraints=constraint_masks,
         states={"pension_wealth": None},
-        active=lambda _age: True,
     )
 
 
@@ -925,34 +992,13 @@ def select_target_for_age(
     mc_next: bool | BoolND,
     tgts: dict[str, int],
 ) -> IntND:
-    """Select target regime ID based on next-period age bracket."""
-    ss_choose = jnp.where(
-        jnp.array(mc_next),
-        tgts["dimc_choose"],
-        tgts["nomc_choose"],
-    )
-    ss_inelig = jnp.where(
-        jnp.array(mc_next),
-        tgts["dimc_inelig"],
-        tgts["nomc_inelig"],
-    )
-    return jnp.where(
-        next_age >= config.end_age - 1,
-        RegimeId.dead,
-        jnp.where(
-            next_age >= config.work_forced_out_age,
-            tgts["forcedout"],
-            jnp.where(
-                next_age >= config.ss_forced_age,
-                tgts["forced_forced"],
-                jnp.where(
-                    next_age >= config.medicare_age,
-                    tgts["forced_choose"],
-                    jnp.where(next_age >= config.ss_early_age, ss_choose, ss_inelig),
-                ),
-            ),
-        ),
-    )
+    """Select with the same stage table that supplies the schedule's support."""
+    result = jnp.asarray(RegimeId.dead)
+    for interval, branches in reversed(_AGE_STAGES):
+        target = jnp.where(jnp.array(mc_next), tgts[branches[1]], tgts[branches[0]])
+        inside = (next_age >= interval.start) & (next_age < interval.stop)
+        result = jnp.where(inside, target, result)
+    return result
 
 
 def build_state_transitions(
