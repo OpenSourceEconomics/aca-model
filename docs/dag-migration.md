@@ -1,10 +1,10 @@
 # ACA: one structural stage table, existing numerical programs
 
-Both factories declare the same admissible starts, `INITIAL_REGIMES`: ages 51–61
-(`AgeRange(start=start_age, stop=ss_early_age)`) in the five `*_inelig_canwork`
-regimes, 55 pairs. Every later age, and `dead` at any age, is reached only through
+Both factories declare the same admissible starts, `INITIAL_REGIMES`: ages 51–60
+(`AgeRange(start=start_age, stop=last_start_age + 1)`) in the five `*_inelig_canwork`
+regimes, 50 pairs. Every later age, and `dead` at any age, is reached only through
 transitions; the engine derives the solved domain from these roots, **181** nodes.
-`(51, "dead")` is not solved. Starts at age ≥ 62 or in `dead` are rejected at
+`(51, "dead")` is not solved. Starts at age ≥ 61 or in `dead` are rejected at
 admission.
 
 `simulate_with_dense_index` drops initial-condition rows older than the last

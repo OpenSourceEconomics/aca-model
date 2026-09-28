@@ -450,11 +450,11 @@ ENTRY_REGIMES = (
     "nongroup_dimc_inelig_canwork",
 )
 
-# Admissible starting (age, regime) pairs, shared by every model variant: ages
-# before early claiming. Later ages, and `dead` at any age, are reached only
+# Admissible starting (age, regime) pairs, shared by every model variant: the
+# baseline estimation-sample ages. Later ages, and `dead` at any age, are reached only
 # through transitions.
 INITIAL_REGIMES = MappingProxyType(
-    {AgeRange(start=config.start_age, stop=config.ss_early_age): ENTRY_REGIMES}
+    {AgeRange(start=config.start_age, stop=config.last_start_age + 1): ENTRY_REGIMES}
 )
 
 _STAGE_KEY = {

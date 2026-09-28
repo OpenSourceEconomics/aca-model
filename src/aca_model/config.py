@@ -12,6 +12,7 @@ BLD = ROOT / "bld"
 @dataclass(frozen=True)
 class ModelConfig:
     start_age: int = 51
+    last_start_age: int = 60
     end_age: int = 96
     ss_early_age: int = 62
     ss_forced_age: int = 70

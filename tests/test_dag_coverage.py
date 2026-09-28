@@ -1,6 +1,7 @@
 """The baseline's solved domain derives from its declared starting pairs."""
 
 import jax.numpy as jnp
+import pandas as pd
 import pytest
 from helpers.model import make_baseline_model
 from lcm.exceptions import InvalidInitialConditionsError
@@ -8,6 +9,7 @@ from lcm.exceptions import InvalidInitialConditionsError
 from aca_model.baseline.regimes import ENTRY_REGIMES
 from aca_model.benchmark import get_benchmark_initial_conditions, get_benchmark_params
 from aca_model.config import MODEL_CONFIG
+from aca_model.simulation import select_admissible_starts
 
 
 @pytest.fixture(scope="module")
@@ -15,10 +17,10 @@ def model():
     return make_baseline_model()
 
 
-def test_initial_nodes_are_the_age_51_to_61_entry_regimes(model):
+def test_initial_nodes_are_the_age_51_to_60_entry_regimes(model):
     expected = {
         (age, regime)
-        for age in range(MODEL_CONFIG.start_age, MODEL_CONFIG.ss_early_age)
+        for age in range(MODEL_CONFIG.start_age, MODEL_CONFIG.last_start_age + 1)
         for regime in ENTRY_REGIMES
     }
     assert {(float(a), r) for a, r in model.initial_nodes} == {
@@ -49,6 +51,7 @@ def test_regimes_carry_no_active_attribute(model):
 @pytest.mark.parametrize(
     ("age", "regime"),
     [
+        (61.0, "retiree_nomc_inelig_canwork"),
         (62.0, "retiree_nomc_choose_canwork"),
         (69.0, "retiree_oamc_choose_canwork"),
         (51.0, "dead"),
@@ -97,3 +100,16 @@ def test_terminal_regime_keeps_the_original_none_declaration(model):
     assert {
         (age, "dead") for age in model.ages.exact_values[1:]
     } <= model.reachability.nodes
+
+
+def test_select_admissible_starts_drops_starts_at_61_and_above(model):
+    ic = pd.DataFrame(
+        {
+            "age": [60.0, 61.0, 62.0],
+            "regime_name": ["retiree_nomc_inelig_canwork"] * 2
+            + ["retiree_nomc_choose_canwork"],
+        },
+        index=pd.Index([1, 2, 3], name="id"),
+    )
+    kept = select_admissible_starts(model=model, initial_conditions=ic)
+    assert list(kept.index) == [1]
