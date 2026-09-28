@@ -420,18 +420,43 @@ def _compute_max_annual_labor_income(
 # Structural stage data, shared by scheduled support and the numerical router.
 # Intervals select existing grid points, not integer-year ranges.
 _AGE_STAGES = (
-    (AgeRange(config.start_age, config.ss_early_age), ("nomc_inelig", "dimc_inelig")),
     (
-        AgeRange(config.ss_early_age, config.medicare_age),
+        AgeRange(start=config.start_age, stop=config.ss_early_age),
+        ("nomc_inelig", "dimc_inelig"),
+    ),
+    (
+        AgeRange(start=config.ss_early_age, stop=config.medicare_age),
         ("nomc_choose", "dimc_choose"),
     ),
-    (AgeRange(config.medicare_age, config.ss_forced_age), ("forced_choose",) * 2),
     (
-        AgeRange(config.ss_forced_age, config.work_forced_out_age),
+        AgeRange(start=config.medicare_age, stop=config.ss_forced_age),
+        ("forced_choose",) * 2,
+    ),
+    (
+        AgeRange(start=config.ss_forced_age, stop=config.work_forced_out_age),
         ("forced_forced",) * 2,
     ),
-    (AgeRange(config.work_forced_out_age, MODEL_AGES[-1]), ("forcedout",) * 2),
+    (
+        AgeRange(start=config.work_forced_out_age, stop=MODEL_AGES[-1]),
+        ("forcedout",) * 2,
+    ),
 )
+# The living regimes a subject may start in: pre-claiming, pre-Medicare.
+ENTRY_REGIMES = (
+    "retiree_nomc_inelig_canwork",
+    "tied_nomc_inelig_canwork",
+    "nongroup_nomc_inelig_canwork",
+    "retiree_dimc_inelig_canwork",
+    "nongroup_dimc_inelig_canwork",
+)
+
+# Admissible starting (age, regime) pairs, shared by every model variant: ages
+# before early claiming. Later ages, and `dead` at any age, are reached only
+# through transitions.
+INITIAL_REGIMES = MappingProxyType(
+    {AgeRange(start=config.start_age, stop=config.ss_early_age): ENTRY_REGIMES}
+)
+
 _STAGE_KEY = {
     ("nomc", "inelig", "canwork"): "nomc_inelig",
     ("dimc", "inelig", "canwork"): "dimc_inelig",
@@ -506,7 +531,7 @@ def build_scheduled_regime_transition(
         int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
     }
     return ByAge(
-        {
+        cases={
             tuple(source_ages): {id_to_name[i]: cells[id_to_name[i]] for i in ids}
             for ids, source_ages in grouped.items()
         }
@@ -583,7 +608,7 @@ def build_granular_regime_transition(
     declared = sorted({*(int(i) for i in target_ids), int(RegimeId.dead)})
     return {
         id_to_name[target_id]: MarkovTransition(
-            _prob_of_target(transition_func=transition_func, target_id=target_id)
+            func=_prob_of_target(transition_func=transition_func, target_id=target_id)
         )
         for target_id in declared
     }
@@ -796,7 +821,7 @@ def build_model_state_transitions() -> dict:
     """
     return {
         "pref_type": fixed_transition("pref_type"),
-        "spousal_income": MarkovTransition(labor_market.next_spousal_income),
+        "spousal_income": MarkovTransition(func=labor_market.next_spousal_income),
         # Carried state: evolved only in simulate (in solve, `pension_wealth`
         # is re-imputed from AIME each period and has no transition).
         "pension_wealth": pensions.wealth_next_before_adjustment,
@@ -1115,9 +1140,9 @@ def _build_per_target_regime_health(
         target_is_post65 = target_spec["mc"] == "oamc"
 
         if spec["mc"] != "oamc" and target_is_post65:
-            result[target_name] = MarkovTransition(health.next_health_cross)
+            result[target_name] = MarkovTransition(func=health.next_health_cross)
         else:
-            result[target_name] = MarkovTransition(health.next_health)
+            result[target_name] = MarkovTransition(func=health.next_health)
 
     return result
 

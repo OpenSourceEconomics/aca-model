@@ -40,10 +40,47 @@ def simulate_with_dense_index(
         on the result panel.
 
     """
-    original_ids = np.asarray(initial_conditions.index)
-    dense = initial_conditions.reset_index(drop=True)
+    admissible = select_admissible_starts(
+        model=model, initial_conditions=initial_conditions
+    )
+    original_ids = np.asarray(admissible.index)
+    dense = admissible.reset_index(drop=True)
     result = model.simulate(initial_conditions=dense, **simulate_kwargs)
     return result, original_ids
+
+
+def select_admissible_starts(
+    *, model: Any, initial_conditions: pd.DataFrame
+) -> pd.DataFrame:
+    """Keep the rows that start at or before the model's last admissible start age.
+
+    Rows older than every age in `model.initial_nodes` are outside the sample
+    the model is meant to simulate and are dropped. Every kept row must start at
+    an admissible `(age, regime_name)` pair; any other kept row raises.
+
+    Args:
+        model: A pylcm `Model` (anything exposing `initial_nodes`).
+        initial_conditions: Seed DataFrame with `age` and `regime_name` columns.
+
+    Returns:
+        The rows of `initial_conditions` inside the model's entry ages.
+
+    Raises:
+        ValueError: If a kept row starts at a pair outside `model.initial_nodes`.
+
+    """
+    admitted = {(float(age), regime) for age, regime in model.initial_nodes}
+    last_entry_age = max(age for age, _ in admitted)
+    kept = initial_conditions.loc[initial_conditions["age"] <= last_entry_age]
+    pairs = set(zip(kept["age"].astype(float), kept["regime_name"], strict=True))
+    _fail_if_starts_not_admitted(refused=pairs - admitted)
+    return kept
+
+
+def _fail_if_starts_not_admitted(*, refused: set[tuple[float, str]]) -> None:
+    if refused:
+        msg = f"Initial conditions start at inadmissible pairs: {sorted(refused)}"
+        raise ValueError(msg)
 
 
 def restore_subject_ids(

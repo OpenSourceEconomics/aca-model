@@ -21,6 +21,8 @@ from aca_model.baseline.regimes import _nongroup as nongroup
 from aca_model.baseline.regimes import _retiree as retiree
 from aca_model.baseline.regimes import _tied as tied
 from aca_model.baseline.regimes._common import (
+    ENTRY_REGIMES,
+    INITIAL_REGIMES,
     REGIME_SPECS,
     Grids,
     RegimeId,
@@ -37,6 +39,8 @@ from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.config import GridConfig
 
 __all__ = [
+    "ENTRY_REGIMES",
+    "INITIAL_REGIMES",
     "REGIME_SPECS",
     "RegimeId",
     "build_all_regimes",

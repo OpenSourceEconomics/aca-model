@@ -14,9 +14,10 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, Model
-from lcm.typing import InitialRegimes, UserParams
+from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import (
+    INITIAL_REGIMES,
     RegimeId,
     SolverName,
     build_all_regimes,
@@ -36,7 +37,6 @@ def create_model(
     solver: SolverName = "brute_force",
     consumption_dollars_points: tuple[float, ...] | None = None,
     execution_config: ExecutionConfig | None = None,
-    initial_regimes: InitialRegimes | None = None,
 ) -> Model:
     """Create the baseline structural retirement model.
 
@@ -70,9 +70,6 @@ def create_model(
             continuous-action grid at model construction); `None` keeps
             the runtime-points grid completed per iteration via
             `inject_consumption_dollars_points`.
-        initial_regimes: Optional simulation-entry contract, not a solve-domain
-            restriction. None permits every covered node; an empty mapping makes
-            the model solve-only. Empirical starting pairs stay in the data/recipe.
         execution_config: Explicit hardware-local policy forwarded unchanged.
             None uses the smallest selected accelerator allocator limit as the
             device-memory budget; CPU construction remains unbudgeted.
@@ -104,7 +101,7 @@ def create_model(
 
     return Model(
         regimes=regimes,
-        initial_regimes=initial_regimes,
+        initial_regimes=INITIAL_REGIMES,
         ages=ages,
         regime_id_class=RegimeId,
         description="Baseline structural retirement model (pre-ACA)",
