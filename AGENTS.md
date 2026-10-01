@@ -72,6 +72,10 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 - ACA replaces stubs with real policy functions from `aca/policies.py`
 - `PolicyVariant` enum controls which policies are active (full ACA, no mandate,
   Medicaid only)
+- Every variant with the reformed non-group market (all but Medicaid-only) swaps the
+  non-group-nomc `plan_premium` for the community-rated
+  `aca_premium_single + aca_premium_married_extra * is_married`; aca-slurm puts the ACA
+  plan's copay parameters into those regimes and drops the risk-rated premium's params
 
 ### Key State Variables
 
@@ -107,6 +111,13 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   an action. Those use `premium()` and `primary_oop()` which condition on it. All other
   regimes use `premium_insured()` / `premium_retired()` and `oop_costs` directly — no
   `buy_private` parameter at all.
+- **Medicaid in the non-group regimes**: their `hic_premium` is
+  `medicaid_adjusted_premium(plan_premium)`, zero when Medicaid-eligible (Medicaid
+  replaces private cover before Medicare and pays the Medicare premium after). Before
+  Medicare, `oop_costs` is Medicaid's cost-sharing on total costs when eligible,
+  whatever `buy_private` says, so a Medicaid-eligible household can neither hold private
+  cover nor stay uninsured; both `buy_private` values give the same outcome. Elsewhere
+  Medicaid pays on top of the primary OOP (`oop_with_medicaid`).
 - **`reference_age` parameter**: Fixed cost of work uses `age - reference_age` (not a
   hardcoded constant). Same parameter appears in `leisure()`, `tied()`, `with_hours()`,
   and `utility_scale_factor()`.
