@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import jax
 import pytest
+from helpers.model import aca_fixed_params
 from lcm import DiscreteGrid, ExecutionConfig
 from lcm.exceptions import ExecutionPlanningError
 
@@ -28,11 +29,12 @@ def _factory(kind):
             pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         )
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
-    factory = (
-        partial(create_aca_model, policy=PolicyVariant.ACA)
-        if kind == "aca"
-        else create_model
-    )
+    factory = create_model
+    if kind == "aca":
+        factory = partial(create_aca_model, policy=PolicyVariant.ACA)
+        fixed_params = aca_fixed_params(
+            fixed_params=fixed_params, policy=PolicyVariant.ACA
+        )
     return partial(
         factory,
         fixed_params=fixed_params,
