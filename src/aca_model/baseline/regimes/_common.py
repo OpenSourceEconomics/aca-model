@@ -849,7 +849,11 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
         if can_work
         else health_insurance.target_his_forcedout
     )
-    functions["pia_unadjusted_next_period"] = social_security.pia_unadjusted_next_period
+    functions["pia_unadjusted_next_period"] = (
+        social_security.pia_unadjusted_next_period_forced
+        if spec["ss"] == "forced"
+        else social_security.pia_unadjusted_next_period
+    )
     functions["imputed_pension_wealth_next_period"] = (
         pensions.imputed_pension_wealth_next_period
     )
@@ -984,20 +988,19 @@ def _select_aime_law(spec: RegimeSpec) -> Callable[..., FloatND]:
 
     The claim-age actuarial bake applies only where the agent chooses when to
     claim (`ss=choose`), so only those regimes carry the `claim_ss`/`claimed_ss`
-    inputs. `ss=inelig` (cannot claim) and `ss=forced` (claims by rule) use the
-    plain-accrual variant: no claim adjustment, no claim inputs. A forced
-    claimant who claimed early carries the reduction in from the choose regime;
-    plain accrual preserves it.
+    inputs. `ss=inelig` (cannot claim) uses plain accrual with no claim inputs;
+    in `ss=forced` (claims by rule) AIME stays as carried in, with any early
+    reduction or delayed credit from the choose regime.
 
     - post-65 (`oamc`), `choose` → `next_aime` (claim-adjusted)
-    - post-65 (`oamc`), `forced` → `next_aime_plain`
+    - post-65 (`oamc`), `forced` → `next_aime_forced` (AIME frozen)
     - pre-65 (`nomc`/`dimc`), `choose` → `next_aime_disabled` (claim-adjusted)
     - pre-65 (`nomc`/`dimc`), `inelig` → `next_aime_disabled_plain`
     """
     is_choose = spec["ss"] == "choose"
     if spec["mc"] == "oamc":
         return (
-            social_security.next_aime if is_choose else social_security.next_aime_plain
+            social_security.next_aime if is_choose else social_security.next_aime_forced
         )
     return (
         social_security.next_aime_disabled

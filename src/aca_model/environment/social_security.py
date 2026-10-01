@@ -342,49 +342,15 @@ def next_aime(
     return jnp.interp(adjusted_pia, pia_table, pia_aime_grid)
 
 
-def next_aime_plain(
-    aime: ContinuousState,
-    labor_income: FloatND,
-    period: Period,
-    age: Age,
-    benefit_withheld_fraction: FloatND,
-    earnings_test_credited_back: FloatND,
-    earnings_test_repealed_age: ScalarInt,
-    pia_table: FloatND,
-    pia_aime_grid: FloatND,
-    aime_accrual_factor: ScalarFloat,
-    aggregate_wage_growth: ScalarFloat,
-    aime_last_age_with_indexing: ScalarInt,
-    aime_kink_2: ScalarFloat,
-    ratio_lowest_earnings: FloatND,
-) -> ContinuousState:
-    """Compute next period's AIME without any claim-age adjustment.
+def next_aime_forced(aime: ContinuousState) -> ContinuousState:
+    """AIME law of the post-65 `ss=forced` regimes: AIME stays as it is.
 
-    Used by post-65 `ss=forced` regimes, where the agent cannot choose when to
-    claim and so carries no `claim_ss` action / `claimed_ss` state. A forced
-    claimant who claimed early already has the actuarial reduction baked into
-    the AIME carried in from the `ss=choose` regime; plain accrual preserves it.
-    A forced claimant who never claimed early keeps a pristine AIME, so the
-    flat-PIA benefit equals the full PIA, which is correct.
+    Once claiming is forced, earnings no longer accrue to AIME and nothing is
+    capped. A forced claimant who claimed early carries the reduction in from
+    the `ss=choose` regime; one who delayed carries the delayed-retirement
+    credit, including the part above the taxable maximum.
     """
-    credited_pia = _accrue_and_credit_back_pia(
-        aime=aime,
-        labor_income=labor_income,
-        period=period,
-        age=age,
-        benefit_withheld_fraction=benefit_withheld_fraction,
-        earnings_test_credited_back=earnings_test_credited_back,
-        earnings_test_repealed_age=earnings_test_repealed_age,
-        pia_table=pia_table,
-        pia_aime_grid=pia_aime_grid,
-        aime_accrual_factor=aime_accrual_factor,
-        aggregate_wage_growth=aggregate_wage_growth,
-        aime_last_age_with_indexing=aime_last_age_with_indexing,
-        aime_kink_2=aime_kink_2,
-        ratio_lowest_earnings=ratio_lowest_earnings,
-    )
-    accrued_aime = jnp.interp(credited_pia, pia_table, pia_aime_grid)
-    return jnp.minimum(accrued_aime, aime_kink_2)
+    return aime
 
 
 def pia_unadjusted_next_period(
@@ -418,6 +384,11 @@ def pia_unadjusted_next_period(
         ratio_lowest_earnings=ratio_lowest_earnings,
     )
     return jnp.interp(accrued_aime, pia_aime_grid, pia_table)
+
+
+def pia_unadjusted_next_period_forced(pia: FloatND) -> FloatND:
+    """Next-period PIA in the `ss=forced` regimes, where AIME stays as it is."""
+    return pia
 
 
 def _accrue_aime(
