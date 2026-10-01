@@ -63,7 +63,7 @@ def create_model(
     """
     ages = AgeGrid(
         start=MODEL_CONFIG.start_age,
-        stop=MODEL_CONFIG.end_age - 1,
+        stop=MODEL_CONFIG.end_age,
         step="Y",
     )
     _fail_if_dcegm_without_consumption_points(

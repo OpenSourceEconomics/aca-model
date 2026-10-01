@@ -75,12 +75,13 @@ def create_model(
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
-        ages 51-95. Regime names follow the `<his>_<medicare>_<ss>_<work>` scheme.
+        ages 51-96; 95 is the last age anyone is alive. Regime names follow
+        the `<his>_<medicare>_<ss>_<work>` scheme.
 
     """
     ages = AgeGrid(
         start=MODEL_CONFIG.start_age,
-        stop=MODEL_CONFIG.end_age - 1,
+        stop=MODEL_CONFIG.end_age,
         step="Y",
     )
     _fail_if_dcegm_without_consumption_points(

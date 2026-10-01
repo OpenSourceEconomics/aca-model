@@ -24,7 +24,7 @@ from aca_model.baseline.regimes._tied import _make_transition_canwork as tied_ca
 from aca_model.config import MODEL_CONFIG
 
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
-SURVIVAL = jnp.ones(N_PERIODS) * 0.99
+SURVIVAL = jnp.ones((N_PERIODS, 3)) * 0.99
 MEDICAID_SCHEDULE = MappingLeaf(
     {"income_threshold": jnp.array([16104.6, 21707.4, 21707.4])}
 )
@@ -90,6 +90,7 @@ def test_expansion_only_medicaid_keeps_employer_coverage(
             **extra_inputs,
             "age": jnp.int32(55),
             "period": jnp.int32(55 - MODEL_CONFIG.start_age),
+            "health": jnp.int32(2),
             "survival_probs": SURVIVAL,
         },
     )

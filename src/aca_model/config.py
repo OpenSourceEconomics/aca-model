@@ -13,6 +13,7 @@ BLD = ROOT / "bld"
 class ModelConfig:
     start_age: int = 51
     end_age: int = 96
+    """First age at which everybody is dead; the model's last period."""
     ss_early_age: int = 62
     ss_forced_age: int = 70
     work_forced_out_age: int = 72
