@@ -303,14 +303,18 @@ def test_medicaid_eligible_aca_expansion_excludes_aged() -> None:
     assert not result
 
 
-def test_medicaid_eligible_aca_expansion_excludes_disabled() -> None:
-    """Disabled households are not reached by the expansion track."""
+def test_medicaid_eligible_aca_expansion_includes_disabled_under_65() -> None:
+    """A disabled under-65 household below the MAGI threshold gets expansion cover.
+
+    The expansion has no asset test, so the household qualifies even though
+    it fails the categorical track (`is_ssi_eligible` is False).
+    """
     result = aca_hi.is_medicaid_eligible(
         **_aca_medicaid_kwargs(
             is_disabled=jnp.asarray(True), aca_magi=jnp.array(10000.0)
         )
     )
-    assert not result
+    assert result
 
 
 def test_medicaid_eligible_aca_ignores_assets() -> None:
