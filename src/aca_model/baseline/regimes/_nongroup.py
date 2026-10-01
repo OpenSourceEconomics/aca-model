@@ -96,7 +96,7 @@ def _build_functions(spec: RegimeSpec) -> dict:
         functions["plan_premium"] = health_insurance.premium_retired
     # Medicaid-eligible households pay no premium: Medicaid replaces private
     # cover and pays the Medicare premium.
-    functions["hic_premium"] = health_insurance.premium_net_of_medicaid
+    functions["hic_premium"] = health_insurance.medicaid_adjusted_premium
 
     functions.update(build_pension_functions(spec))
 

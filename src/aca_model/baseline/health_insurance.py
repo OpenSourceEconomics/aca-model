@@ -419,7 +419,7 @@ def oop_with_medicaid_replacing_private(
     return jnp.where(is_medicaid_eligible, medicaid_oop, primary_oop)
 
 
-def premium_net_of_medicaid(
+def medicaid_adjusted_premium(
     plan_premium: FloatND,
     is_medicaid_eligible: BoolND,
 ) -> FloatND:
