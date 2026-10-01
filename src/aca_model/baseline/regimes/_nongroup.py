@@ -48,13 +48,13 @@ def _make_transition_canwork(
         health: DiscreteState,
         labor_supply: DiscreteAction,
         survival_probs: FloatND,
-        health_trans_probs: FloatND,
+        prob_disabled_next: FloatND,
     ) -> FloatND:
         return build_regime_probs_with_di_medicare(
             target_dimc=select_target_for_age(age + 1, True, own),
             target_nomc=select_target_for_age(age + 1, False, own),
             prob_dimc=prob_di_medicare_next(
-                health, period, labor_supply, health_trans_probs
+                labor_supply, prob_disabled_next[period, health]
             ),
             survival=survival_probs[period],
         )

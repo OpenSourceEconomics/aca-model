@@ -33,6 +33,8 @@ SURVIVAL = jnp.full(N_PERIODS, 0.99)
 # Rows: current health (disabled, bad, good); columns: next health.
 _HEALTH_ROWS = jnp.array([[0.98, 0.01, 0.01], [0.05, 0.75, 0.20], [0.002, 0.058, 0.94]])
 HEALTH_TRANS = jnp.broadcast_to(_HEALTH_ROWS, (N_PERIODS, 3, 3))
+# P(disabled next period | health), the first column of the rows above.
+PROB_DISABLED = HEALTH_TRANS[:, :, 0]
 
 
 def _nongroup_probs(regime: str, health_state: int, labor: int) -> jnp.ndarray:
@@ -43,7 +45,7 @@ def _nongroup_probs(regime: str, health_state: int, labor: int) -> jnp.ndarray:
         health=jnp.int32(health_state),
         labor_supply=jnp.array(labor),
         survival_probs=SURVIVAL,
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
     )
 
 
@@ -116,7 +118,7 @@ def test_retiree_transition_newly_disabled_non_worker_keeps_retiree_cover() -> N
         labor_supply=jnp.array(LaborSupply.do_not_work),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
     )
     np.testing.assert_allclose(
         probs[RegimeId.retiree_dimc_inelig_canwork], 0.99 * 0.002, atol=1e-12
@@ -133,7 +135,7 @@ def test_tied_transition_newly_disabled_non_worker_moves_to_nongroup_medicare() 
         labor_supply=jnp.array(LaborSupply.do_not_work),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
     )
     np.testing.assert_allclose(
         probs[RegimeId.nongroup_dimc_inelig_canwork], 0.99 * 0.05, atol=1e-12

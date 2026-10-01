@@ -518,20 +518,21 @@ def build_regime_probs_with_di_medicare(
 
 
 def prob_di_medicare_next(
-    health: IntND,
-    period: IntND,
     labor_supply: IntND,
-    health_trans_probs: FloatND,
+    prob_disabled: FloatND,
 ) -> FloatND:
     """Probability of holding disability Medicare next period.
 
     Before 65, Medicare covers households that are disabled and did not work
     in the previous period: the household must not work this period and be
-    disabled next period. Before 65 `health_trans_probs` is the 3-state
-    `HealthWithDisability` matrix; from 65 the value does not matter (see
-    `build_regime_probs_with_di_medicare`).
+    disabled next period, which happens with probability `prob_disabled`
+    (`prob_disabled_next[period, health]`, 0 from 65 on, where the split does
+    not matter; see `build_regime_probs_with_di_medicare`).
+
+    Callers index `prob_disabled_next` in their own body: pylcm reads the
+    indexing expression from the consuming function's source to lay out the
+    `(age, health)` Series.
     """
-    prob_disabled = health_trans_probs[period, health][HealthWithDisability.disabled]
     return jnp.where(labor_supply == LaborSupply.do_not_work, prob_disabled, 0.0)
 
 

@@ -60,7 +60,7 @@ def _make_transition_canwork(
         labor_supply: DiscreteAction,
         is_medicaid_eligible: BoolND,
         survival_probs: FloatND,
-        health_trans_probs: FloatND,
+        prob_disabled_next: FloatND,
     ) -> FloatND:
         next_age = age + 1
 
@@ -73,7 +73,7 @@ def _make_transition_canwork(
             target_dimc=target(True),
             target_nomc=target(False),
             prob_dimc=prob_di_medicare_next(
-                health, period, labor_supply, health_trans_probs
+                labor_supply, prob_disabled_next[period, health]
             ),
             survival=survival_probs[period],
         )

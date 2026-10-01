@@ -27,11 +27,10 @@ from aca_model.config import MODEL_CONFIG
 N_REGIMES = 19
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
 SURVIVAL = jnp.ones(N_PERIODS) * 0.99
-# Pre-65 health rows (disabled, bad, good); a good-health household stays
-# off disability with probability 0.998.
-HEALTH_TRANS = jnp.broadcast_to(
-    jnp.array([[0.98, 0.01, 0.01], [0.05, 0.75, 0.20], [0.002, 0.058, 0.94]]),
-    (N_PERIODS, 3, 3),
+# P(disabled next period | disabled, bad, good health).
+PROB_DISABLED = jnp.broadcast_to(
+    jnp.array([0.98, 0.05, 0.002]),
+    (N_PERIODS, 3),
 )
 
 
@@ -54,7 +53,7 @@ def test_tied_stop_working_becomes_nongroup() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(2),
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.do_not_work),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
@@ -73,7 +72,7 @@ def test_tied_keeps_working_stays_tied() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(2),
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
@@ -94,7 +93,7 @@ def test_retiree_medicaid_override_to_nongroup() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(2),
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
@@ -112,7 +111,7 @@ def test_retiree_not_medicaid_stays_retiree() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(2),
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
@@ -169,7 +168,7 @@ def test_retiree_age_bracket_transitions(
         age=jnp.asarray(age),
         period=period,
         health=jnp.int32(2),
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
@@ -190,7 +189,7 @@ def test_nongroup_canwork_valid_probs() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(2),
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
         survival_probs=SURVIVAL,
     )
@@ -224,7 +223,7 @@ def test_tied_medicaid_override_to_nongroup() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(2),
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
@@ -243,7 +242,7 @@ def test_tied_at_medicare_age_with_medicaid() -> None:
         age=jnp.int32(64),
         period=period,
         health=jnp.int32(2),
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
@@ -263,7 +262,7 @@ def test_survival_prob_determines_death_weight() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(2),
-        health_trans_probs=HEALTH_TRANS,
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
         is_medicaid_eligible=jnp.array(False),
         survival_probs=survival,
