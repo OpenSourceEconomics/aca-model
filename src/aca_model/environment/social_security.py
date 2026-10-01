@@ -202,18 +202,30 @@ def benefit_inelig_pre65(
 def benefit_withheld_fraction(
     pia: FloatND,
     ss_benefit: FloatND,
+    age: Age,
+    period: Period,
     claim_ss: DiscreteAction,
     claimed_ss: DiscreteState,
+    early_ret_adjustment: FloatND,
+    normal_retirement_age: ScalarInt,
 ) -> FloatND:
-    """Fraction of raw PIA withheld (early retirement + earnings test).
+    """Fraction of the claimed benefit the earnings test withholds.
 
-    Zero when not claiming regular SS. Used by `next_aime` to credit back
-    future AIME for benefit withholding during the earnings test.
+    The claimed benefit is the PIA times the early-claim factor below the
+    normal retirement age. Only earnings-test withholding is credited back to
+    future AIME, so the fraction is zero when not claiming regular SS, when not
+    working, and when earnings stay below the threshold; the early-claim
+    reduction itself is never credited.
     """
     is_claiming = jnp.maximum(claim_ss, claimed_ss) > 0
+    claimed_benefit = jnp.where(
+        age < normal_retirement_age, pia * early_ret_adjustment[period], pia
+    )
+    has_benefit = claimed_benefit > 0
+    safe_benefit = jnp.where(has_benefit, claimed_benefit, 1.0)
     return jnp.where(
-        is_claiming & (pia > 0),
-        jnp.maximum(0.0, 1.0 - ss_benefit / pia),
+        is_claiming & has_benefit,
+        jnp.maximum(0.0, 1.0 - ss_benefit / safe_benefit),
         0.0,
     )
 
