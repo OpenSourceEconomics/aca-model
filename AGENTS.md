@@ -116,8 +116,18 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   `premium_default = max(0, hic_premium − max(0, resources − consumption_dollars_floor))`
   is a tracked DAG node; `cash_on_hand` subtracts only the affordable part. The floor is
   therefore on pre-premium resources; OOP stays the post-decision shock in
-  `next_assets`. Coverage is unchanged on default (the defaulted premium is
-  uncompensated care).
+  `next_assets`. Employer and Medicare coverage is unchanged on default (the defaulted
+  premium is uncompensated care). Private non-group cover is not: under the brute-force
+  solver the `private_cover_paid_in_full` constraint makes `buy_private = yes`
+  infeasible whenever `premium_default > 0`, so no household holds private cover
+  financed by the floor.
+- **Private non-group premium**:
+  `max(premium_minimum[is_married], p0 + b (1 + markup) E[insurer cost])`, with `b`
+  estimated. The intercept `p0` is the DAG node `private_premium_intercept`, solved by
+  bisection from the insurer's zero-profit condition on the data sample of private
+  buyers under 65 (`premium_sample_*`), so it moves with `b`.
+- **Couples' cost sharing**: `deductible` and `oop_max` are the single household's;
+  `insured_oop` doubles both for married households.
 - **Two-track Medicaid eligibility**: `is_medicaid_eligible` is the union of a
   *categorical* track — `(crossed_oamc_threshold OR is_disabled)` AND the SSI asset and
   income tests (on SSI countable income) — and, under the ACA Medicaid-expansion
@@ -127,9 +137,12 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 - **`crossed_oamc_threshold`**: per-regime constant fixed param
   (`= spec["mc"] == "oamc"`, i.e. age ≥ 65), the *aged* indicator in eligibility. It
   replaced the `gets_medicare` gate there; `is_disabled` (= `health == disabled`, a DAG
-  function in `nomc`/`dimc` regimes) supplies the disabled arm. The Medicare
-  *transition* still uses its own build-time `gets_medicare` constant (`mc != nomc`) —
-  distinct from this.
+  function in `nomc`/`dimc` regimes) supplies the disabled arm.
+- **Disability Medicare before 65**: a household is on Medicare (`dimc`) next period
+  exactly when it does not work this period and is disabled next period. The canwork
+  regime transitions split survivors between the `dimc` and `nomc` targets by
+  `P(disabled next | health)`, and the per-target health laws condition on the outcome
+  (`next_health_into_dimc`, `next_health_into_nomc`).
 - **SS claim-age adjustment baked into AIME**: at the voluntary claim the
   early-retirement reduction / delayed-retirement credit is applied to PIA and converted
   back to AIME via `find_aime` (the exact inverse of `pia`), so the permanent adjustment

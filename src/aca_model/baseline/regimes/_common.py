@@ -498,6 +498,43 @@ def build_regime_probs(target: IntND, survival: FloatND) -> FloatND:
     return probs.at[target].add(survival)
 
 
+def build_regime_probs_with_di_medicare(
+    *,
+    target_dimc: IntND,
+    target_nomc: IntND,
+    prob_dimc: FloatND,
+    survival: FloatND,
+) -> FloatND:
+    """Build the regime probability vector with the disability-Medicare split.
+
+    Survivors land in `target_dimc` with probability `prob_dimc` and in
+    `target_nomc` otherwise. From age 65 on both targets are the same `oamc`
+    regime, so the split is immaterial there.
+    """
+    probs = jnp.zeros(19)
+    probs = probs.at[RegimeId.dead].set(1.0 - survival)
+    probs = probs.at[target_dimc].add(survival * prob_dimc)
+    return probs.at[target_nomc].add(survival * (1.0 - prob_dimc))
+
+
+def prob_di_medicare_next(
+    health: IntND,
+    period: IntND,
+    labor_supply: IntND,
+    health_trans_probs: FloatND,
+) -> FloatND:
+    """Probability of holding disability Medicare next period.
+
+    Before 65, Medicare covers households that are disabled and did not work
+    in the previous period: the household must not work this period and be
+    disabled next period. Before 65 `health_trans_probs` is the 3-state
+    `HealthWithDisability` matrix; from 65 the value does not matter (see
+    `build_regime_probs_with_di_medicare`).
+    """
+    prob_disabled = health_trans_probs[period, health][HealthWithDisability.disabled]
+    return jnp.where(labor_supply == LaborSupply.do_not_work, prob_disabled, 0.0)
+
+
 def build_granular_regime_transition(
     *,
     transition_func: Callable[..., FloatND],
@@ -752,7 +789,9 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     )
     has_buy_private = spec["his"] == "nongroup" and spec["mc"] == "nomc"
     functions["primary_oop"] = (
-        health_insurance.primary_oop if has_buy_private else health_insurance.oop_costs
+        health_insurance.primary_oop
+        if has_buy_private
+        else health_insurance.insured_oop
     )
 
     if can_work:
@@ -1050,7 +1089,12 @@ def _build_per_target_regime_health(
     """Build per-target health transitions.
 
     Pre-65 regimes use HealthWithDisability (3-state), post-65 use Health (2-state).
-    Cross-grid transitions (3->2) happen at the age-65 boundary.
+    Cross-grid transitions (3->2) happen at the age-65 boundary. Between pre-65
+    regimes the Medicare outcome reveals next-period disability for
+    non-workers, so each target carries the health law conditional on it:
+
+    - `dimc` target: disabled (`next_health_into_dimc`);
+    - `nomc` target: not disabled if not working (`next_health_into_nomc`).
     """
     target_regimes = precompute_target_regimes(spec)
     id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
@@ -1065,13 +1109,15 @@ def _build_per_target_regime_health(
         target_name = id_to_name.get(target_id)
         if target_name is None:
             continue
-        target_spec = REGIME_SPECS[target_name]
-        target_is_post65 = target_spec["mc"] == "oamc"
-
-        if spec["mc"] != "oamc" and target_is_post65:
-            result[target_name] = MarkovTransition(health.next_health_cross)
-        else:
+        target_mc = REGIME_SPECS[target_name]["mc"]
+        if spec["mc"] == "oamc":
             result[target_name] = MarkovTransition(health.next_health)
+        elif target_mc == "oamc":
+            result[target_name] = MarkovTransition(health.next_health_cross)
+        elif target_mc == "dimc":
+            result[target_name] = MarkovTransition(health.next_health_into_dimc)
+        else:
+            result[target_name] = MarkovTransition(health.next_health_into_nomc)
 
     return result
 

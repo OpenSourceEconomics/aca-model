@@ -12,7 +12,7 @@ from aca_model.baseline.regimes._common import REGIME_SPECS
 _MARKUP = jnp.asarray(0.1696)
 _MINIMUM = jnp.array([1000.0, 2000.0])
 _SAMPLE_COST = jnp.array([1000.0, 3000.0, 8000.0])
-_SAMPLE_MARRIED = jnp.array([0, 1, 0])
+_SAMPLE_MARRIED = jnp.array([0, 1, 0], dtype=jnp.int32)
 
 
 @pytest.mark.parametrize(
@@ -47,7 +47,7 @@ def test_private_premium_intercept_zero_profit_on_sample() -> None:
     """
     rng = np.random.default_rng(seed=3)
     cost = jnp.asarray(np.exp(rng.normal(loc=7.5, scale=1.2, size=2000)))
-    married = jnp.asarray(rng.integers(0, 2, size=2000))
+    married = jnp.asarray(rng.integers(0, 2, size=2000), dtype=jnp.int32)
     coeff = jnp.asarray(1.161245437600243)
     intercept = health_insurance.private_premium_intercept(
         premium_predicted_hcc=coeff,
