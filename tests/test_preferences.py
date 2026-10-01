@@ -3,10 +3,16 @@
 Parameter values from struct-ret PreferenceParameters fixture.
 """
 
+from collections.abc import Callable
+from typing import Any
+
 import jax.numpy as jnp
 import numpy as np
+import pytest
+from dags import concatenate_functions
 
 from aca_model.agent import preferences
+from aca_model.baseline.regimes._common import build_dead_regime, build_model_functions
 
 # Struct-ret preference parameters. Tests call DAG functions directly, so
 # every scalar fixed_param is supplied as a 0-d jax array (the type pylcm
@@ -296,3 +302,64 @@ def test_bequest_floors_estate_base_when_debt_exceeds_the_shifter() -> None:
 
     expected = scale * bwt * 1.0 / (1.0 - coefficient_rra)
     np.testing.assert_allclose(result, expected, atol=1e-9)
+
+
+# --- dead-regime bequest utility per preference type ---
+
+# Draft estimates (struct-ret original_data/baseline/final/prefs.json).
+_DRAFT_CONSUMPTION_WEIGHTS = jnp.asarray(
+    [0.6776541629520845, 0.8805772328591686, 0.0718086283445225]
+)
+_DRAFT_COEFFICIENTS_RRA = jnp.asarray(
+    [3.841252231680976, 0.9990771146810682, 3.8328505891095137]
+)
+_DRAFT_DISCOUNT_FACTORS = jnp.asarray(
+    [0.839255583514979, 0.9121549199895648, 1.0595836603747046]
+)
+
+
+def _dead_regime_utility() -> Callable[..., Any]:
+    """Compose the dead regime's utility DAG as pylcm merges it.
+
+    Model-level functions come first; the dead regime's own entries override
+    them, and `None` entries mask a model-level function out of the regime.
+    """
+    functions = dict(build_model_functions())
+    for name, func in build_dead_regime().functions.items():
+        if func is None:
+            functions.pop(name, None)
+        else:
+            functions[name] = func
+    return concatenate_functions(functions, targets="utility")
+
+
+@pytest.mark.parametrize(
+    ("pref_type", "expected"),
+    [
+        (0, -75.59884789663738),
+        (1, 39.12342314306149),
+        (2, -12.47026859098475),
+    ],
+)
+def test_dead_regime_bequest_uses_per_type_transformed_weight(
+    pref_type: int, expected: float
+) -> None:
+    """At the draft estimates and r = 0.05, the bequest utility of 100k assets
+    equals `θ_B(type) · (A + κ)^((1-ν)γ) / (1-ν) · scale(type)` with the
+    per-type `θ_B = T^ξ (bw / (1 + r - bw))^ξ₂ / β(type)`."""
+    utility = _dead_regime_utility()
+    result = utility(
+        assets=jnp.asarray(100_000.0),
+        pref_type=jnp.asarray(pref_type),
+        bequest_shifter=jnp.asarray(334460.20744719007),
+        bequest_weight=jnp.asarray(0.02861082652580584),
+        consumption_weights=_DRAFT_CONSUMPTION_WEIGHTS,
+        coefficients_rra=_DRAFT_COEFFICIENTS_RRA,
+        discount_factor_by_type=_DRAFT_DISCOUNT_FACTORS,
+        time_endowment=jnp.asarray(3926.9478390365557),
+        rate_of_return=jnp.asarray(0.05),
+        average_consumption_equiv=jnp.asarray(20_000.0),
+        fixed_cost_of_work_intercept=jnp.asarray(337.5223349543413),
+        reference_hours=jnp.asarray(1000.0),
+    )
+    np.testing.assert_allclose(result, expected, rtol=1e-9)
