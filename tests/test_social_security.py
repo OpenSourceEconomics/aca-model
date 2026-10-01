@@ -251,14 +251,8 @@ def test_next_aime_no_indexing_low_income() -> None:
     assert jnp.isclose(result, 1000, atol=ATOL)
 
 
-def test_next_aime_high_aime_high_income_accrues_above_taxable_max() -> None:
-    """Within-period labor accrual above the taxable-max-indexed base is preserved.
-
-    `_accrue_aime` caps the *indexed* base at the taxable max; the small extra
-    accrual from current labor earnings then rides on top. The carried AIME is
-    the round-trip of that accrued PIA — not re-clamped at the taxable max — so
-    it lands just above `aime_kink_2`.
-    """
+def test_next_aime_high_aime_high_income_is_capped_at_taxable_max() -> None:
+    """Labor accrual cannot lift an AIME at the taxable max above it."""
     result = social_security.next_aime(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
@@ -279,10 +273,7 @@ def test_next_aime_high_aime_high_income_accrues_above_taxable_max() -> None:
         aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
-    capped_base = AIME_KINK_2
-    lowest_year = _RATIO_NP[62] * capped_base
-    expected = capped_base + (20000.0 - lowest_year) * float(AIME_ACCRUAL_FACTOR)
-    assert jnp.isclose(result, expected, atol=ATOL)
+    assert jnp.isclose(result, AIME_KINK_2, atol=ATOL)
 
 
 def test_next_aime_cap_high_aime_low_income() -> None:

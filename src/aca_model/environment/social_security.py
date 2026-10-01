@@ -432,7 +432,10 @@ def _accrue_aime(
     aime_kink_2: ScalarFloat,
     ratio_lowest_earnings: FloatND,
 ) -> FloatND:
-    """Accrue AIME from labor income (indexing, taxable cap, lowest-year drop)."""
+    """Accrue AIME from labor income (indexing, taxable cap, lowest-year drop).
+
+    The accrued AIME is capped at the taxable maximum.
+    """
     indexed_aime = jnp.where(
         age <= aime_last_age_with_indexing,
         aime * (1.0 + aggregate_wage_growth),
@@ -444,7 +447,7 @@ def _accrue_aime(
     accrual = (
         jnp.maximum(0.0, capped_labor - lowest_year_earnings) * aime_accrual_factor
     )
-    return capped_aime + accrual
+    return jnp.minimum(capped_aime + accrual, aime_kink_2)
 
 
 def _accrue_and_credit_back_pia(
