@@ -37,7 +37,7 @@ def test_low_income_qualifies_for_ssi_and_medicaid() -> None:
     result = combined(
         labor_income=jnp.array(0.0),
         capital_income=jnp.array(0.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         ss_benefit=jnp.array(500.0),
         pension_benefit=jnp.array(0.0),
         ssi_ignored_overall=jnp.asarray(20.0),
@@ -69,7 +69,7 @@ def test_high_income_ineligible_for_ssi() -> None:
     result = combined(
         labor_income=jnp.array(50000.0),
         capital_income=jnp.array(5000.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         ss_benefit=jnp.array(2000.0),
         pension_benefit=jnp.array(0.0),
         ssi_ignored_overall=jnp.asarray(20.0),
@@ -105,7 +105,7 @@ def test_disabled_under_65_qualifies_for_ssi_and_medicaid() -> None:
     result = combined(
         labor_income=jnp.array(0.0),
         capital_income=jnp.array(0.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
         ssi_ignored_overall=jnp.asarray(20.0),
@@ -144,7 +144,7 @@ def test_aca_expansion_uses_magi_not_countable_income() -> None:
         # but full MAGI 28000 > 15000 threshold.
         labor_income=jnp.array(28000.0),
         capital_income=jnp.array(0.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
         ssi_ignored_overall=jnp.asarray(20.0),

@@ -1,6 +1,7 @@
 """Tests for individual model component functions."""
 
 import jax.numpy as jnp
+from helpers.social_security import next_aime_from_state
 
 from aca_model.agent import preferences
 from aca_model.environment import social_security
@@ -191,7 +192,7 @@ def test_aime_to_pia_three_brackets() -> None:
 def test_next_aime_accrual() -> None:
     ratio = jnp.zeros(100)
     ratio = ratio.at[55].set(0.5)
-    result = social_security.next_aime(
+    result = next_aime_from_state(
         aime=jnp.array(1000.0),
         labor_income=jnp.array(50000.0),
         period=jnp.int32(55),
