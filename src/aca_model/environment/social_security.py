@@ -202,18 +202,30 @@ def benefit_inelig_pre65(
 def benefit_withheld_fraction(
     pia: FloatND,
     ss_benefit: FloatND,
+    age: Age,
+    period: Period,
     claim_ss: DiscreteAction,
     claimed_ss: DiscreteState,
+    early_ret_adjustment: FloatND,
+    normal_retirement_age: ScalarInt,
 ) -> FloatND:
-    """Fraction of raw PIA withheld (early retirement + earnings test).
+    """Fraction of the claimed benefit the earnings test withholds.
 
-    Zero when not claiming regular SS. Used by `next_aime` to credit back
-    future AIME for benefit withholding during the earnings test.
+    The claimed benefit is the PIA times the early-claim factor below the
+    normal retirement age. Only earnings-test withholding is credited back to
+    future AIME, so the fraction is zero when not claiming regular SS, when not
+    working, and when earnings stay below the threshold; the early-claim
+    reduction itself is never credited.
     """
     is_claiming = jnp.maximum(claim_ss, claimed_ss) > 0
+    claimed_benefit = jnp.where(
+        age < normal_retirement_age, pia * early_ret_adjustment[period], pia
+    )
+    has_benefit = claimed_benefit > 0
+    safe_benefit = jnp.where(has_benefit, claimed_benefit, 1.0)
     return jnp.where(
-        is_claiming & (pia > 0),
-        jnp.maximum(0.0, 1.0 - ss_benefit / pia),
+        is_claiming & has_benefit,
+        jnp.maximum(0.0, 1.0 - ss_benefit / safe_benefit),
         0.0,
     )
 
@@ -266,7 +278,7 @@ def _apply_benefit_rules(
 # --- AIME transition functions (state transitions, no aime_to_pia calls) ---
 
 
-def next_aime(
+def pia_adjusted_next_period(
     aime: ContinuousState,
     labor_income: FloatND,
     period: Period,
@@ -285,16 +297,15 @@ def next_aime(
     aime_last_age_with_indexing: ScalarInt,
     aime_kink_2: ScalarFloat,
     ratio_lowest_earnings: FloatND,
-) -> ContinuousState:
-    """Compute next period's AIME given labor earnings and the claim decision.
+) -> FloatND:
+    """Next period's PIA after accrual, earnings-test credit and claim adjustment.
 
     Steps:
     1. Accrue AIME from labor income (indexing, taxable cap, lowest-year drop).
-    2. Credit back for earnings-test withholding (PIA round-trip).
-    3. Bake the claim-age actuarial factor into AIME (`_apply_claim_adjustment`),
+    2. Credit back for earnings-test withholding.
+    3. Apply the per-year claim-age actuarial factor (`_apply_claim_adjustment`),
        so the carried AIME permanently encodes the early-retirement reduction or
-       the delayed-retirement credit. The flat-PIA benefit read off this AIME is
-       then correct at every later age, including the forced regimes.
+       the delayed-retirement credit.
     """
     credited_pia = _accrue_and_credit_back_pia(
         aime=aime,
@@ -312,8 +323,7 @@ def next_aime(
         aime_kink_2=aime_kink_2,
         ratio_lowest_earnings=ratio_lowest_earnings,
     )
-
-    adjusted_pia = _apply_claim_adjustment(
+    return _apply_claim_adjustment(
         pia=credited_pia,
         period=period,
         age=age,
@@ -322,57 +332,41 @@ def next_aime(
         normal_retirement_age=normal_retirement_age,
         early_ret_adjustment=early_ret_adjustment,
     )
-    # The extended `pia_table`/`pia_aime_grid` reach above the taxable max so a
-    # delayed-retirement credit on a top earner's PIA round-trips to an AIME
-    # above `aime_kink_2` rather than clamping there. `_accrue_aime` already
-    # capped the labor-earnings base at the taxable max; the actuarial credit is
-    # the only thing carried beyond it.
-    return jnp.interp(adjusted_pia, pia_table, pia_aime_grid)
 
 
-def next_aime_plain(
-    aime: ContinuousState,
-    labor_income: FloatND,
-    period: Period,
-    age: Age,
-    benefit_withheld_fraction: FloatND,
-    earnings_test_credited_back: FloatND,
-    earnings_test_repealed_age: ScalarInt,
+def carried_pia_simulate(pia_adjusted_next_period: FloatND) -> FloatND:
+    """PIA the next-period AIME encodes in simulate: the adjusted PIA itself.
+
+    Simulate carries the true pension wealth as a state, so no pension
+    imputation has to be offset. The solve-phase counterpart is
+    `pensions.total_to_pia`.
+    """
+    return pia_adjusted_next_period
+
+
+def next_aime(
+    carried_pia: FloatND,
     pia_table: FloatND,
     pia_aime_grid: FloatND,
-    aime_accrual_factor: ScalarFloat,
-    aggregate_wage_growth: ScalarFloat,
-    aime_last_age_with_indexing: ScalarInt,
-    aime_kink_2: ScalarFloat,
-    ratio_lowest_earnings: FloatND,
 ) -> ContinuousState:
-    """Compute next period's AIME without any claim-age adjustment.
+    """AIME law of the post-65 `ss=choose` regimes: the AIME of the carried PIA.
 
-    Used by post-65 `ss=forced` regimes, where the agent cannot choose when to
-    claim and so carries no `claim_ss` action / `claimed_ss` state. A forced
-    claimant who claimed early already has the actuarial reduction baked into
-    the AIME carried in from the `ss=choose` regime; plain accrual preserves it.
-    A forced claimant who never claimed early keeps a pristine AIME, so the
-    flat-PIA benefit equals the full PIA, which is correct.
+    The extended `pia_table`/`pia_aime_grid` reach above the taxable max, so a
+    delayed-retirement credit on a top earner's PIA round-trips to an AIME
+    above `aime_kink_2` instead of clamping there.
     """
-    credited_pia = _accrue_and_credit_back_pia(
-        aime=aime,
-        labor_income=labor_income,
-        period=period,
-        age=age,
-        benefit_withheld_fraction=benefit_withheld_fraction,
-        earnings_test_credited_back=earnings_test_credited_back,
-        earnings_test_repealed_age=earnings_test_repealed_age,
-        pia_table=pia_table,
-        pia_aime_grid=pia_aime_grid,
-        aime_accrual_factor=aime_accrual_factor,
-        aggregate_wage_growth=aggregate_wage_growth,
-        aime_last_age_with_indexing=aime_last_age_with_indexing,
-        aime_kink_2=aime_kink_2,
-        ratio_lowest_earnings=ratio_lowest_earnings,
-    )
-    accrued_aime = jnp.interp(credited_pia, pia_table, pia_aime_grid)
-    return jnp.minimum(accrued_aime, aime_kink_2)
+    return jnp.interp(carried_pia, pia_table, pia_aime_grid)
+
+
+def next_aime_forced(aime: ContinuousState) -> ContinuousState:
+    """AIME law of the post-65 `ss=forced` regimes: AIME stays as it is.
+
+    Once claiming is forced, earnings no longer accrue to AIME and nothing is
+    capped. A forced claimant who claimed early carries the reduction in from
+    the `ss=choose` regime; one who delayed carries the delayed-retirement
+    credit, including the part above the taxable maximum.
+    """
+    return aime
 
 
 def pia_unadjusted_next_period(
@@ -408,6 +402,11 @@ def pia_unadjusted_next_period(
     return jnp.interp(accrued_aime, pia_aime_grid, pia_table)
 
 
+def pia_unadjusted_next_period_forced(pia: FloatND) -> FloatND:
+    """Next-period PIA in the `ss=forced` regimes, where AIME stays as it is."""
+    return pia
+
+
 def _accrue_aime(
     *,
     aime: ContinuousState,
@@ -420,7 +419,10 @@ def _accrue_aime(
     aime_kink_2: ScalarFloat,
     ratio_lowest_earnings: FloatND,
 ) -> FloatND:
-    """Accrue AIME from labor income (indexing, taxable cap, lowest-year drop)."""
+    """Accrue AIME from labor income (indexing, taxable cap, lowest-year drop).
+
+    The accrued AIME is capped at the taxable maximum.
+    """
     indexed_aime = jnp.where(
         age <= aime_last_age_with_indexing,
         aime * (1.0 + aggregate_wage_growth),
@@ -432,7 +434,7 @@ def _accrue_aime(
     accrual = (
         jnp.maximum(0.0, capped_labor - lowest_year_earnings) * aime_accrual_factor
     )
-    return capped_aime + accrual
+    return jnp.minimum(capped_aime + accrual, aime_kink_2)
 
 
 def _accrue_and_credit_back_pia(
@@ -521,17 +523,11 @@ def _apply_claim_adjustment(
 
 def next_aime_disabled(
     aime: ContinuousState,
+    carried_pia: FloatND,
     labor_income: FloatND,
     period: Period,
     age: Age,
     health: DiscreteState,
-    claim_ss: DiscreteAction,
-    claimed_ss: DiscreteState,
-    normal_retirement_age: ScalarInt,
-    early_ret_adjustment: FloatND,
-    benefit_withheld_fraction: FloatND,
-    earnings_test_credited_back: FloatND,
-    earnings_test_repealed_age: ScalarInt,
     pia_table: FloatND,
     pia_aime_grid: FloatND,
     aime_accrual_factor: ScalarFloat,
@@ -543,50 +539,33 @@ def next_aime_disabled(
     di_dropout_scale: FloatND,
     di_dropout_next_period_ratio: FloatND,
 ) -> ContinuousState:
-    """AIME transition for pre-65 regimes handling both disabled and non-disabled.
+    """AIME transition for pre-65 `ss=choose` regimes, disabled and non-disabled.
 
-    Non-disabled: standard AIME accrual from labor income, earnings-test
-    credit-back, and the claim-age actuarial bake (early reduction for claimants
-    below NRA — pre-65 never reaches the delayed-credit window).
+    Non-disabled: the AIME of the carried PIA (accrual, earnings-test credit and
+    claim-age adjustment; pre-65 never reaches the delayed-credit window).
     Disabled: maintain PIA continuity across ages by adjusting AIME so the DI
     dropout-year scale factor change doesn't alter the benefit. The disabled path
     reads the un-baked AIME — DI benefits are routed only when never claimed, so
     the claim adjustment never touches them.
     At Medicare transition, stores the dropout-adjusted AIME (switching to OA).
     """
-    credited_pia = _accrue_and_credit_back_pia(
+    regular = jnp.minimum(
+        jnp.interp(carried_pia, pia_table, pia_aime_grid),
+        aime_kink_2,
+    )
+    accrued_aime = _accrue_aime(
         aime=aime,
         labor_income=labor_income,
         period=period,
         age=age,
-        benefit_withheld_fraction=benefit_withheld_fraction,
-        earnings_test_credited_back=earnings_test_credited_back,
-        earnings_test_repealed_age=earnings_test_repealed_age,
-        pia_table=pia_table,
-        pia_aime_grid=pia_aime_grid,
         aime_accrual_factor=aime_accrual_factor,
         aggregate_wage_growth=aggregate_wage_growth,
         aime_last_age_with_indexing=aime_last_age_with_indexing,
         aime_kink_2=aime_kink_2,
         ratio_lowest_earnings=ratio_lowest_earnings,
     )
-
-    adjusted_pia = _apply_claim_adjustment(
-        pia=credited_pia,
-        period=period,
-        age=age,
-        claim_ss=claim_ss,
-        claimed_ss=claimed_ss,
-        normal_retirement_age=normal_retirement_age,
-        early_ret_adjustment=early_ret_adjustment,
-    )
-    regular = jnp.minimum(
-        jnp.interp(adjusted_pia, pia_table, pia_aime_grid),
-        aime_kink_2,
-    )
-
     return _select_disabled_or_regular(
-        aime=aime,
+        accrued_aime=accrued_aime,
         regular=regular,
         period=period,
         age=age,
@@ -647,8 +626,19 @@ def next_aime_disabled_plain(
         aime_kink_2,
     )
 
-    return _select_disabled_or_regular(
+    accrued_aime = _accrue_aime(
         aime=aime,
+        labor_income=labor_income,
+        period=period,
+        age=age,
+        aime_accrual_factor=aime_accrual_factor,
+        aggregate_wage_growth=aggregate_wage_growth,
+        aime_last_age_with_indexing=aime_last_age_with_indexing,
+        aime_kink_2=aime_kink_2,
+        ratio_lowest_earnings=ratio_lowest_earnings,
+    )
+    return _select_disabled_or_regular(
+        accrued_aime=accrued_aime,
         regular=regular,
         period=period,
         age=age,
@@ -661,7 +651,7 @@ def next_aime_disabled_plain(
 
 def _select_disabled_or_regular(
     *,
-    aime: ContinuousState,
+    accrued_aime: FloatND,
     regular: FloatND,
     period: Period,
     age: Age,
@@ -672,14 +662,16 @@ def _select_disabled_or_regular(
 ) -> ContinuousState:
     """Route the disabled DI-continuity AIME against the non-disabled AIME.
 
-    The disabled path reads the un-baked `aime`, scaling it so the DI dropout-year
-    factor change leaves the benefit unchanged. At the Medicare transition it
-    switches to the dropout-adjusted AIME (OA from then on).
+    The disabled path starts from the un-baked AIME after indexing and labor
+    accrual, the same accrual as for anyone else, and scales it so the DI
+    dropout-year factor change alone leaves the benefit unchanged. At the
+    Medicare transition it switches to the dropout-adjusted AIME (OA from then
+    on).
     """
     disabled_next = jnp.where(
         age + 1 < medicare_age,
-        aime * di_dropout_next_period_ratio[period],
-        aime * di_dropout_scale[period],
+        accrued_aime * di_dropout_next_period_ratio[period],
+        accrued_aime * di_dropout_scale[period],
     )
     is_disabled = health == 0
     return jnp.where(is_disabled, disabled_next, regular)

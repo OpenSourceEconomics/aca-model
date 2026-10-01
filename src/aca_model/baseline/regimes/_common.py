@@ -558,9 +558,8 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
       other broadcast function is masked with `None` so its unresolvable
       inputs (e.g. `pension_benefit`) don't surface as params in the dead
       template.
-    - constraints: the borrowing constraint is masked — `dead` has no
-      consumption action. It is broadcast under every solver, so there is
-      always exactly one mask to apply.
+    - constraints: every broadcast constraint is masked — `dead` has no
+      consumption action.
     - `pension_wealth` is masked explicitly: a carried state is rejected in
       terminal regimes before pruning could drop it.
     """
@@ -627,7 +626,7 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     functions["total_health_costs"] = health_insurance.total_costs
     functions["oop_costs"] = health_insurance.oop_with_medicaid
     functions["capital_income"] = assets_and_income.capital_income
-    # spousal_income_amounts is a lookup table param, not a DAG function
+    functions["spousal_income_amount"] = labor_market.spousal_income_amount
     functions["is_married"] = labor_market.is_married
     functions["equivalence_scale"] = preferences.equivalence_scale
     functions["utility_scale_factor"] = preferences.utility_scale_factor
@@ -692,18 +691,24 @@ def build_nbegm_functions() -> dict:
 def build_model_constraints(*, solver: SolverName) -> dict:
     """Build the model-level constraints broadcast into every regime.
 
-    `dead` masks the borrowing constraint — it has no consumption action.
-    Grid search evaluates the action-level predicate directly. An EGM-family
+    `dead` masks every constraint — it has no consumption action.
+    Grid search evaluates the action-level predicates directly: the borrowing
+    constraint and the household's own consumption floor. An EGM-family
     solve proves the equivalent post-decision lower bound from its savings
     grid, while forward simulation receives the solver's intrinsic budget
-    mask over the consumption grid.
+    mask over the consumption grid; it does not carry the own-floor bound.
     """
     borrowing_constraint = (
         assets_and_income.borrowing_constraint
         if solver == "brute_force"
         else post_decision_lower_bound(margin=ACA_LIQUID_MARGIN, lower=0.0)
     )
-    return {"borrowing_constraint": borrowing_constraint}
+    constraints = {"borrowing_constraint": borrowing_constraint}
+    if solver == "brute_force":
+        constraints["consumption_floor_constraint"] = (
+            assets_and_income.consumption_above_floor
+        )
+    return constraints
 
 
 def build_model_states(grids: Grids) -> dict:
@@ -843,6 +848,10 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
       `pension_assets_adjustment`, which reconciles the accrual-evolved
       pension with next period's AIME imputation; in simulate the adjustment
       is zero because the true wealth is carried directly.
+    - in `ss=choose` regimes, `carried_pia` is the PIA the next-period AIME
+      encodes: in solve the claim-adjusted PIA corrected so that SS plus
+      imputed pension benefits keep their adjusted total
+      (`pensions.total_to_pia`); in simulate the claim-adjusted PIA itself.
     """
     can_work = spec["canwork"] == "canwork"
 
@@ -860,10 +869,21 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
         if can_work
         else health_insurance.target_his_forcedout
     )
-    functions["pia_unadjusted_next_period"] = social_security.pia_unadjusted_next_period
+    functions["pia_unadjusted_next_period"] = (
+        social_security.pia_unadjusted_next_period_forced
+        if spec["ss"] == "forced"
+        else social_security.pia_unadjusted_next_period
+    )
+    functions["full_benefit_next_period"] = pensions.full_benefit_next_period
     functions["imputed_pension_wealth_next_period"] = (
         pensions.imputed_pension_wealth_next_period
     )
+    if spec["ss"] == "choose":
+        functions["pia_adjusted_next_period"] = social_security.pia_adjusted_next_period
+        functions["carried_pia"] = Phased(
+            solve=pensions.total_to_pia,
+            simulate=social_security.carried_pia_simulate,
+        )
     functions["pension_assets_adjustment"] = Phased(
         solve=pensions.assets_adjustment,
         simulate=_zero_pension_assets_adjustment,
@@ -995,20 +1015,19 @@ def _select_aime_law(spec: RegimeSpec) -> Callable[..., FloatND]:
 
     The claim-age actuarial bake applies only where the agent chooses when to
     claim (`ss=choose`), so only those regimes carry the `claim_ss`/`claimed_ss`
-    inputs. `ss=inelig` (cannot claim) and `ss=forced` (claims by rule) use the
-    plain-accrual variant: no claim adjustment, no claim inputs. A forced
-    claimant who claimed early carries the reduction in from the choose regime;
-    plain accrual preserves it.
+    inputs. `ss=inelig` (cannot claim) uses plain accrual with no claim inputs;
+    in `ss=forced` (claims by rule) AIME stays as carried in, with any early
+    reduction or delayed credit from the choose regime.
 
     - post-65 (`oamc`), `choose` → `next_aime` (claim-adjusted)
-    - post-65 (`oamc`), `forced` → `next_aime_plain`
+    - post-65 (`oamc`), `forced` → `next_aime_forced` (AIME frozen)
     - pre-65 (`nomc`/`dimc`), `choose` → `next_aime_disabled` (claim-adjusted)
     - pre-65 (`nomc`/`dimc`), `inelig` → `next_aime_disabled_plain`
     """
     is_choose = spec["ss"] == "choose"
     if spec["mc"] == "oamc":
         return (
-            social_security.next_aime if is_choose else social_security.next_aime_plain
+            social_security.next_aime if is_choose else social_security.next_aime_forced
         )
     return (
         social_security.next_aime_disabled

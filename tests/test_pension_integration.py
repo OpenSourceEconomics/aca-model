@@ -80,21 +80,39 @@ def test_imputation_chain_full_benefit_to_wealth() -> None:
     assert jnp.isclose(result, 500.0, atol=ATOL)
 
 
-def test_total_to_pia_inverts_imputed_benefit_via_dag() -> None:
-    """`pbmax → total_to_pia` round-trip via dags recovers original PIA."""
+def test_total_to_pia_keeps_adjusted_total_via_dag() -> None:
+    """The carried PIA keeps SS plus after-tax imputed pension at its adjusted total.
+
+    Accrued PIA 8,000 is adjusted to 7,000; the carried PIA `p` satisfies
+    `p + (1 - τ) pbmax(p) = 7,000 + (1 - τ) pbmax(8,000)`.
+    """
+    next_period_kwargs = {f"{k}_next_period": v for k, v in PBMAX_KWARGS.items()}
     functions = {
-        "pension_benefit": pensions.full_benefit,
+        "full_benefit_next_period": pensions.full_benefit_next_period,
         "total_to_pia": pensions.total_to_pia,
     }
     combined = concatenate_functions(functions, targets="total_to_pia")
-    recovered = combined(
-        pia=jnp.array(8000.0),
+    mtr = jnp.array(0.2)
+    carried = combined(
+        pia_adjusted_next_period=jnp.array(7000.0),
+        pia_unadjusted_next_period=jnp.array(8000.0),
+        target_his=jnp.int32(0),
         period=PERIOD,
-        his=jnp.int32(0),
-        marginal_tax_rate=jnp.array(0.2),
-        **PBMAX_KWARGS,
+        marginal_tax_rate=mtr,
+        **next_period_kwargs,
     )
-    assert jnp.isclose(recovered, 8000.0, atol=ATOL)
+
+    def pbmax(pia: jnp.ndarray) -> jnp.ndarray:
+        return pensions.full_benefit_next_period(
+            pia_unadjusted_next_period=pia,
+            target_his=jnp.int32(0),
+            period=PERIOD,
+            **next_period_kwargs,
+        )
+
+    total_carried = carried + (1.0 - mtr) * pbmax(carried)
+    target = 7000.0 + (1.0 - mtr) * pbmax(jnp.array(8000.0))
+    assert jnp.isclose(total_carried, target, atol=ATOL)
 
 
 def test_next_assets_includes_pension_adjustment() -> None:
@@ -126,7 +144,11 @@ def test_zero_adjustment_when_his_unchanged() -> None:
         period=PERIOD,
     )
     accrual_val = pensions.accrual(
-        labor_income=labor_income, period=PERIOD, his=his, **ACCRUAL_KWARGS
+        labor_income=labor_income,
+        age=jnp.int32(60),
+        period=PERIOD,
+        his=his,
+        **ACCRUAL_KWARGS,
     )
 
     next_exact = pensions.wealth_next_before_adjustment(
@@ -173,7 +195,11 @@ def test_rebalancing_preserves_total_wealth_across_his_change() -> None:
         period=PERIOD,
     )
     accrual_val = pensions.accrual(
-        labor_income=labor_income, period=PERIOD, his=old_his, **ACCRUAL_KWARGS
+        labor_income=labor_income,
+        age=jnp.int32(60),
+        period=PERIOD,
+        his=old_his,
+        **ACCRUAL_KWARGS,
     )
 
     next_exact = pensions.wealth_next_before_adjustment(
@@ -224,7 +250,11 @@ def _solve_phase_adjustment_across_his_change() -> jnp.ndarray:
         period=PERIOD,
     )
     accrual_val = pensions.accrual(
-        labor_income=labor_income, period=PERIOD, his=old_his, **ACCRUAL_KWARGS
+        labor_income=labor_income,
+        age=jnp.int32(60),
+        period=PERIOD,
+        his=old_his,
+        **ACCRUAL_KWARGS,
     )
     next_exact = pensions.wealth_next_before_adjustment(
         pension_wealth=pw_old,

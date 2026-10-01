@@ -131,21 +131,24 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   *transition* still uses its own build-time `gets_medicare` constant (`mc != nomc`) —
   distinct from this.
 - **SS claim-age adjustment baked into AIME**: at the voluntary claim the
-  early-retirement reduction / delayed-retirement credit is applied to PIA and converted
-  back to AIME via `find_aime` (the exact inverse of `pia`), so the permanent adjustment
-  rides in the carried `aime` with no extra state and persists into the forced regimes.
+  early-retirement reduction / delayed-retirement credit is applied to PIA
+  (`pia_adjusted_next_period`) and converted back to AIME via the exact inverse of
+  `pia`, so the permanent adjustment rides in the carried `aime` with no extra state.
   The `pia_aime_grid` / `pia_table` carry a fifth bend point above the taxable max
   (`max_delayed_factor * max_pia`, round-tripped to AIME), so a top earner who delays
   keeps the delayed-retirement credit in the carried AIME instead of clamping at the
-  taxable max — matching the reference (struct-ret's
-  `convert_pia_to_aime(..., impose_upper_bound_on_aime=False)`). Post-claim labor
-  accrual runs on this adjusted AIME; `_accrue_aime` still caps the labor-earnings base
-  at the taxable max, and the solve-phase `pension_assets_adjustment` corrects the
-  pension imputation gap, with pension imputation reading an *unadjusted* PIA
-  (`pia_unadjusted_next_period`) so the claim-age credit never feeds the pension node —
-  faithful to the reference. The DI path (`ssdi_pia`) reads the un-baked AIME.
-  `inelig`/`forced` regimes use a plain `next_aime` with no claim inputs
-  (`_select_aime_law` routes on `spec["ss"]`).
+  taxable max. Which PIA the next AIME encodes is the phased `carried_pia` node:
+  - solve: `pensions.total_to_pia`, the PIA `PIA*` with
+    `PIA* + (1 − τ) pbmax_{t+1}(PIA*) = PIA_adj + (1 − τ) pbmax_{t+1}(PIA_unadj)`,
+    because solve re-imputes pension wealth from next period's PIA (French & Jones 2011,
+    app. D; struct-ret `convert_total_ben_to_pia`);
+  - simulate: the adjusted PIA itself, since simulate carries true pension wealth.
+    Pension imputation reads the unadjusted PIA (`pia_unadjusted_next_period`), and the
+    solve-phase `pension_assets_adjustment` corrects the accrual-evolved pension against
+    it. The earnings-test credit covers only benefits the earnings test withheld. In the
+    `forced` regimes (70+) AIME is frozen (`next_aime_forced`); `inelig` regimes use
+    plain accrual with no claim inputs (`_select_aime_law` routes on `spec["ss"]`). The
+    DI path reads the un-baked AIME after indexing and labor accrual.
 - **ACA subsidies/mandate respect Medicaid**: `premium_subsidy`, `cost_sharing`, and
   `mandate_penalty` take `is_medicaid_eligible` and return the neutral value when the
   household is Medicaid-eligible (Medicaid is minimum-essential coverage).
