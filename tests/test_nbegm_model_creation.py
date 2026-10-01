@@ -17,7 +17,7 @@ from collections.abc import Mapping
 from typing import cast
 
 import pytest
-from helpers.model import _DERIVED_CATEGORICALS
+from helpers.model import _DERIVED_CATEGORICALS, aca_fixed_params
 from lcm import DiscreteGrid, Model, Regime
 from lcm.consumption_savings_regime import ConsumptionSavingsRegime, LiquidMargin
 from lcm.exceptions import RegimeInitializationError
@@ -300,7 +300,7 @@ def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     grid_config = _BRIDGED_GRID_CONFIG
     model = create_aca_model(
         policy=policy,
-        fixed_params=_FIXED_PARAMS,
+        fixed_params=aca_fixed_params(fixed_params=_FIXED_PARAMS, policy=policy),
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,
         grid_config=grid_config,
@@ -333,7 +333,7 @@ def test_nbegm_aca_variants_leave_no_free_buy_private_params(
     grid_config = _BRIDGED_GRID_CONFIG
     model = create_aca_model(
         policy=policy,
-        fixed_params=_FIXED_PARAMS,
+        fixed_params=aca_fixed_params(fixed_params=_FIXED_PARAMS, policy=policy),
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,
         grid_config=grid_config,

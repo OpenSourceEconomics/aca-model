@@ -1,7 +1,8 @@
 """Regime transitions and builder for retiree HIS regimes.
 
 Retiree regimes: agents with employer-sponsored retiree health insurance.
-Medicaid-eligible agents are overridden to nongroup.
+Categorically (SSI-) Medicaid-eligible agents are overridden to nongroup; the
+ACA Medicaid expansion leaves employer coverage untouched.
 """
 
 from collections.abc import Callable
@@ -49,7 +50,8 @@ def _make_transition_canwork(
     """Create transition for canwork retiree regimes.
 
     Before 65, a household that does not work and is disabled next period
-    holds disability Medicare. Medicaid-eligible agents are overridden to
+    holds disability Medicare. Categorically (SSI-) Medicaid-eligible
+    agents are overridden to
     nongroup targets.
     """
 
@@ -58,7 +60,7 @@ def _make_transition_canwork(
         period: Period,
         health: DiscreteState,
         labor_supply: DiscreteAction,
-        is_medicaid_eligible: BoolND,
+        is_ssi_eligible: BoolND,
         survival_probs: FloatND,
         prob_disabled_next: FloatND,
     ) -> FloatND:
@@ -67,7 +69,7 @@ def _make_transition_canwork(
         def target(mc_next: bool) -> IntND:
             own_target = select_target_for_age(next_age, mc_next, own)
             ng_target = select_target_for_age(next_age, mc_next, ng)
-            return jnp.where(is_medicaid_eligible, ng_target, own_target)
+            return jnp.where(is_ssi_eligible, ng_target, own_target)
 
         return build_regime_probs_with_di_medicare(
             target_dimc=target(True),
@@ -75,7 +77,7 @@ def _make_transition_canwork(
             prob_dimc=prob_di_medicare_next(
                 labor_supply, prob_disabled_next[period, health]
             ),
-            survival=survival_probs[period],
+            survival=survival_probs[period, health],
         )
 
     return transition
@@ -88,20 +90,22 @@ def _make_transition_forcedout(
 ) -> Callable[..., FloatND]:
     """Create transition for forcedout retiree regimes.
 
-    No labor supply action. Medicaid-eligible agents are overridden to nongroup.
+    No labor supply action. Categorically (SSI-) Medicaid-eligible agents are
+    overridden to nongroup.
     """
 
     def transition(
         age: Age,
         period: Period,
-        is_medicaid_eligible: BoolND,
+        health: DiscreteState,
+        is_ssi_eligible: BoolND,
         survival_probs: FloatND,
     ) -> FloatND:
-        sp = survival_probs[period]
+        sp = survival_probs[period, health]
         next_age = age + 1
         target = select_target_for_age(next_age, gets_medicare, own)
         ng_ssi = select_target_for_age(next_age, gets_medicare, ng)
-        target = jnp.where(is_medicaid_eligible, ng_ssi, target)
+        target = jnp.where(is_ssi_eligible, ng_ssi, target)
         return build_regime_probs(target, sp)
 
     return transition

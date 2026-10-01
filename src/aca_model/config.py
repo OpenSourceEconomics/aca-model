@@ -13,10 +13,14 @@ BLD = ROOT / "bld"
 class ModelConfig:
     start_age: int = 51
     end_age: int = 96
+    """First age at which everybody is dead; the model's last period."""
     ss_early_age: int = 62
     ss_forced_age: int = 70
     work_forced_out_age: int = 72
     medicare_age: int = 65
+    # Pension benefits must be drawn from this age on; pension wealth no longer
+    # accrues from earnings.
+    pension_must_receive_age: int = 71
 
 
 @dataclass(frozen=True)

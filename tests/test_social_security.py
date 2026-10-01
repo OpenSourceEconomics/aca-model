@@ -9,6 +9,7 @@ import pandas as pd
 from helpers.social_security import (
     compute_di_dropout_scale,
     compute_pia_table,
+    next_aime_from_state,
 )
 from lcm.typing import ScalarInt
 
@@ -154,7 +155,7 @@ def test_pia_to_aime_above_kink_1() -> None:
 
 
 def test_next_aime_indexing_high_income() -> None:
-    result = social_security.next_aime(
+    result = next_aime_from_state(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
         normal_retirement_age=NORMAL_RETIREMENT_AGE,
@@ -179,7 +180,7 @@ def test_next_aime_indexing_high_income() -> None:
 
 
 def test_next_aime_indexing_low_income() -> None:
-    result = social_security.next_aime(
+    result = next_aime_from_state(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
         normal_retirement_age=NORMAL_RETIREMENT_AGE,
@@ -203,7 +204,7 @@ def test_next_aime_indexing_low_income() -> None:
 
 
 def test_next_aime_no_indexing_high_income() -> None:
-    result = social_security.next_aime(
+    result = next_aime_from_state(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
         normal_retirement_age=NORMAL_RETIREMENT_AGE,
@@ -228,7 +229,7 @@ def test_next_aime_no_indexing_high_income() -> None:
 
 
 def test_next_aime_no_indexing_low_income() -> None:
-    result = social_security.next_aime(
+    result = next_aime_from_state(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
         normal_retirement_age=NORMAL_RETIREMENT_AGE,
@@ -251,15 +252,9 @@ def test_next_aime_no_indexing_low_income() -> None:
     assert jnp.isclose(result, 1000, atol=ATOL)
 
 
-def test_next_aime_high_aime_high_income_accrues_above_taxable_max() -> None:
-    """Within-period labor accrual above the taxable-max-indexed base is preserved.
-
-    `_accrue_aime` caps the *indexed* base at the taxable max; the small extra
-    accrual from current labor earnings then rides on top. The carried AIME is
-    the round-trip of that accrued PIA — not re-clamped at the taxable max — so
-    it lands just above `aime_kink_2`.
-    """
-    result = social_security.next_aime(
+def test_next_aime_high_aime_high_income_is_capped_at_taxable_max() -> None:
+    """Labor accrual cannot lift an AIME at the taxable max above it."""
+    result = next_aime_from_state(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
         normal_retirement_age=NORMAL_RETIREMENT_AGE,
@@ -279,14 +274,11 @@ def test_next_aime_high_aime_high_income_accrues_above_taxable_max() -> None:
         aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
-    capped_base = AIME_KINK_2
-    lowest_year = _RATIO_NP[62] * capped_base
-    expected = capped_base + (20000.0 - lowest_year) * float(AIME_ACCRUAL_FACTOR)
-    assert jnp.isclose(result, expected, atol=ATOL)
+    assert jnp.isclose(result, AIME_KINK_2, atol=ATOL)
 
 
 def test_next_aime_cap_high_aime_low_income() -> None:
-    result = social_security.next_aime(
+    result = next_aime_from_state(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
         normal_retirement_age=NORMAL_RETIREMENT_AGE,
@@ -503,7 +495,7 @@ def _next_aime_claiming(
     labor_income: float = 0.0,
 ) -> jnp.ndarray:
     """Advance AIME one period under a given claim state, no labor accrual."""
-    return social_security.next_aime(
+    return next_aime_from_state(
         aime=aime,
         labor_income=jnp.array(labor_income),
         period=jnp.int32(age),
@@ -580,7 +572,7 @@ def test_delayed_claim_at_taxable_max_carries_credit_above_max() -> None:
     taxable max instead of clamping there, so the credit is carried forward.
     """
     aime_at_max = AIME_KINK_2_SCALAR
-    result = social_security.next_aime(
+    result = next_aime_from_state(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
         normal_retirement_age=NORMAL_RETIREMENT_AGE,

@@ -18,6 +18,7 @@ from lcm.typing import (
     DiscreteAction,
     DiscreteState,
     FloatND,
+    IntND,
     ScalarBool,
     ScalarFloat,
 )
@@ -33,6 +34,23 @@ class PolicyVariant(Enum):
     ACA_NO_MEDICAID_EXPANSION = auto()
     ACA_NO_MEDICAID_EXPANSION_NO_MANDATE = auto()
     ACA_ONLY_MEDICAID_EXPANSION = auto()
+
+
+def community_rated_premium(
+    is_married: IntND,
+    buy_private: DiscreteAction,
+    aca_premium_single: ScalarFloat,
+    aca_premium_married_extra: ScalarFloat,
+) -> FloatND:
+    """Compute the ACA private non-group premium before premium credits.
+
+    With community rating the premium varies only by household size, not
+    with expected medical costs: `aca_premium_single` for a single
+    household plus `aca_premium_married_extra` for a married one. Return 0
+    when not buying (`buy_private=no`).
+    """
+    premium = aca_premium_single + aca_premium_married_extra * is_married
+    return jnp.where(buy_private == BuyPrivate.yes, premium, 0.0)
 
 
 def mandate_penalty(
@@ -116,7 +134,6 @@ def is_medicaid_eligible(
     aca_magi: FloatND,
     spousal_income: DiscreteState,
     crossed_oamc_threshold: ScalarBool,
-    is_disabled: BoolND,
     medicaid_schedule: MappingLeaf,
 ) -> BoolND:
     """Determine Medicaid eligibility on two tracks under ACA expansion.
@@ -125,22 +142,18 @@ def is_medicaid_eligible(
 
     - **Categorical** (SSI-linked): `is_ssi_eligible`, which applies the
       aged-or-disabled gate plus the SSI asset and income tests.
-    - **Expansion** (ACA): the under-65, non-disabled population with MAGI
-      below the expansion threshold (138% FPL encoded in
-      `medicaid_schedule["income_threshold"]`). Expansion never reaches the
-      aged or the disabled; they stay on the categorical track with its
-      asset test.
+    - **Expansion** (ACA): every under-65 household with MAGI below the
+      expansion threshold (138% FPL encoded in
+      `medicaid_schedule["income_threshold"]`), regardless of assets or
+      health, so the disabled under 65 qualify without the asset test. The
+      aged stay on the categorical track with its asset test.
 
     Expansion uses full-count MAGI, not the half-counted SSI
     `countable_income`.
     """
     sched = cast("Mapping[str, Any]", medicaid_schedule.data)
     threshold = sched["income_threshold"]
-    expansion = (
-        (~crossed_oamc_threshold)
-        & (~is_disabled)
-        & (aca_magi < threshold[spousal_income])
-    )
+    expansion = (~crossed_oamc_threshold) & (aca_magi < threshold[spousal_income])
     return is_ssi_eligible | expansion
 
 

@@ -56,7 +56,7 @@ def _make_transition_canwork(
             prob_dimc=prob_di_medicare_next(
                 labor_supply, prob_disabled_next[period, health]
             ),
-            survival=survival_probs[period],
+            survival=survival_probs[period, health],
         )
 
     return transition
@@ -75,10 +75,11 @@ def _make_transition_forcedout(
     def transition(
         age: Age,
         period: Period,
+        health: DiscreteState,
         survival_probs: FloatND,
     ) -> FloatND:
         target = select_target_for_age(age + 1, gets_medicare, own)
-        return build_regime_probs(target, survival_probs[period])
+        return build_regime_probs(target, survival_probs[period, health])
 
     return transition
 
@@ -94,14 +95,17 @@ def _build_functions(spec: RegimeSpec) -> dict:
     # not DAG functions. pylcm resolves them from the params dict.
 
     if _has_buy_private(spec):
-        functions["hic_premium"] = health_insurance.premium
+        functions["plan_premium"] = health_insurance.premium
         functions["private_premium_intercept"] = (
             health_insurance.private_premium_intercept
         )
     elif can_work:
-        functions["hic_premium"] = health_insurance.premium_insured
+        functions["plan_premium"] = health_insurance.premium_insured
     else:
-        functions["hic_premium"] = health_insurance.premium_retired
+        functions["plan_premium"] = health_insurance.premium_retired
+    # Medicaid-eligible households pay no premium: Medicaid replaces private
+    # cover and pays the Medicare premium.
+    functions["hic_premium"] = health_insurance.medicaid_adjusted_premium
 
     functions.update(build_pension_functions(spec))
 

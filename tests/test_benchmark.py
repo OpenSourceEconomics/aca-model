@@ -6,7 +6,6 @@ from lcm import (
     DiscreteGrid,
     GridBreakpoint,
     IrregSpacedGrid,
-    LinSpacedGrid,
     PiecewiseLinSpacedGrid,
     RouwenhorstAR1Process,
 )
@@ -32,12 +31,12 @@ def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
     assert aime.n_points == 38
     regime = model.user_regimes["retiree_nomc_inelig_canwork"]
     assert len(model.user_regimes) == 19
-    assert model.n_periods == 45
+    assert model.n_periods == 46
     assets = regime.states["assets"]
     wage_res = regime.states["log_ft_wage_res"]
     pref_type = regime.states["pref_type"]
     consumption = regime.actions["consumption_dollars"]
-    assert isinstance(assets, LinSpacedGrid)
+    assert isinstance(assets, IrregSpacedGrid)
     assert isinstance(wage_res, RouwenhorstAR1Process)
     assert isinstance(pref_type, DiscreteGrid)
     assert isinstance(consumption, IrregSpacedGrid)

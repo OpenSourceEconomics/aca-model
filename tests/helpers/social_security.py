@@ -4,9 +4,13 @@ Inlined from the aca-data pipeline so the aca-model test suite has no
 runtime dependency on the data-prep package.
 """
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+
+from aca_model.environment import social_security
 
 
 def compute_pia_table(
@@ -71,3 +75,17 @@ def compute_di_dropout_scale(
         result[period] = product * elapsed / (elapsed - years_to_drop)
 
     return result
+
+
+def next_aime_from_state(**kwargs: Any) -> Any:
+    """Advance AIME one period through `pia_adjusted_next_period` and `next_aime`.
+
+    Composes the two DAG steps the way simulate wires them (the carried PIA is
+    the claim-adjusted PIA).
+    """
+    carried_pia = social_security.pia_adjusted_next_period(**kwargs)
+    return social_security.next_aime(
+        carried_pia=carried_pia,
+        pia_table=kwargs["pia_table"],
+        pia_aime_grid=kwargs["pia_aime_grid"],
+    )

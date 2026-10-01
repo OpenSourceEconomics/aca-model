@@ -29,7 +29,7 @@ from aca_model.baseline.regimes._tied import _make_transition_canwork as tied_ca
 from aca_model.config import MODEL_CONFIG
 
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
-SURVIVAL = jnp.full(N_PERIODS, 0.99)
+SURVIVAL = jnp.full((N_PERIODS, 3), 0.99)
 # Rows: current health (disabled, bad, good); columns: next health.
 _HEALTH_ROWS = jnp.array([[0.98, 0.01, 0.01], [0.05, 0.75, 0.20], [0.002, 0.058, 0.94]])
 HEALTH_TRANS = jnp.broadcast_to(_HEALTH_ROWS, (N_PERIODS, 3, 3))
@@ -116,7 +116,7 @@ def test_retiree_transition_newly_disabled_non_worker_keeps_retiree_cover() -> N
         period=jnp.int32(4),
         health=jnp.int32(HealthWithDisability.good),
         labor_supply=jnp.array(LaborSupply.do_not_work),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
         prob_disabled_next=PROB_DISABLED,
     )
@@ -133,7 +133,7 @@ def test_tied_transition_newly_disabled_non_worker_moves_to_nongroup_medicare() 
         period=jnp.int32(4),
         health=jnp.int32(HealthWithDisability.bad),
         labor_supply=jnp.array(LaborSupply.do_not_work),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
         prob_disabled_next=PROB_DISABLED,
     )

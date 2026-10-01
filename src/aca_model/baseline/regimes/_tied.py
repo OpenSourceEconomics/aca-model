@@ -2,7 +2,8 @@
 
 Tied regimes: agents with employer-tied health insurance.
 Tied agents who stop working become nongroup.
-Medicaid-eligible agents are also overridden to nongroup.
+Categorically (SSI-) Medicaid-eligible agents are also overridden to nongroup;
+the ACA Medicaid expansion leaves employer coverage untouched.
 """
 
 from collections.abc import Callable
@@ -51,7 +52,8 @@ def _make_transition_canwork(
 
     Tied agents who stop working become nongroup (lose employer coverage);
     before 65, those disabled next period hold disability Medicare there.
-    Medicaid-eligible agents are also overridden to nongroup targets.
+    Categorically (SSI-) Medicaid-eligible agents are also overridden to
+    nongroup targets.
     """
 
     def transition(
@@ -59,12 +61,12 @@ def _make_transition_canwork(
         period: Period,
         health: DiscreteState,
         labor_supply: DiscreteAction,
-        is_medicaid_eligible: BoolND,
+        is_ssi_eligible: BoolND,
         survival_probs: FloatND,
         prob_disabled_next: FloatND,
     ) -> FloatND:
         next_age = age + 1
-        to_nongroup = (labor_supply == LaborSupply.do_not_work) | is_medicaid_eligible
+        to_nongroup = (labor_supply == LaborSupply.do_not_work) | is_ssi_eligible
 
         def target(mc_next: bool) -> IntND:
             own_target = select_target_for_age(next_age, mc_next, own)
@@ -77,7 +79,7 @@ def _make_transition_canwork(
             prob_dimc=prob_di_medicare_next(
                 labor_supply, prob_disabled_next[period, health]
             ),
-            survival=survival_probs[period],
+            survival=survival_probs[period, health],
         )
 
     return transition

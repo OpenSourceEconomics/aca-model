@@ -53,13 +53,13 @@ def build_regime(name: str):
 def test_model_creates_successfully() -> None:
     model = make_baseline_model()
     assert len(model.user_regimes) == 19
-    assert model.n_periods == 45
+    assert model.n_periods == 46
 
 
 def test_model_age_range() -> None:
     model = make_baseline_model()
     assert model.ages.values[0] == 51.0
-    assert model.ages.values[-1] == 95.0
+    assert model.ages.values[-1] == 96.0
 
 
 def test_dead_regime_is_terminal() -> None:
@@ -203,13 +203,17 @@ def test_inelig_and_forced_regimes_aime_law_takes_no_claim_inputs(name: str) -> 
     [n for n, s in REGIME_SPECS.items() if s["ss"] == "choose"],
 )
 def test_choose_regimes_aime_law_takes_claim_inputs(name: str) -> None:
-    """`ss=choose` regimes bake the claim-age adjustment, so their AIME law
-    reads the `claim_ss` action and `claimed_ss` state."""
+    """`ss=choose` regimes bake the claim-age adjustment into the carried PIA.
+
+    The AIME law reads `carried_pia`, whose claim-adjusted input
+    `pia_adjusted_next_period` reads the `claim_ss` action and `claimed_ss` state.
+    """
     regime = build_regime(name)
-    aime_law = regime.state_transitions["aime"]
-    params = set(inspect.signature(aime_law).parameters)
-    assert "claim_ss" in params
-    assert "claimed_ss" in params
+    aime_params = set(inspect.signature(regime.state_transitions["aime"]).parameters)
+    adjusted = regime.functions["pia_adjusted_next_period"]
+    adjusted_params = set(inspect.signature(adjusted).parameters)
+    assert "carried_pia" in aime_params
+    assert {"claim_ss", "claimed_ss"} <= adjusted_params
 
 
 def test_regime_specs_keys_match_regime_id() -> None:
@@ -283,7 +287,7 @@ def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
 def test_aca_model_creates_successfully() -> None:
     model = make_aca_model(policy=PolicyVariant.ACA)
     assert len(model.user_regimes) == 19
-    assert model.n_periods == 45
+    assert model.n_periods == 46
 
 
 def test_aca_nongroup_inelig_has_real_functions() -> None:
