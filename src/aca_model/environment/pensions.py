@@ -188,11 +188,18 @@ def wealth_next_before_adjustment(
 
     next = ((1 + r) * wealth + accrual - benefit) / survival_prob
     The (1 + r) factor compounds pension wealth at the market return rate.
-    The division by survival prob accounts for the annuity pricing.
+    The division by survival prob accounts for the annuity pricing. At an age
+    where nobody survives, the wealth is left undivided.
     """
-    return (
+    survival_prob = unconditional_survival_prob[period]
+    compounded = (
         (1.0 + rate_of_return) * pension_wealth + pension_accrual - pension_benefit
-    ) / unconditional_survival_prob[period]
+    )
+    return jnp.where(
+        survival_prob > 0.0,
+        compounded / jnp.where(survival_prob > 0.0, survival_prob, 1.0),
+        compounded,
+    )
 
 
 def assets_adjustment(
