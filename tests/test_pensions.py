@@ -188,6 +188,20 @@ def test_pension_wealth_next_with_benefit() -> None:
     assert jnp.isclose(result, expected, atol=ATOL)
 
 
+def test_pension_wealth_next_is_undivided_where_nobody_survives() -> None:
+    """At an age with zero survival probability, next pension wealth is the
+    compounded wealth net of accrual and benefit, not divided by survival."""
+    result = pensions.wealth_next_before_adjustment(
+        pension_wealth=jnp.array(3000.0),
+        pension_benefit=jnp.array(2000.0),
+        pension_accrual=jnp.array(500.0),
+        rate_of_return=jnp.asarray(0.03),
+        unconditional_survival_prob=jnp.array([0.99, 0.0]),
+        period=jnp.int32(1),
+    )
+    assert jnp.isclose(result, 1.03 * 3000.0 + 500.0 - 2000.0, atol=ATOL)
+
+
 def test_convert_total_ben_to_pia_below_kink_0() -> None:
     """Round-trip: PIA below first kink recovers original PIA."""
     pia_input = jnp.array(500.0)
