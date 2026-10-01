@@ -197,12 +197,13 @@ def test_convert_total_ben_to_pia_below_kink_0() -> None:
         pia=pia_input, period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     recovered = pensions.total_to_pia(
-        pension_benefit=pbmax,
-        pia=pia_input,
+        pia_adjusted_next_period=pia_input,
+        pia_unadjusted_next_period=pia_input + 1.0,
+        full_benefit_next_period=pbmax,
+        target_his=jnp.int32(0),
         period=jnp.int32(29),
-        his=jnp.int32(0),
         marginal_tax_rate=mtr,
-        **_PBMAX_KWARGS,
+        **{f"{k}_next_period": v for k, v in _PBMAX_KWARGS.items()},
     )
     assert jnp.isclose(recovered, pia_input, atol=ATOL)
 
@@ -216,12 +217,13 @@ def test_convert_total_ben_to_pia_between_kinks() -> None:
         pia=pia_input, period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     recovered = pensions.total_to_pia(
-        pension_benefit=pbmax,
-        pia=pia_input,
+        pia_adjusted_next_period=pia_input,
+        pia_unadjusted_next_period=pia_input + 1.0,
+        full_benefit_next_period=pbmax,
+        target_his=jnp.int32(0),
         period=jnp.int32(29),
-        his=jnp.int32(0),
         marginal_tax_rate=mtr,
-        **_PBMAX_KWARGS,
+        **{f"{k}_next_period": v for k, v in _PBMAX_KWARGS.items()},
     )
     assert jnp.isclose(recovered, pia_input, atol=ATOL)
 
@@ -235,12 +237,13 @@ def test_convert_total_ben_to_pia_above_kink_1() -> None:
         pia=pia_input, period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     recovered = pensions.total_to_pia(
-        pension_benefit=pbmax,
-        pia=pia_input,
+        pia_adjusted_next_period=pia_input,
+        pia_unadjusted_next_period=pia_input + 1.0,
+        full_benefit_next_period=pbmax,
+        target_his=jnp.int32(0),
         period=jnp.int32(29),
-        his=jnp.int32(0),
         marginal_tax_rate=mtr,
-        **_PBMAX_KWARGS,
+        **{f"{k}_next_period": v for k, v in _PBMAX_KWARGS.items()},
     )
     assert jnp.isclose(recovered, pia_input, atol=ATOL)
 
@@ -254,12 +257,13 @@ def test_convert_total_ben_to_pia_zero_mtr() -> None:
         pia=pia_input, period=jnp.int32(29), his=jnp.int32(0), **_PBMAX_KWARGS
     )
     recovered = pensions.total_to_pia(
-        pension_benefit=pbmax,
-        pia=pia_input,
+        pia_adjusted_next_period=pia_input,
+        pia_unadjusted_next_period=pia_input + 1.0,
+        full_benefit_next_period=pbmax,
+        target_his=jnp.int32(0),
         period=jnp.int32(29),
-        his=jnp.int32(0),
         marginal_tax_rate=mtr,
-        **_PBMAX_KWARGS,
+        **{f"{k}_next_period": v for k, v in _PBMAX_KWARGS.items()},
     )
     assert jnp.isclose(recovered, pia_input, atol=ATOL)
 
@@ -272,7 +276,7 @@ def test_imputed_pension_wealth_uses_unadjusted_pia() -> None:
     PIA yields the unreduced imputed wealth, independent of any claim-age
     reduction baked into the carried AIME.
     """
-    result = pensions.imputed_pension_wealth_next_period(
+    full_benefit_next = pensions.full_benefit_next_period(
         pia_unadjusted_next_period=jnp.array(500.0),
         target_his=jnp.int32(0),
         period=jnp.int32(28),
@@ -282,6 +286,10 @@ def test_imputed_pension_wealth_uses_unadjusted_pia() -> None:
         imp_pia_kink_1_coeff_next_period=jnp.zeros((30, 1)),
         imp_kink_0_next_period=jnp.full(30, 99999.0),
         imp_kink_1_next_period=jnp.full(30, 99999.0),
+    )
+    result = pensions.imputed_pension_wealth_next_period(
+        full_benefit_next_period=full_benefit_next,
+        period=jnp.int32(28),
         epdv_constant_pension_next_period=EPDV,
     )
     # pbmax = max(0, -50 + 500·0.2) = 50, pw = 50 · Γ(=10) = 500.

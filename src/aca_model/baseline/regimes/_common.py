@@ -837,6 +837,10 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
       `pension_assets_adjustment`, which reconciles the accrual-evolved
       pension with next period's AIME imputation; in simulate the adjustment
       is zero because the true wealth is carried directly.
+    - in `ss=choose` regimes, `carried_pia` is the PIA the next-period AIME
+      encodes: in solve the claim-adjusted PIA corrected so that SS plus
+      imputed pension benefits keep their adjusted total
+      (`pensions.total_to_pia`); in simulate the claim-adjusted PIA itself.
     """
     can_work = spec["canwork"] == "canwork"
 
@@ -859,9 +863,16 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
         if spec["ss"] == "forced"
         else social_security.pia_unadjusted_next_period
     )
+    functions["full_benefit_next_period"] = pensions.full_benefit_next_period
     functions["imputed_pension_wealth_next_period"] = (
         pensions.imputed_pension_wealth_next_period
     )
+    if spec["ss"] == "choose":
+        functions["pia_adjusted_next_period"] = social_security.pia_adjusted_next_period
+        functions["carried_pia"] = Phased(
+            solve=pensions.total_to_pia,
+            simulate=social_security.carried_pia_simulate,
+        )
     functions["pension_assets_adjustment"] = Phased(
         solve=pensions.assets_adjustment,
         simulate=_zero_pension_assets_adjustment,

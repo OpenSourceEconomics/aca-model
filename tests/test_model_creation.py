@@ -203,13 +203,17 @@ def test_inelig_and_forced_regimes_aime_law_takes_no_claim_inputs(name: str) -> 
     [n for n, s in REGIME_SPECS.items() if s["ss"] == "choose"],
 )
 def test_choose_regimes_aime_law_takes_claim_inputs(name: str) -> None:
-    """`ss=choose` regimes bake the claim-age adjustment, so their AIME law
-    reads the `claim_ss` action and `claimed_ss` state."""
+    """`ss=choose` regimes bake the claim-age adjustment into the carried PIA.
+
+    The AIME law reads `carried_pia`, whose claim-adjusted input
+    `pia_adjusted_next_period` reads the `claim_ss` action and `claimed_ss` state.
+    """
     regime = build_regime(name)
-    aime_law = regime.state_transitions["aime"]
-    params = set(inspect.signature(aime_law).parameters)
-    assert "claim_ss" in params
-    assert "claimed_ss" in params
+    aime_params = set(inspect.signature(regime.state_transitions["aime"]).parameters)
+    adjusted = regime.functions["pia_adjusted_next_period"]
+    adjusted_params = set(inspect.signature(adjusted).parameters)
+    assert "carried_pia" in aime_params
+    assert {"claim_ss", "claimed_ss"} <= adjusted_params
 
 
 def test_regime_specs_keys_match_regime_id() -> None:

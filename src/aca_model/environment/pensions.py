@@ -61,37 +61,49 @@ def benefit(
 
 
 def total_to_pia(
-    pension_benefit: FloatND,
-    pia: FloatND,
+    pia_adjusted_next_period: FloatND,
+    pia_unadjusted_next_period: FloatND,
+    full_benefit_next_period: FloatND,
+    target_his: IntND,
     period: Period,
-    his: IntND,
     marginal_tax_rate: FloatND,
-    imp_intercept: FloatND,
-    imp_pia_coeff: FloatND,
-    imp_pia_kink_0_coeff: FloatND,
-    imp_pia_kink_1_coeff: FloatND,
-    imp_kink_0: FloatND,
-    imp_kink_1: FloatND,
+    imp_intercept_next_period: FloatND,
+    imp_pia_coeff_next_period: FloatND,
+    imp_pia_kink_0_coeff_next_period: FloatND,
+    imp_pia_kink_1_coeff_next_period: FloatND,
+    imp_kink_0_next_period: FloatND,
+    imp_kink_1_next_period: FloatND,
 ) -> FloatND:
-    """Invert pension imputation to recover PIA from total after-tax benefits.
+    """PIA the next-period AIME encodes in solve (French & Jones 2011, app. D).
 
-    Piecewise-linear inverse of the pension_benefit mapping, adjusted for
-    marginal tax rates.
+    Solve re-imputes pension wealth from next period's PIA, so a claim-age
+    adjustment or earnings-test credit baked into that PIA would also move the
+    imputed pension. The carried PIA `PIA*` instead solves
+
+    ```
+    PIA* + (1 - τ) pbmax_{t+1}(PIA*) = PIA_adj + (1 - τ) pbmax_{t+1}(PIA_unadj)
+    ```
+
+    which keeps the after-tax total of Social Security and imputed pension
+    benefits at its claim-adjusted value. `pbmax_{t+1}` uses next period's
+    coefficients for the target HIS and `τ` this period's marginal tax rate.
+    Without an adjustment (`PIA_adj == PIA_unadj`) the carried PIA is the
+    accrued PIA.
     """
     after_tax = 1.0 - marginal_tax_rate
-    total_ben = after_tax * pension_benefit + pia
+    total_ben = after_tax * full_benefit_next_period + pia_adjusted_next_period
 
-    at_intercept = after_tax * imp_intercept[period, his]
-    at_pia = after_tax * imp_pia_coeff[period, his]
-    at_kink_0 = after_tax * imp_pia_kink_0_coeff[period, his]
-    at_kink_1 = after_tax * imp_pia_kink_1_coeff[period, his]
+    at_intercept = after_tax * imp_intercept_next_period[period, target_his]
+    at_pia = after_tax * imp_pia_coeff_next_period[period, target_his]
+    at_kink_0 = after_tax * imp_pia_kink_0_coeff_next_period[period, target_his]
+    at_kink_1 = after_tax * imp_pia_kink_1_coeff_next_period[period, target_his]
 
-    k0 = imp_kink_0[period]
-    k1 = imp_kink_1[period]
+    k0 = imp_kink_0_next_period[period]
+    k1 = imp_kink_1_next_period[period]
     kink_0_tb = at_intercept + k0 * (1.0 + at_pia)
     kink_1_tb = kink_0_tb + (k1 - k0) * (1.0 + at_pia + at_kink_0)
 
-    return jnp.where(
+    inverted = jnp.where(
         total_ben < at_intercept,
         0.0,
         jnp.where(
@@ -103,6 +115,11 @@ def total_to_pia(
                 k1 + (total_ben - kink_1_tb) / (1.0 + at_pia + at_kink_0 + at_kink_1),
             ),
         ),
+    )
+    return jnp.where(
+        pia_adjusted_next_period == pia_unadjusted_next_period,
+        pia_unadjusted_next_period,
+        inverted,
     )
 
 
@@ -198,7 +215,7 @@ def assets_adjustment(
     )
 
 
-def imputed_pension_wealth_next_period(
+def full_benefit_next_period(
     pia_unadjusted_next_period: FloatND,
     target_his: IntND,
     period: Period,
@@ -208,21 +225,17 @@ def imputed_pension_wealth_next_period(
     imp_pia_kink_1_coeff_next_period: FloatND,
     imp_kink_0_next_period: FloatND,
     imp_kink_1_next_period: FloatND,
-    epdv_constant_pension_next_period: FloatND,
 ) -> FloatND:
-    """Imputed pension wealth at next period using the target regime's HIS.
+    """Next period's full pension benefit `pbmax_{t+1}` at the target regime's HIS.
 
-    `pw_{t+1} = Γ_{t+1} · pbmax_{t+1}` (French & Jones 2011, eq. D.3): the
-    *full* next-period benefit times the next-period annuity factor, with no
-    current-period fraction (the fraction lives inside `Γ`). Mirrors
-    `full_benefit` and `wealth` but indexes 1-period-shifted views so all
-    subscripts use bare-name parameters (`period`, `target_his`). Inlining is
-    required: pylcm's AST shape inference inspects the registered function's
-    body and does not trace through nested calls.
+    Mirrors `full_benefit` but indexes 1-period-shifted views so all subscripts
+    use bare-name parameters (`period`, `target_his`). Inlining is required:
+    pylcm's AST shape inference inspects the registered function's body and
+    does not trace through nested calls.
 
-    The PIA input is `pia_unadjusted_next_period` — the next-period PIA from pure labor
-    accrual. French & Jones impute pension wealth from the unadjusted PIA, so the
-    claim-age reduction or credit baked into the carried AIME never enters here.
+    The PIA input is `pia_unadjusted_next_period` — the next-period PIA from pure
+    labor accrual. French & Jones impute pension wealth from the unadjusted PIA,
+    so the claim-age reduction or credit never enters here.
     """
     intercept = imp_intercept_next_period[period, target_his]
     pia_pred = (
@@ -234,6 +247,18 @@ def imputed_pension_wealth_next_period(
     kink_1_adj = imp_pia_kink_1_coeff_next_period[period, target_his] * jnp.maximum(
         0.0, pia_unadjusted_next_period - imp_kink_1_next_period[period]
     )
+    return jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
 
-    pbmax_next = jnp.maximum(0.0, intercept + pia_pred + kink_0_adj + kink_1_adj)
-    return pbmax_next * epdv_constant_pension_next_period[period]
+
+def imputed_pension_wealth_next_period(
+    full_benefit_next_period: FloatND,
+    period: Period,
+    epdv_constant_pension_next_period: FloatND,
+) -> FloatND:
+    """Imputed pension wealth at next period (French & Jones 2011, eq. D.3).
+
+    `pw_{t+1} = Γ_{t+1} · pbmax_{t+1}`: the *full* next-period benefit times the
+    next-period annuity factor, with no current-period fraction (the fraction
+    lives inside `Γ`).
+    """
+    return full_benefit_next_period * epdv_constant_pension_next_period[period]
