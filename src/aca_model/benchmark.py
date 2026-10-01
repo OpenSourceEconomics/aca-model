@@ -29,13 +29,14 @@ import cloudpickle
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
-from lcm import DiscreteGrid, Model
+from lcm import DiscreteGrid, ExecutionConfig, Model
 
 from aca_model.agent.health import GoodHealth
 from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model
+from aca_model.baseline.regimes import ENTRY_REGIMES
 from aca_model.config import BENCHMARK_GRID_CONFIG
 from aca_model.consumption_dollars_grid import (
     compute_consumption_dollars_points,
@@ -57,35 +58,26 @@ _DERIVED_CATEGORICALS = {
     "pref_type": DiscreteGrid(BenchmarkPrefType),
 }
 
-# Five regimes active at start_age=51 (inelig + canwork). All have
+# The five entry regimes (inelig + canwork). All have
 # HealthWithDisability (3-state); four have lagged_labor_supply (tied
 # does not — it's implied by the regime).
-_INITIAL_REGIMES = (
-    "retiree_nomc_inelig_canwork",
-    "tied_nomc_inelig_canwork",
-    "nongroup_nomc_inelig_canwork",
-    "retiree_dimc_inelig_canwork",
-    "nongroup_dimc_inelig_canwork",
-)
 
 
 def create_benchmark_model(
     *,
-    n_subjects: int,
     pref_type_grid: DiscreteGrid,
+    execution_config: ExecutionConfig | None = None,
 ) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 
-    The benchmark uses a 2-type `BenchmarkPrefType`. No `batch_size != 0`
-    on any grid (continuous grids inherit
-    `BENCHMARK_GRID_CONFIG.n_assets_batch_size = 0` and
-    `n_aime_batch_size = 0`).
+    The benchmark uses a 2-type `BenchmarkPrefType`. Grids describe economic
+    outcomes; the execution policy selects devices and program widths.
 
     Args:
-        n_subjects: Forwarded to `lcm.Model(n_subjects=...)`. When set, the
-            first matching `simulate(...)` call AOT-compiles all simulate
-            functions for that batch shape.
         pref_type_grid: Pref-type grid; pass `DiscreteGrid(BenchmarkPrefType)`.
+        execution_config: Explicit hardware-local policy forwarded unchanged.
+            None uses the smallest selected accelerator allocator limit as the
+            device-memory budget; CPU construction remains unbudgeted.
     """
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return create_model(
@@ -94,7 +86,7 @@ def create_benchmark_model(
         wage_params=wage_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
         pref_type_grid=pref_type_grid,
-        n_subjects=n_subjects,
+        execution_config=execution_config,
     )
 
 
@@ -159,19 +151,19 @@ def get_benchmark_initial_conditions(
 ) -> dict[str, Array]:
     """Draw random feasible initial conditions across five age-51 regimes.
 
-    Every subject gets a random regime from `_INITIAL_REGIMES`; continuous
+    Every subject gets a random regime from `ENTRY_REGIMES`; continuous
     states are drawn uniformly over the regime's grid range, discrete states
     uniformly over categories. States absent from a subject's regime are
     filled with 0 (pylcm ignores them for that regime).
     """
     rng = np.random.default_rng(seed)
-    regime_ids = tuple(model.regime_names_to_ids[n] for n in _INITIAL_REGIMES)
+    regime_ids = tuple(model.regime_names_to_ids[n] for n in ENTRY_REGIMES)
     regime = rng.choice(regime_ids, size=n_subjects).astype(np.int32)
 
     # Grid ranges come from any of the five regimes (shared structure).
     # Use to_jax() so the helper handles both LinSpacedGrid and
     # PiecewiseLinSpacedGrid (the latter has no `.start` / `.stop`).
-    ref_regime = model.user_regimes[_INITIAL_REGIMES[0]]
+    ref_regime = model.user_regimes[ENTRY_REGIMES[0]]
     grids = ref_regime.states
     # Every state read here is a plain `Grid`; `pension_wealth` (a
     # carried state) is never indexed, so the union widening
