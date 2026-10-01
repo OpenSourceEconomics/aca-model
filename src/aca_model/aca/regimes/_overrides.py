@@ -9,6 +9,7 @@ consuming functions that need them.
 from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.baseline.regimes._common import RegimeSpec
+from aca_model.environment import taxes
 
 
 def apply_aca_overrides(
@@ -17,6 +18,10 @@ def apply_aca_overrides(
     policy: PolicyVariant,
 ) -> None:
     """Override baseline functions with ACA versions in-place.
+
+    Every variant charges the ACA surtaxes in every regime: the 3.8% surtax
+    on unearned income above 200,000, plus, under the full ACA only, the
+    0.9% surtax on earnings above 200,000 (struct-ret's composition).
 
     Three orthogonal feature flags derived from the policy variant:
 
@@ -40,6 +45,13 @@ def apply_aca_overrides(
     has_mandate = policy in (
         PolicyVariant.ACA,
         PolicyVariant.ACA_NO_MEDICAID_EXPANSION,
+    )
+
+    functions["after_tax_income_before_aca_surtaxes"] = taxes.after_tax_income
+    functions["after_tax_income"] = (
+        taxes.after_tax_income_with_aca_surtaxes
+        if policy == PolicyVariant.ACA
+        else taxes.after_tax_income_with_aca_investment_surtax
     )
 
     if has_medicaid_expansion:
