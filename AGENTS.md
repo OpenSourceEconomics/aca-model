@@ -75,9 +75,10 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 
 ### Key State Variables
 
-- `assets`: Savings grid `[≈ −221k, 500k]`, 24 points (lower bound = minus one year of
-  maximum full-time earnings, so it shifts with the wage parameters; finer at low
-  levels)
+- `assets`: Savings grid from minus one year of maximum full-time earnings (so the lower
+  bound shifts with the wage parameters) to 12M (the largest initial holding), 24
+  points, sinh-spaced around zero (5 nodes below zero, a node at zero, 5 nodes in
+  `[0, 30k]`, geometric above; `build_assets_grid`)
 - `aime`: Average Indexed Monthly Earnings — piecewise grid at the PIA bend points (32
   points total; `n_aime_gridpoints` is ignored on this path)
 - `health`: `HealthWithDisability` (disabled/bad/good) pre-65, `Health` (bad/good)
@@ -85,7 +86,10 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 - `log_ft_wage_res`: AR(1) wage residual shock (5-point Rouwenhorst)
 - `hcc_persistent` / `hcc_transitory`: Health cost shocks (`_ShockGrid` — integrated
   over, policy does not condition on them)
-- Regime transitions determined by `select_target_for_age()` based on age and actions
+- Regime transitions determined by `select_target_for_age()` based on age and actions;
+  death has probability `1 − survival_probs[age, health]`, a per-regime param on the
+  regime's own health grid. Ages run 51–96: 95 is the last age anyone is alive (survival
+  1e-4 at 94, 0 at 95), and only `dead` is active at 96.
 
 ### Key Design Decisions
 

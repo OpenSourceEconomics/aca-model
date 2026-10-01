@@ -228,7 +228,7 @@ config = MODEL_CONFIG
 
 @dataclass(frozen=True)
 class Grids:
-    assets: LinSpacedGrid
+    assets: IrregSpacedGrid
     aime: PiecewiseLinSpacedGrid
     pension_wealth: LinSpacedGrid
     consumption_dollars: IrregSpacedGrid
@@ -257,6 +257,17 @@ _AIME_PIECE_N_POINTS: tuple[int, int, int, int] = (10, 11, 11, 6)
 _PENSION_WEALTH_GRID = LinSpacedGrid(start=0.0, stop=2_000_000.0, n_points=2)
 
 
+# Asset grid: `_ASSETS_SINH_SCALE * sinh(u)` with `u` evenly spaced on each side
+# of zero. The spacing is about `_ASSETS_SINH_SCALE * du` near zero, where the
+# consumption floor and the SSI asset tests bite, and geometric (ratio `e^du`) for
+# large holdings. The top node is the largest initial asset holding in the data.
+_ASSETS_TOP = 12_000_000.0
+_ASSETS_SINH_SCALE = 10_000.0
+# Share of nodes below zero; the negative branch only has to reach the borrowing
+# limit.
+_ASSETS_NEGATIVE_SHARE = 5 / 24
+
+
 # AR(1) persistence of the Rouwenhorst shocks. Calibrated once; not
 # routed through fixed_params because they shape the grid topology
 # rather than feed any DAG function. The Rouwenhorst innovation std is
@@ -276,15 +287,10 @@ def build_grids(
     """Build continuous-state/action grids from a `GridConfig`.
 
     The AIME grid is `PiecewiseLinSpacedGrid` breakpointed at the PIA
-    bends from `fixed_params["pia_aime_grid"]` (total 32 points). The
-    assets grid's lower bound is `-max_annual_labor_income` computed
+    bends from `fixed_params["pia_aime_grid"]`. The assets grid
+    (`build_assets_grid`) runs from `-max_annual_labor_income`, computed
     from `wage_params` (`log_ft_wage_mean`, `log_ft_wage_std`,
-    `adj_wage_hours_*`).
-
-    `wage_params` is passed separately rather than via `fixed_params`
-    because `log_ft_wage_mean` is a per-iteration param at estimation
-    time (reconstructed from `wage_bias_coeffs_*`), not a fixed one;
-    the grid floor must still be known at build time.
+    `adj_wage_hours_*`), to the largest initial asset holding.
 
     `consumption_dollars_points` fixes the consumption action grid at
     construction (the DC-EGM kernel needs it then); `None` keeps the
@@ -315,10 +321,8 @@ def build_grids(
     )
 
     return Grids(
-        assets=LinSpacedGrid(
-            start=assets_start,
-            stop=500_000.0,
-            n_points=grid_config.n_assets_gridpoints,
+        assets=build_assets_grid(
+            floor=assets_start, n_points=grid_config.n_assets_gridpoints
         ),
         aime=_build_aime_grid(fixed_params=fixed_params),
         pension_wealth=_PENSION_WEALTH_GRID,
@@ -333,6 +337,35 @@ def build_grids(
         pref_type=pref_type_grid,
         grid_config=grid_config,
     )
+
+
+def build_assets_grid(*, floor: float, n_points: int) -> IrregSpacedGrid:
+    """Return the sinh-spaced asset grid from `floor` to `_ASSETS_TOP`.
+
+    `round(n_points * _ASSETS_NEGATIVE_SHARE)` nodes (at least one) lie below
+    zero, starting at `floor`; the rest run from exactly zero to `_ASSETS_TOP`.
+    On each side the nodes are `_ASSETS_SINH_SCALE * sinh(u)` with `u` evenly
+    spaced, so the grid is fine near zero and geometric for large holdings.
+
+    Args:
+        floor: Borrowing limit, the bottom node. Must be negative.
+        n_points: Total number of nodes.
+
+    Returns:
+        The asset grid.
+
+    """
+    n_negative = max(1, round(n_points * _ASSETS_NEGATIVE_SHARE))
+    scale = _ASSETS_SINH_SCALE
+    negative = scale * np.sinh(
+        np.linspace(np.arcsinh(floor / scale), 0.0, n_negative + 1)[:-1]
+    )
+    positive = scale * np.sinh(
+        np.linspace(0.0, np.arcsinh(_ASSETS_TOP / scale), n_points - n_negative)
+    )
+    negative[0] = floor
+    positive[-1] = _ASSETS_TOP
+    return IrregSpacedGrid(points=np.concatenate([negative, positive]).tolist())
 
 
 def get_hcc_persistent_shock(*, grid_config: GridConfig) -> RouwenhorstAR1Process:
@@ -430,7 +463,7 @@ _ACTIVE_PREDICATES: dict[tuple[str, str, str], Callable[..., Any]] = {
         (age >= config.ss_forced_age) & (age < config.work_forced_out_age)
     ),
     ("oamc", "forced", "forcedout"): lambda age: (
-        (age >= config.work_forced_out_age) & (age < config.end_age - 1)
+        (age >= config.work_forced_out_age) & (age < config.end_age)
     ),
 }
 
@@ -937,7 +970,7 @@ def select_target_for_age(
         tgts["nomc_inelig"],
     )
     return jnp.where(
-        next_age >= config.end_age - 1,
+        next_age >= config.end_age,
         RegimeId.dead,
         jnp.where(
             next_age >= config.work_forced_out_age,

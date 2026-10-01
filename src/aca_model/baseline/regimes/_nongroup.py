@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from lcm import Regime
 from lcm.solvers import DCEGM, NBEGM
-from lcm.typing import Age, DiscreteAction, FloatND, Period
+from lcm.typing import Age, DiscreteAction, DiscreteState, FloatND, Period
 
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
@@ -45,10 +45,11 @@ def _make_transition_canwork(
     def transition(
         age: Age,
         period: Period,
+        health: DiscreteState,
         labor_supply: DiscreteAction,
         survival_probs: FloatND,
     ) -> FloatND:
-        sp = survival_probs[period]
+        sp = survival_probs[period, health]
         mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
         target = select_target_for_age(age + 1, mc_next, own)
         return build_regime_probs(target, sp)
@@ -69,10 +70,11 @@ def _make_transition_forcedout(
     def transition(
         age: Age,
         period: Period,
+        health: DiscreteState,
         survival_probs: FloatND,
     ) -> FloatND:
         target = select_target_for_age(age + 1, gets_medicare, own)
-        return build_regime_probs(target, survival_probs[period])
+        return build_regime_probs(target, survival_probs[period, health])
 
     return transition
 
