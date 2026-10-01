@@ -89,11 +89,14 @@ def _build_functions(spec: RegimeSpec) -> dict:
 
     has_buy_private = spec["his"] == "nongroup" and spec["mc"] == "nomc"
     if has_buy_private:
-        functions["hic_premium"] = health_insurance.premium
+        functions["plan_premium"] = health_insurance.premium
     elif can_work:
-        functions["hic_premium"] = health_insurance.premium_insured
+        functions["plan_premium"] = health_insurance.premium_insured
     else:
-        functions["hic_premium"] = health_insurance.premium_retired
+        functions["plan_premium"] = health_insurance.premium_retired
+    # Medicaid-eligible households pay no premium: Medicaid replaces private
+    # cover and pays the Medicare premium.
+    functions["hic_premium"] = health_insurance.premium_net_of_medicaid
 
     functions.update(build_pension_functions(spec))
 

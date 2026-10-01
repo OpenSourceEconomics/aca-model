@@ -394,6 +394,44 @@ def oop_with_medicaid(
     return jnp.where(is_medicaid_eligible, medicaid_oop, primary_oop)
 
 
+def oop_with_medicaid_replacing_private(
+    total_health_costs: FloatND,
+    primary_oop: FloatND,
+    is_medicaid_eligible: BoolND,
+    deductible_medicaid: ScalarFloat,
+    coinsurance_rate_medicaid: ScalarFloat,
+    oop_max_medicaid: ScalarFloat,
+) -> FloatND:
+    """Compute OOP costs in the non-group regimes before Medicare.
+
+    A Medicaid-eligible household is covered by Medicaid alone: Medicaid is
+    the payer of last resort and does not cover private premia, so it can
+    neither hold private cover nor stay uninsured. Its OOP is Medicaid's
+    cost-sharing on total costs, whatever its `buy_private` choice. Other
+    households pay the primary (private or uninsured) OOP.
+    """
+    medicaid_oop = oop_costs(
+        total_health_costs=total_health_costs,
+        deductible=deductible_medicaid,
+        coinsurance_rate=coinsurance_rate_medicaid,
+        oop_max=oop_max_medicaid,
+    )
+    return jnp.where(is_medicaid_eligible, medicaid_oop, primary_oop)
+
+
+def premium_net_of_medicaid(
+    plan_premium: FloatND,
+    is_medicaid_eligible: BoolND,
+) -> FloatND:
+    """Compute the premium a non-group household pays.
+
+    A Medicaid-eligible household pays no premium: before Medicare its only
+    cover is Medicaid, whose premium is zero; with Medicare, Medicaid pays
+    the Medicare premium.
+    """
+    return jnp.where(is_medicaid_eligible, 0.0, plan_premium)
+
+
 def hcc_insurer_predicted(
     hcc_persistent: ContinuousState,
     predicted_hcc_insurer_table: FloatND,

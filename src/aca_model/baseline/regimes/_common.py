@@ -614,7 +614,6 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
         # `marginal_continuation`.
         functions |= build_dcegm_functions()
     functions["total_health_costs"] = health_insurance.total_costs
-    functions["oop_costs"] = health_insurance.oop_with_medicaid
     functions["capital_income"] = assets_and_income.capital_income
     # spousal_income_amounts is a lookup table param, not a DAG function
     functions["is_married"] = labor_market.is_married
@@ -753,6 +752,13 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     has_buy_private = spec["his"] == "nongroup" and spec["mc"] == "nomc"
     functions["primary_oop"] = (
         health_insurance.primary_oop if has_buy_private else health_insurance.oop_costs
+    )
+    # Medicaid pays on top of the primary cover, except in the non-group
+    # regimes before Medicare, where it replaces private or no cover.
+    functions["oop_costs"] = (
+        health_insurance.oop_with_medicaid_replacing_private
+        if has_buy_private
+        else health_insurance.oop_with_medicaid
     )
 
     if can_work:
