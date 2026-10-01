@@ -254,6 +254,7 @@ def _aca_medicaid_kwargs(**overrides: object) -> dict:
 
     Defaults describe an under-65, non-disabled household that is not
     categorically eligible; tests override the expansion-relevant fields.
+    Only the arguments `is_medicaid_eligible` reads are passed on.
     """
     base = {
         "is_ssi_eligible": jnp.array(False),
@@ -264,7 +265,8 @@ def _aca_medicaid_kwargs(**overrides: object) -> dict:
         "medicaid_schedule": MEDICAID_SCHEDULE,
     }
     base.update(overrides)
-    return base
+    read = inspect.signature(aca_hi.is_medicaid_eligible).parameters
+    return {name: value for name, value in base.items() if name in read}
 
 
 def test_medicaid_eligible_aca_expansion_below_threshold() -> None:

@@ -21,10 +21,9 @@ def apply_aca_overrides(
     Three orthogonal feature flags derived from the policy variant:
 
     - **Medicaid expansion**: two-track eligibility (categorical SSI plus the
-      under-65 non-disabled MAGI expansion) installed on all regimes. The
-      expansion arm is internally scoped to the under-65 non-disabled
-      population, so post-65 and disabled households keep the categorical
-      track with its asset test.
+      under-65 MAGI expansion) installed on all regimes. The expansion arm is
+      internally scoped to the under-65 population, disabled or not, so only
+      post-65 households keep the categorical track with its asset test.
     - **Subsidies**: premium credits, cost-sharing reductions, and their
       consuming functions (nongroup+nomc only). All mask to their neutral
       value when Medicaid-eligible (minimum-essential coverage).

@@ -122,8 +122,9 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   *categorical* track — `(crossed_oamc_threshold OR is_disabled)` AND the SSI asset and
   income tests (on SSI countable income) — and, under the ACA Medicaid-expansion
   variant, an *income-only* track — `aca_magi < 138% FPL`, scoped to the under-65
-  non-disabled population. The expansion uses MAGI (full income via `aca_magi`),
-  distinct from the half-counted SSI countable income of the categorical track.
+  population whatever their health (the disabled under 65 included, without the asset
+  test). The expansion uses MAGI (full income via `aca_magi`), distinct from the
+  half-counted SSI countable income of the categorical track.
 - **`crossed_oamc_threshold`**: per-regime constant fixed param
   (`= spec["mc"] == "oamc"`, i.e. age ≥ 65), the *aged* indicator in eligibility. It
   replaced the `gets_medicare` gate there; `is_disabled` (= `health == disabled`, a DAG
