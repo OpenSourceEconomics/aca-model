@@ -216,6 +216,7 @@ def primary_oop(
     total_health_costs: FloatND,
     cost_sharing_scale: FloatND,
     buy_private: DiscreteAction,
+    is_married: IntND,
     deductible: ScalarFloat,
     coinsurance_rate: ScalarFloat,
     oop_max: ScalarFloat,
@@ -223,13 +224,15 @@ def primary_oop(
     """Compute primary OOP costs with ACA cost-sharing reductions.
 
     Scale deductible, coinsurance rate, and OOP max by the cost-sharing
-    factor before applying the standard OOP calculation. When uninsured
+    factor before applying the standard OOP calculation; couples'
+    deductible and OOP max are twice the single ones. When uninsured
     (`buy_private=no`), OOP equals total health costs (no coverage).
     """
+    couple_scale = 1.0 + is_married
     insured_oop = oop_costs(
         total_health_costs,
-        deductible * cost_sharing_scale,
+        deductible * cost_sharing_scale * couple_scale,
         coinsurance_rate * cost_sharing_scale,
-        oop_max * cost_sharing_scale,
+        oop_max * cost_sharing_scale * couple_scale,
     )
     return jnp.where(buy_private == BuyPrivate.yes, insured_oop, total_health_costs)
