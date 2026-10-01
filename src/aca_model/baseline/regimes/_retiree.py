@@ -1,7 +1,8 @@
 """Regime transitions and builder for retiree HIS regimes.
 
 Retiree regimes: agents with employer-sponsored retiree health insurance.
-Medicaid-eligible agents are overridden to nongroup.
+Categorically (SSI-) Medicaid-eligible agents are overridden to nongroup; the
+ACA Medicaid expansion leaves employer coverage untouched.
 """
 
 from collections.abc import Callable
@@ -41,7 +42,8 @@ def _make_transition_canwork(
     """Create transition for canwork retiree regimes.
 
     Retirees who stop working get Medicare (if gets_medicare).
-    Medicaid-eligible agents are overridden to nongroup targets.
+    Categorically (SSI-) Medicaid-eligible agents are overridden to nongroup
+    targets.
     """
 
     def transition(
@@ -49,16 +51,16 @@ def _make_transition_canwork(
         period: Period,
         health: DiscreteState,
         labor_supply: DiscreteAction,
-        is_medicaid_eligible: BoolND,
+        is_ssi_eligible: BoolND,
         survival_probs: FloatND,
     ) -> FloatND:
         sp = survival_probs[period, health]
         next_age = age + 1
         mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
         target = select_target_for_age(next_age, mc_next, own)
-        # Medicaid eligibility overrides to nongroup
+        # Categorical Medicaid eligibility overrides to nongroup
         ng_ssi = select_target_for_age(next_age, mc_next, ng)
-        target = jnp.where(is_medicaid_eligible, ng_ssi, target)
+        target = jnp.where(is_ssi_eligible, ng_ssi, target)
         return build_regime_probs(target, sp)
 
     return transition
@@ -71,21 +73,22 @@ def _make_transition_forcedout(
 ) -> Callable[..., FloatND]:
     """Create transition for forcedout retiree regimes.
 
-    No labor supply action. Medicaid-eligible agents are overridden to nongroup.
+    No labor supply action. Categorically (SSI-) Medicaid-eligible agents are
+    overridden to nongroup.
     """
 
     def transition(
         age: Age,
         period: Period,
         health: DiscreteState,
-        is_medicaid_eligible: BoolND,
+        is_ssi_eligible: BoolND,
         survival_probs: FloatND,
     ) -> FloatND:
         sp = survival_probs[period, health]
         next_age = age + 1
         target = select_target_for_age(next_age, gets_medicare, own)
         ng_ssi = select_target_for_age(next_age, gets_medicare, ng)
-        target = jnp.where(is_medicaid_eligible, ng_ssi, target)
+        target = jnp.where(is_ssi_eligible, ng_ssi, target)
         return build_regime_probs(target, sp)
 
     return transition

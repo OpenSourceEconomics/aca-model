@@ -642,9 +642,11 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
 
     Contains exactly the functions that are identical across all 18 living
     regimes AND are never swapped by the ACA policy overlay. Spec-dependent
-    selections (`good_health`, `leisure`, …) and overlay-swapped names
-    (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`) stay regime-level
-    in `build_common_functions`. The `dead` regime masks every entry the
+    selections (`good_health`, `leisure`, `oop_costs`, …) and overlay-swapped
+    names (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`,
+    `after_tax_income`) stay regime-level in `build_common_functions`: pylcm
+    refuses a name defined at both levels, so a regime can only swap a
+    regime-level entry. The `dead` regime masks every entry the
     bequest DAG does not read (see `build_dead_regime`). Under DC-EGM the
     solver-contract functions join the broadcast set.
     """
@@ -657,7 +659,6 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
         # `marginal_continuation`.
         functions |= build_dcegm_functions()
     functions["total_health_costs"] = health_insurance.total_costs
-    functions["oop_costs"] = health_insurance.oop_with_medicaid
     functions["capital_income"] = assets_and_income.capital_income
     functions["spousal_income_amount"] = labor_market.spousal_income_amount
     functions["is_married"] = labor_market.is_married
@@ -678,7 +679,6 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     # Taxes
     functions["taxable_ss_benefit"] = taxes.taxable_ss_benefit
     functions["gross_income"] = taxes.gross_income
-    functions["after_tax_income"] = taxes.after_tax_income
     # Every living regime carries pension wealth and the solve-phase pension
     # assets adjustment, both of which scale by the marginal income tax rate.
     functions["marginal_tax_rate"] = taxes.marginal_rate
@@ -803,6 +803,13 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     functions["primary_oop"] = (
         health_insurance.primary_oop if has_buy_private else health_insurance.oop_costs
     )
+    # Medicaid pays on top of the primary cover, except in the non-group
+    # regimes before Medicare, where it replaces private or no cover.
+    functions["oop_costs"] = (
+        health_insurance.oop_with_medicaid_replacing_private
+        if has_buy_private
+        else health_insurance.oop_with_medicaid
+    )
 
     if can_work:
         functions["working_hours_value"] = labor_market.working_hours_value
@@ -830,6 +837,7 @@ def build_common_functions(spec: RegimeSpec) -> dict:
 
     # Swapped per policy variant by the ACA overlay, hence regime-level
     functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
+    functions["after_tax_income"] = taxes.after_tax_income
     functions["premium_default"] = assets_and_income.premium_default
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
 

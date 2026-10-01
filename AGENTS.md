@@ -72,6 +72,10 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 - ACA replaces stubs with real policy functions from `aca/policies.py`
 - `PolicyVariant` enum controls which policies are active (full ACA, no mandate,
   Medicaid only)
+- Every variant with the reformed non-group market (all but Medicaid-only) swaps the
+  non-group-nomc `plan_premium` for the community-rated
+  `aca_premium_single + aca_premium_married_extra * is_married`; aca-slurm puts the ACA
+  plan's copay parameters into those regimes and drops the risk-rated premium's params
 
 ### Key State Variables
 
@@ -111,6 +115,13 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   an action. Those use `premium()` and `primary_oop()` which condition on it. All other
   regimes use `premium_insured()` / `premium_retired()` and `oop_costs` directly — no
   `buy_private` parameter at all.
+- **Medicaid in the non-group regimes**: their `hic_premium` is
+  `medicaid_adjusted_premium(plan_premium)`, zero when Medicaid-eligible (Medicaid
+  replaces private cover before Medicare and pays the Medicare premium after). Before
+  Medicare, `oop_costs` is Medicaid's cost-sharing on total costs when eligible,
+  whatever `buy_private` says, so a Medicaid-eligible household can neither hold private
+  cover nor stay uninsured; both `buy_private` values give the same outcome. Elsewhere
+  Medicaid pays on top of the primary OOP (`oop_with_medicaid`).
 - **`reference_age` parameter**: Fixed cost of work uses `age - reference_age` (not a
   hardcoded constant). Same parameter appears in `leisure()`, `tied()`, `with_hours()`,
   and `utility_scale_factor()`.
@@ -126,8 +137,13 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   *categorical* track — `(crossed_oamc_threshold OR is_disabled)` AND the SSI asset and
   income tests (on SSI countable income) — and, under the ACA Medicaid-expansion
   variant, an *income-only* track — `aca_magi < 138% FPL`, scoped to the under-65
-  non-disabled population. The expansion uses MAGI (full income via `aca_magi`),
-  distinct from the half-counted SSI countable income of the categorical track.
+  population whatever their health (the disabled under 65 included, without the asset
+  test). The expansion uses MAGI (full income via `aca_magi`), distinct from the
+  half-counted SSI countable income of the categorical track. Regime (HIS) transitions
+  and the pension `target_his` read the categorical track only (`is_ssi_eligible`): the
+  ACA leaves employer coverage untouched, so a retiree/tied household eligible only
+  through the expansion keeps its employer coverage, with Medicaid paying on top of its
+  OOP.
 - **`crossed_oamc_threshold`**: per-regime constant fixed param
   (`= spec["mc"] == "oamc"`, i.e. age ≥ 65), the *aged* indicator in eligibility. It
   replaced the `gets_medicare` gate there; `is_disabled` (= `health == disabled`, a DAG

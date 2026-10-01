@@ -331,13 +331,14 @@ def is_medicaid_eligible(is_ssi_eligible: BoolND) -> BoolND:
 def target_his(
     his: IntND,
     labor_supply: DiscreteAction,
-    is_medicaid_eligible: BoolND,
+    is_ssi_eligible: BoolND,
 ) -> IntND:
     """Return the HIS class of the surviving target regime.
 
     Mirrors the cross-HIS branches inside `_make_transition_canwork` (retiree,
     tied, nongroup): tied agents who stop working become nongroup, and
-    Medicaid-eligible agents are overridden to nongroup. Used by
+    categorically (SSI-) Medicaid-eligible agents are overridden to nongroup.
+    The ACA Medicaid expansion leaves employer coverage untouched. Used by
     `imputed_pension_wealth_next_period` to look up next-period imputation
     coefficients at the target's HIS.
     """
@@ -345,7 +346,7 @@ def target_his(
         labor_supply == LaborSupply.do_not_work
     )
     return jnp.where(
-        tied_to_ng | is_medicaid_eligible,
+        tied_to_ng | is_ssi_eligible,
         HealthInsuranceState.nongroup,
         his,
     ).astype(jnp.int32)
@@ -353,18 +354,18 @@ def target_his(
 
 def target_his_forcedout(
     his: IntND,
-    is_medicaid_eligible: BoolND,
+    is_ssi_eligible: BoolND,
 ) -> IntND:
     """Return the HIS class of the surviving target regime in forced-out regimes.
 
     Forced-out regimes have no labor-supply choice, and tied agents have
     already moved to nongroup before the forced-out age, so the only HIS
-    override is Medicaid eligibility → nongroup. Used by
+    override is categorical (SSI) Medicaid eligibility → nongroup. Used by
     `imputed_pension_wealth_next_period` to look up next-period imputation
     coefficients at the target's HIS.
     """
     return jnp.where(
-        is_medicaid_eligible,
+        is_ssi_eligible,
         HealthInsuranceState.nongroup,
         his,
     ).astype(jnp.int32)
@@ -389,6 +390,44 @@ def oop_with_medicaid(
         oop_max=oop_max_medicaid,
     )
     return jnp.where(is_medicaid_eligible, medicaid_oop, primary_oop)
+
+
+def oop_with_medicaid_replacing_private(
+    total_health_costs: FloatND,
+    primary_oop: FloatND,
+    is_medicaid_eligible: BoolND,
+    deductible_medicaid: ScalarFloat,
+    coinsurance_rate_medicaid: ScalarFloat,
+    oop_max_medicaid: ScalarFloat,
+) -> FloatND:
+    """Compute OOP costs in the non-group regimes before Medicare.
+
+    A Medicaid-eligible household is covered by Medicaid alone: Medicaid is
+    the payer of last resort and does not cover private premia, so it can
+    neither hold private cover nor stay uninsured. Its OOP is Medicaid's
+    cost-sharing on total costs, whatever its `buy_private` choice. Other
+    households pay the primary (private or uninsured) OOP.
+    """
+    medicaid_oop = oop_costs(
+        total_health_costs=total_health_costs,
+        deductible=deductible_medicaid,
+        coinsurance_rate=coinsurance_rate_medicaid,
+        oop_max=oop_max_medicaid,
+    )
+    return jnp.where(is_medicaid_eligible, medicaid_oop, primary_oop)
+
+
+def medicaid_adjusted_premium(
+    plan_premium: FloatND,
+    is_medicaid_eligible: BoolND,
+) -> FloatND:
+    """Compute the premium a non-group household pays.
+
+    A Medicaid-eligible household pays no premium: before Medicare its only
+    cover is Medicaid, whose premium is zero; with Medicare, Medicaid pays
+    the Medicare premium.
+    """
+    return jnp.where(is_medicaid_eligible, 0.0, plan_premium)
 
 
 def hcc_insurer_predicted(

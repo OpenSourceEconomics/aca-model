@@ -254,6 +254,7 @@ def _aca_medicaid_kwargs(**overrides: object) -> dict:
 
     Defaults describe an under-65, non-disabled household that is not
     categorically eligible; tests override the expansion-relevant fields.
+    Only the arguments `is_medicaid_eligible` reads are passed on.
     """
     base = {
         "is_ssi_eligible": jnp.array(False),
@@ -264,7 +265,8 @@ def _aca_medicaid_kwargs(**overrides: object) -> dict:
         "medicaid_schedule": MEDICAID_SCHEDULE,
     }
     base.update(overrides)
-    return base
+    read = inspect.signature(aca_hi.is_medicaid_eligible).parameters
+    return {name: value for name, value in base.items() if name in read}
 
 
 def test_medicaid_eligible_aca_expansion_below_threshold() -> None:
@@ -303,14 +305,18 @@ def test_medicaid_eligible_aca_expansion_excludes_aged() -> None:
     assert not result
 
 
-def test_medicaid_eligible_aca_expansion_excludes_disabled() -> None:
-    """Disabled households are not reached by the expansion track."""
+def test_medicaid_eligible_aca_expansion_includes_disabled_under_65() -> None:
+    """A disabled under-65 household below the MAGI threshold gets expansion cover.
+
+    The expansion has no asset test, so the household qualifies even though
+    it fails the categorical track (`is_ssi_eligible` is False).
+    """
     result = aca_hi.is_medicaid_eligible(
         **_aca_medicaid_kwargs(
             is_disabled=jnp.asarray(True), aca_magi=jnp.array(10000.0)
         )
     )
-    assert not result
+    assert result
 
 
 def test_medicaid_eligible_aca_ignores_assets() -> None:
