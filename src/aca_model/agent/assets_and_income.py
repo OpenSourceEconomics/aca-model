@@ -211,3 +211,17 @@ def borrowing_constraint(
     The `max` form returns `floor` exactly.
     """
     return consumption_dollars <= jnp.maximum(cash_on_hand, consumption_dollars_floor)
+
+
+def consumption_above_floor(
+    consumption_dollars: ContinuousAction,
+    consumption_dollars_floor: FloatND,
+) -> BoolND:
+    """Consumption cannot fall below the household's own $-floor.
+
+    The consumption grid starts at the single floor; a married household's
+    floor is higher, and consuming below it would let the household save part
+    of a floor-topping transfer. With cash on hand below the floor, this and
+    the borrowing constraint together pin consumption at the floor.
+    """
+    return consumption_dollars >= consumption_dollars_floor

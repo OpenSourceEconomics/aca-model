@@ -551,9 +551,8 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
       other broadcast function is masked with `None` so its unresolvable
       inputs (e.g. `pension_benefit`) don't surface as params in the dead
       template.
-    - constraints: the borrowing constraint is masked — `dead` has no
-      consumption action. It is broadcast under every solver, so there is
-      always exactly one mask to apply.
+    - constraints: every broadcast constraint is masked — `dead` has no
+      consumption action.
     - `pension_wealth` is masked explicitly: a carried state is rejected in
       terminal regimes before pruning could drop it.
     """
@@ -681,18 +680,24 @@ def build_nbegm_functions() -> dict:
 def build_model_constraints(*, solver: SolverName) -> dict:
     """Build the model-level constraints broadcast into every regime.
 
-    `dead` masks the borrowing constraint — it has no consumption action.
-    Grid search evaluates the action-level predicate directly. An EGM-family
+    `dead` masks every constraint — it has no consumption action.
+    Grid search evaluates the action-level predicates directly: the borrowing
+    constraint and the household's own consumption floor. An EGM-family
     solve proves the equivalent post-decision lower bound from its savings
     grid, while forward simulation receives the solver's intrinsic budget
-    mask over the consumption grid.
+    mask over the consumption grid; it does not carry the own-floor bound.
     """
     borrowing_constraint = (
         assets_and_income.borrowing_constraint
         if solver == "brute_force"
         else post_decision_lower_bound(margin=ACA_LIQUID_MARGIN, lower=0.0)
     )
-    return {"borrowing_constraint": borrowing_constraint}
+    constraints = {"borrowing_constraint": borrowing_constraint}
+    if solver == "brute_force":
+        constraints["consumption_floor_constraint"] = (
+            assets_and_income.consumption_above_floor
+        )
+    return constraints
 
 
 def build_model_states(grids: Grids) -> dict:
