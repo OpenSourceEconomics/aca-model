@@ -6,7 +6,16 @@ Health (2-state: bad/good) is used in post-65 regimes (mc=oamc).
 
 import jax.numpy as jnp
 from lcm import categorical
-from lcm.typing import DiscreteState, FloatND, IntND, Period, ScalarInt
+from lcm.typing import (
+    DiscreteAction,
+    DiscreteState,
+    FloatND,
+    IntND,
+    Period,
+    ScalarInt,
+)
+
+from aca_model.agent.labor_market import LaborSupply
 
 
 @categorical(ordered=True)
@@ -60,3 +69,37 @@ def next_health_cross(
     regimes (Health) at the age-65 boundary.
     """
     return health_trans_probs_cross[period, health]
+
+
+def next_health_into_dimc(
+    health: DiscreteState,
+    period: Period,
+    health_trans_probs: FloatND,
+) -> FloatND:
+    """Next health of a household that lands on disability Medicare: disabled.
+
+    Pre-65 Medicare goes to households disabled next period, so landing in a
+    `dimc` regime reveals the next health state.
+    """
+    probs = health_trans_probs[period, health]
+    return jnp.zeros_like(probs).at[HealthWithDisability.disabled].set(1.0)
+
+
+def next_health_into_nomc(
+    health: DiscreteState,
+    period: Period,
+    labor_supply: DiscreteAction,
+    health_trans_probs: FloatND,
+) -> FloatND:
+    """Next health of a pre-65 household that lands without Medicare.
+
+    A household that does not work this period gets disability Medicare
+    whenever it is disabled next period, so landing without Medicare means it
+    is not disabled: its next health is the transition row with the disabled
+    state removed and renormalised. A worker keeps the unconditional row.
+    """
+    probs = health_trans_probs[period, health]
+    off_disability = probs.at[HealthWithDisability.disabled].set(0.0)
+    mass = off_disability.sum()
+    conditional = off_disability / jnp.where(mass > 0.0, mass, 1.0)
+    return jnp.where(labor_supply == LaborSupply.do_not_work, conditional, probs)

@@ -92,6 +92,7 @@ def test_baseline_primary_oop_no_cost_sharing_scale() -> None:
     result = health_insurance.primary_oop(
         total_health_costs=costs,
         buy_private=jnp.array(BuyPrivate.yes),
+        is_married=jnp.int32(0),
         deductible=deductible,
         coinsurance_rate=coinsurance,
         oop_max=oop_max_val,
@@ -115,6 +116,7 @@ def test_aca_primary_oop_scaled_reduces_costs() -> None:
         total_health_costs=costs,
         cost_sharing_scale=jnp.array(1.0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_married=jnp.int32(0),
         deductible=deductible,
         coinsurance_rate=coinsurance,
         oop_max=oop_max_val,
@@ -123,6 +125,7 @@ def test_aca_primary_oop_scaled_reduces_costs() -> None:
         total_health_costs=costs,
         cost_sharing_scale=jnp.array(0.3),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_married=jnp.int32(0),
         deductible=deductible,
         coinsurance_rate=coinsurance,
         oop_max=oop_max_val,

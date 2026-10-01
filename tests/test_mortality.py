@@ -33,15 +33,18 @@ from aca_model.config import MODEL_CONFIG
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
 # Survival by (period, health): distinct per health state.
 SURVIVAL = jnp.tile(jnp.array([0.90, 0.95, 0.99]), (N_PERIODS, 1))
+# P(disabled next period | health); inert for the working households here.
+PROB_DISABLED = jnp.zeros((N_PERIODS, 3))
 
 
 def _tied(health: int) -> jnp.ndarray:
     own, ng = make_targets("tied_nomc_inelig_canwork")
-    return tied_canwork(gets_medicare=False, own=own, ng=ng)(
+    return tied_canwork(own=own, ng=ng)(
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(health),
         labor_supply=jnp.array(LaborSupply.h2000),
+        prob_disabled_next=PROB_DISABLED,
         is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
@@ -49,11 +52,12 @@ def _tied(health: int) -> jnp.ndarray:
 
 def _retiree(health: int) -> jnp.ndarray:
     own, ng = make_targets("retiree_nomc_inelig_canwork")
-    return retiree_canwork(gets_medicare=False, own=own, ng=ng)(
+    return retiree_canwork(own=own, ng=ng)(
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(health),
         labor_supply=jnp.array(LaborSupply.h2000),
+        prob_disabled_next=PROB_DISABLED,
         is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
@@ -72,11 +76,12 @@ def _retiree_forcedout(health: int) -> jnp.ndarray:
 
 def _nongroup(health: int) -> jnp.ndarray:
     own, _ng = make_targets("nongroup_nomc_inelig_canwork")
-    return nongroup_canwork(gets_medicare=False, own=own)(
+    return nongroup_canwork(own=own)(
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(health),
         labor_supply=jnp.array(LaborSupply.h2000),
+        prob_disabled_next=PROB_DISABLED,
         survival_probs=SURVIVAL,
     )
 

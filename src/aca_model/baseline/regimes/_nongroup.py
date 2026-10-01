@@ -10,7 +10,6 @@ from lcm import Regime
 from lcm.solvers import DCEGM, NBEGM
 from lcm.typing import Age, DiscreteAction, DiscreteState, FloatND, Period
 
-from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
 from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
@@ -23,23 +22,24 @@ from aca_model.baseline.regimes._common import (
     build_nbegm_functions,
     build_pension_functions,
     build_regime_probs,
+    build_regime_probs_with_di_medicare,
     build_state_transitions,
     build_states,
     make_active_func,
     make_targets,
+    prob_di_medicare_next,
     select_ss_benefit,
     select_target_for_age,
 )
 
 
 def _make_transition_canwork(
-    gets_medicare: bool,
     own: dict[str, int],
 ) -> Callable[..., FloatND]:
     """Create transition for canwork nongroup regimes.
 
-    Already nongroup — no SSI override needed. Gets Medicare if stops working
-    (when gets_medicare is True).
+    Already nongroup — no SSI override needed. Before 65, a household that
+    does not work and is disabled next period holds disability Medicare.
     """
 
     def transition(
@@ -48,11 +48,16 @@ def _make_transition_canwork(
         health: DiscreteState,
         labor_supply: DiscreteAction,
         survival_probs: FloatND,
+        prob_disabled_next: FloatND,
     ) -> FloatND:
-        sp = survival_probs[period, health]
-        mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
-        target = select_target_for_age(age + 1, mc_next, own)
-        return build_regime_probs(target, sp)
+        return build_regime_probs_with_di_medicare(
+            target_dimc=select_target_for_age(age + 1, True, own),
+            target_nomc=select_target_for_age(age + 1, False, own),
+            prob_dimc=prob_di_medicare_next(
+                labor_supply, prob_disabled_next[period, health]
+            ),
+            survival=survival_probs[period, health],
+        )
 
     return transition
 
@@ -89,9 +94,11 @@ def _build_functions(spec: RegimeSpec) -> dict:
     # his and crossed_oamc_threshold are fixed params (constants per regime),
     # not DAG functions. pylcm resolves them from the params dict.
 
-    has_buy_private = spec["his"] == "nongroup" and spec["mc"] == "nomc"
-    if has_buy_private:
+    if _has_buy_private(spec):
         functions["plan_premium"] = health_insurance.premium
+        functions["private_premium_intercept"] = (
+            health_insurance.private_premium_intercept
+        )
     elif can_work:
         functions["plan_premium"] = health_insurance.premium_insured
     else:
@@ -103,6 +110,23 @@ def _build_functions(spec: RegimeSpec) -> dict:
     functions.update(build_pension_functions(spec))
 
     return functions
+
+
+def _has_buy_private(spec: RegimeSpec) -> bool:
+    return spec["his"] == "nongroup" and spec["mc"] == "nomc"
+
+
+def build_constraints(spec: RegimeSpec) -> dict:
+    """Build the regime's choice constraints.
+
+    Where private cover is a choice, it is feasible only if its premium is
+    paid in full (`private_cover_paid_in_full`).
+    """
+    if _has_buy_private(spec):
+        return {
+            "private_cover_paid_in_full": health_insurance.private_cover_paid_in_full
+        }
+    return {}
 
 
 def build_regime(
@@ -118,7 +142,7 @@ def build_regime(
     own, _ng = make_targets(name)
 
     if spec["canwork"] == "canwork":
-        transition_func = _make_transition_canwork(gets_mc, own)
+        transition_func = _make_transition_canwork(own)
     else:
         transition_func = _make_transition_forcedout(gets_mc, own)
 
@@ -131,7 +155,9 @@ def build_regime(
         else ("nbegm" if nbegm_solver is not None else "dcegm")
     )
     functions = _build_functions(spec)
-    constraints: dict = {}
+    # The EGM solvers reject constraints that read the continuous state, which
+    # the private-cover constraint does through `premium_default`.
+    constraints = build_constraints(spec) if egm_solver is None else {}
     if nbegm_solver is not None:
         # NBEGM solves only this regime, so its solver-contract functions are
         # regime-level here rather than broadcast model-wide. The broadcast

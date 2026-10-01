@@ -10,9 +10,16 @@ from collections.abc import Callable
 import jax.numpy as jnp
 from lcm import Regime
 from lcm.solvers import DCEGM, NBEGM
-from lcm.typing import Age, BoolND, DiscreteAction, DiscreteState, FloatND, Period
+from lcm.typing import (
+    Age,
+    BoolND,
+    DiscreteAction,
+    DiscreteState,
+    FloatND,
+    IntND,
+    Period,
+)
 
-from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
 from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
@@ -25,25 +32,27 @@ from aca_model.baseline.regimes._common import (
     build_nbegm_functions,
     build_pension_functions,
     build_regime_probs,
+    build_regime_probs_with_di_medicare,
     build_state_transitions,
     build_states,
     make_active_func,
     make_targets,
+    prob_di_medicare_next,
     select_ss_benefit,
     select_target_for_age,
 )
 
 
 def _make_transition_canwork(
-    gets_medicare: bool,
     own: dict[str, int],
     ng: dict[str, int],
 ) -> Callable[..., FloatND]:
     """Create transition for canwork retiree regimes.
 
-    Retirees who stop working get Medicare (if gets_medicare).
-    Categorically (SSI-) Medicaid-eligible agents are overridden to nongroup
-    targets.
+    Before 65, a household that does not work and is disabled next period
+    holds disability Medicare. Categorically (SSI-) Medicaid-eligible
+    agents are overridden to
+    nongroup targets.
     """
 
     def transition(
@@ -53,15 +62,23 @@ def _make_transition_canwork(
         labor_supply: DiscreteAction,
         is_ssi_eligible: BoolND,
         survival_probs: FloatND,
+        prob_disabled_next: FloatND,
     ) -> FloatND:
-        sp = survival_probs[period, health]
         next_age = age + 1
-        mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
-        target = select_target_for_age(next_age, mc_next, own)
-        # Categorical Medicaid eligibility overrides to nongroup
-        ng_ssi = select_target_for_age(next_age, mc_next, ng)
-        target = jnp.where(is_ssi_eligible, ng_ssi, target)
-        return build_regime_probs(target, sp)
+
+        def target(mc_next: bool) -> IntND:
+            own_target = select_target_for_age(next_age, mc_next, own)
+            ng_target = select_target_for_age(next_age, mc_next, ng)
+            return jnp.where(is_ssi_eligible, ng_target, own_target)
+
+        return build_regime_probs_with_di_medicare(
+            target_dimc=target(True),
+            target_nomc=target(False),
+            prob_dimc=prob_di_medicare_next(
+                labor_supply, prob_disabled_next[period, health]
+            ),
+            survival=survival_probs[period, health],
+        )
 
     return transition
 
@@ -127,7 +144,7 @@ def build_regime(
     own, ng = make_targets(name)
 
     if spec["canwork"] == "canwork":
-        transition_func = _make_transition_canwork(gets_mc, own, ng)
+        transition_func = _make_transition_canwork(own, ng)
     else:
         transition_func = _make_transition_forcedout(gets_mc, own, ng)
 

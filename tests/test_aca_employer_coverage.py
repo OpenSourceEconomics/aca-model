@@ -81,7 +81,7 @@ def test_expansion_only_medicaid_keeps_employer_coverage(
 ) -> None:
     """An employer-covered household eligible only via the expansion keeps it."""
     own, ng = make_targets(regime_name)
-    transition = make_transition(gets_medicare=False, own=own, ng=ng)
+    transition = make_transition(own=own, ng=ng)
     result = _compose_with_aca_eligibility(
         "next_regime",
         transition,
@@ -92,6 +92,7 @@ def test_expansion_only_medicaid_keeps_employer_coverage(
             "period": jnp.int32(55 - MODEL_CONFIG.start_age),
             "health": jnp.int32(2),
             "survival_probs": SURVIVAL,
+            "prob_disabled_next": jnp.zeros((N_PERIODS, 3)),
         },
     )
     assert _live_target(result["next_regime"]) == expected
