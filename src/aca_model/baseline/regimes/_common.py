@@ -536,14 +536,21 @@ def _prob_of_target(
 # Broadcast functions the bequest DAG reads: the pref-type-indexed scalars
 # resolve their per-cell value from the broadcast `pref_type` state.
 _DEAD_KEEPS = frozenset(
-    {"consumption_weight", "coefficient_rra", "utility_scale_factor"}
+    {
+        "consumption_weight",
+        "coefficient_rra",
+        "discount_factor",
+        "utility_scale_factor",
+    }
 )
 
 
 def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
     """Build the terminal dead regime.
 
-    Everything `dead` carries arrives via the model-level broadcast:
+    `dead` owns two functions, the bequest `utility` and the per-type bequest
+    weight `scaled_bequest_weight`; everything else arrives via the
+    model-level broadcast:
 
     - states: `assets` and `pref_type` survive DAG pruning (the bequest
       utility reads them); the remaining broadcast states are pruned.
@@ -565,7 +572,11 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
     constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
     return Regime(
         transition=None,
-        functions={"utility": preferences.bequest, **function_masks},
+        functions={
+            "utility": preferences.bequest,
+            "scaled_bequest_weight": preferences.scaled_bequest_weight,
+            **function_masks,
+        },
         constraints=constraint_masks,
         states={"pension_wealth": None},
         active=lambda _age: True,

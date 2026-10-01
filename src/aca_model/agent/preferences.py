@@ -284,16 +284,20 @@ def utility_scale_factor(
 
 def scaled_bequest_weight(
     bequest_weight: ScalarFloat,
-    consumption_weight: ScalarFloat,
-    coefficient_rra: ScalarFloat,
+    consumption_weight: FloatND,
+    coefficient_rra: FloatND,
     time_endowment: ScalarFloat,
-    time_discount_factor: ScalarFloat,
+    discount_factor: FloatND,
     rate_of_return: ScalarFloat,
 ) -> FloatND:
-    """Transform raw bequest weight into the form used in the bequest function.
+    """Per-type bequest weight `θ_B` from the estimated bequest MPC.
 
     result = T^ξ * (bw / (1+r-bw))^ξ₂ / β
     where ξ = (1-α)(1-γ) and ξ₂ = α(1-γ) - 1.
+
+    `bw` is the marginal propensity to consume out of final-period wealth, one
+    scalar for all types; α, γ and β are the type's consumption weight, CRRA
+    coefficient and discount factor, so `θ_B` differs by preference type.
     """
     xi = (1.0 - consumption_weight) * (1.0 - coefficient_rra)
     xi2 = consumption_weight * (1.0 - coefficient_rra) - 1.0
@@ -302,7 +306,7 @@ def scaled_bequest_weight(
         bequest_weight > 0.0,
         time_endowment**xi
         * (safe_bw / (1.0 + rate_of_return - safe_bw)) ** xi2
-        / time_discount_factor,
+        / discount_factor,
         0.0,
     )
 
@@ -310,7 +314,7 @@ def scaled_bequest_weight(
 def bequest(
     assets: ContinuousState,
     bequest_shifter: ScalarFloat,
-    scaled_bequest_weight: ScalarFloat,
+    scaled_bequest_weight: FloatND,
     consumption_weight: FloatND,
     coefficient_rra: FloatND,
     utility_scale_factor: FloatND,
