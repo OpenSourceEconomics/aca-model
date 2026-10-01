@@ -333,13 +333,14 @@ def is_medicaid_eligible(is_ssi_eligible: BoolND) -> BoolND:
 def target_his(
     his: IntND,
     labor_supply: DiscreteAction,
-    is_medicaid_eligible: BoolND,
+    is_ssi_eligible: BoolND,
 ) -> IntND:
     """Return the HIS class of the surviving target regime.
 
     Mirrors the cross-HIS branches inside `_make_transition_canwork` (retiree,
     tied, nongroup): tied agents who stop working become nongroup, and
-    Medicaid-eligible agents are overridden to nongroup. Used by
+    categorically (SSI-) Medicaid-eligible agents are overridden to nongroup.
+    The ACA Medicaid expansion leaves employer coverage untouched. Used by
     `imputed_pension_wealth_next_period` to look up next-period imputation
     coefficients at the target's HIS.
     """
@@ -347,7 +348,7 @@ def target_his(
         labor_supply == LaborSupply.do_not_work
     )
     return jnp.where(
-        tied_to_ng | is_medicaid_eligible,
+        tied_to_ng | is_ssi_eligible,
         HealthInsuranceState.nongroup,
         his,
     ).astype(jnp.int32)
@@ -355,18 +356,18 @@ def target_his(
 
 def target_his_forcedout(
     his: IntND,
-    is_medicaid_eligible: BoolND,
+    is_ssi_eligible: BoolND,
 ) -> IntND:
     """Return the HIS class of the surviving target regime in forced-out regimes.
 
     Forced-out regimes have no labor-supply choice, and tied agents have
     already moved to nongroup before the forced-out age, so the only HIS
-    override is Medicaid eligibility → nongroup. Used by
+    override is categorical (SSI) Medicaid eligibility → nongroup. Used by
     `imputed_pension_wealth_next_period` to look up next-period imputation
     coefficients at the target's HIS.
     """
     return jnp.where(
-        is_medicaid_eligible,
+        is_ssi_eligible,
         HealthInsuranceState.nongroup,
         his,
     ).astype(jnp.int32)

@@ -48,7 +48,7 @@ def test_tied_stop_working_becomes_nongroup() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.do_not_work),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -65,7 +65,7 @@ def test_tied_keeps_working_stays_tied() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -84,7 +84,7 @@ def test_retiree_medicaid_override_to_nongroup() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(True),
+        is_ssi_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -100,7 +100,7 @@ def test_retiree_not_medicaid_stays_retiree() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -115,7 +115,7 @@ def test_retiree_forcedout_medicaid_override() -> None:
     probs = transition(
         age=jnp.int32(80),
         period=jnp.int32(29),
-        is_medicaid_eligible=jnp.array(True),
+        is_ssi_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -155,7 +155,7 @@ def test_retiree_age_bracket_transitions(
         age=jnp.asarray(age),
         period=period,
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -206,7 +206,7 @@ def test_tied_medicaid_override_to_nongroup() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(True),
+        is_ssi_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -223,7 +223,7 @@ def test_tied_at_medicare_age_with_medicaid() -> None:
         age=jnp.int32(64),
         period=period,
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(True),
+        is_ssi_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -241,7 +241,7 @@ def test_survival_prob_determines_death_weight() -> None:
         age=jnp.int32(55),
         period=jnp.int32(4),
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=survival,
     )
     assert jnp.isclose(probs[RegimeId.dead], 0.15, atol=1e-6)

@@ -124,7 +124,11 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   variant, an *income-only* track — `aca_magi < 138% FPL`, scoped to the under-65
   population whatever their health (the disabled under 65 included, without the asset
   test). The expansion uses MAGI (full income via `aca_magi`), distinct from the
-  half-counted SSI countable income of the categorical track.
+  half-counted SSI countable income of the categorical track. Regime (HIS) transitions
+  and the pension `target_his` read the categorical track only (`is_ssi_eligible`): the
+  ACA leaves employer coverage untouched, so a retiree/tied household eligible only
+  through the expansion keeps its employer coverage, with Medicaid paying on top of its
+  OOP.
 - **`crossed_oamc_threshold`**: per-regime constant fixed param
   (`= spec["mc"] == "oamc"`, i.e. age ≥ 65), the *aged* indicator in eligibility. It
   replaced the `gets_medicare` gate there; `is_disabled` (= `health == disabled`, a DAG
