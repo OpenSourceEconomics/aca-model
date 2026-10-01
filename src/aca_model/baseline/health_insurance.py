@@ -49,8 +49,7 @@ class HealthInsuranceState:
 def countable_income(
     labor_income: FloatND,
     capital_income: FloatND,
-    spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     ss_benefit: FloatND,
     pension_benefit: FloatND,
     ssi_ignored_overall: ScalarFloat,
@@ -64,7 +63,7 @@ def countable_income(
     return (
         earned
         + capital_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + ss_benefit
         + pension_benefit
         - ssi_ignored_overall
@@ -131,8 +130,7 @@ def is_disabled_never() -> BoolND:
 def aca_magi(
     labor_income: FloatND,
     capital_income: FloatND,
-    spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     ss_benefit: FloatND,
     pension_benefit: FloatND,
 ) -> FloatND:
@@ -145,7 +143,7 @@ def aca_magi(
     return (
         labor_income
         + capital_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + ss_benefit
         + pension_benefit
     )

@@ -616,7 +616,7 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     functions["total_health_costs"] = health_insurance.total_costs
     functions["oop_costs"] = health_insurance.oop_with_medicaid
     functions["capital_income"] = assets_and_income.capital_income
-    # spousal_income_amounts is a lookup table param, not a DAG function
+    functions["spousal_income_amount"] = labor_market.spousal_income_amount
     functions["is_married"] = labor_market.is_married
     functions["equivalence_scale"] = preferences.equivalence_scale
     functions["utility_scale_factor"] = preferences.utility_scale_factor

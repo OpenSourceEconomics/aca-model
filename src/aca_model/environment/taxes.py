@@ -25,8 +25,7 @@ _N_INCOME_TAX_KINKS = 7
 def gross_income(
     capital_income: FloatND,
     labor_income: FloatND,
-    spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     taxable_ss_benefit: FloatND,
     pension_benefit: FloatND,
 ) -> FloatND:
@@ -34,7 +33,7 @@ def gross_income(
     return (
         capital_income
         + labor_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + taxable_ss_benefit
         + pension_benefit
     )
@@ -44,7 +43,7 @@ def taxable_ss_benefit(
     capital_income: FloatND,
     labor_income: FloatND,
     spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     ss_benefit: FloatND,
     pension_benefit: FloatND,
     ss_tax_schedule: MappingLeaf,
@@ -58,7 +57,7 @@ def taxable_ss_benefit(
     prov_income = (
         capital_income
         + labor_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + sched["ben_fraction_prov_income"] * ss_benefit
         + pension_benefit
     )
