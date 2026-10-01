@@ -53,13 +53,13 @@ def build_regime(name: str):
 def test_model_creates_successfully() -> None:
     model = make_baseline_model()
     assert len(model.user_regimes) == 19
-    assert model.n_periods == 45
+    assert model.n_periods == 46
 
 
 def test_model_age_range() -> None:
     model = make_baseline_model()
     assert model.ages.values[0] == 51.0
-    assert model.ages.values[-1] == 95.0
+    assert model.ages.values[-1] == 96.0
 
 
 def test_dead_regime_is_terminal() -> None:
@@ -287,7 +287,7 @@ def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
 def test_aca_model_creates_successfully() -> None:
     model = make_aca_model(policy=PolicyVariant.ACA)
     assert len(model.user_regimes) == 19
-    assert model.n_periods == 45
+    assert model.n_periods == 46
 
 
 def test_aca_nongroup_inelig_has_real_functions() -> None:

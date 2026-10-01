@@ -10,7 +10,7 @@ from collections.abc import Callable
 import jax.numpy as jnp
 from lcm import Regime
 from lcm.solvers import DCEGM, NBEGM
-from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
+from lcm.typing import Age, BoolND, DiscreteAction, DiscreteState, FloatND, Period
 
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
@@ -48,11 +48,12 @@ def _make_transition_canwork(
     def transition(
         age: Age,
         period: Period,
+        health: DiscreteState,
         labor_supply: DiscreteAction,
         is_medicaid_eligible: BoolND,
         survival_probs: FloatND,
     ) -> FloatND:
-        sp = survival_probs[period]
+        sp = survival_probs[period, health]
         next_age = age + 1
         mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
         target = select_target_for_age(next_age, mc_next, own)
