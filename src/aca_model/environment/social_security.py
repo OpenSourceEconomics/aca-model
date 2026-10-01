@@ -600,8 +600,19 @@ def next_aime_disabled(
         aime_kink_2,
     )
 
-    return _select_disabled_or_regular(
+    accrued_aime = _accrue_aime(
         aime=aime,
+        labor_income=labor_income,
+        period=period,
+        age=age,
+        aime_accrual_factor=aime_accrual_factor,
+        aggregate_wage_growth=aggregate_wage_growth,
+        aime_last_age_with_indexing=aime_last_age_with_indexing,
+        aime_kink_2=aime_kink_2,
+        ratio_lowest_earnings=ratio_lowest_earnings,
+    )
+    return _select_disabled_or_regular(
+        accrued_aime=accrued_aime,
         regular=regular,
         period=period,
         age=age,
@@ -662,8 +673,19 @@ def next_aime_disabled_plain(
         aime_kink_2,
     )
 
-    return _select_disabled_or_regular(
+    accrued_aime = _accrue_aime(
         aime=aime,
+        labor_income=labor_income,
+        period=period,
+        age=age,
+        aime_accrual_factor=aime_accrual_factor,
+        aggregate_wage_growth=aggregate_wage_growth,
+        aime_last_age_with_indexing=aime_last_age_with_indexing,
+        aime_kink_2=aime_kink_2,
+        ratio_lowest_earnings=ratio_lowest_earnings,
+    )
+    return _select_disabled_or_regular(
+        accrued_aime=accrued_aime,
         regular=regular,
         period=period,
         age=age,
@@ -676,7 +698,7 @@ def next_aime_disabled_plain(
 
 def _select_disabled_or_regular(
     *,
-    aime: ContinuousState,
+    accrued_aime: FloatND,
     regular: FloatND,
     period: Period,
     age: Age,
@@ -687,14 +709,16 @@ def _select_disabled_or_regular(
 ) -> ContinuousState:
     """Route the disabled DI-continuity AIME against the non-disabled AIME.
 
-    The disabled path reads the un-baked `aime`, scaling it so the DI dropout-year
-    factor change leaves the benefit unchanged. At the Medicare transition it
-    switches to the dropout-adjusted AIME (OA from then on).
+    The disabled path starts from the un-baked AIME after indexing and labor
+    accrual, the same accrual as for anyone else, and scales it so the DI
+    dropout-year factor change alone leaves the benefit unchanged. At the
+    Medicare transition it switches to the dropout-adjusted AIME (OA from then
+    on).
     """
     disabled_next = jnp.where(
         age + 1 < medicare_age,
-        aime * di_dropout_next_period_ratio[period],
-        aime * di_dropout_scale[period],
+        accrued_aime * di_dropout_next_period_ratio[period],
+        accrued_aime * di_dropout_scale[period],
     )
     is_disabled = health == 0
     return jnp.where(is_disabled, disabled_next, regular)
