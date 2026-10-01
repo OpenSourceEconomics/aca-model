@@ -125,6 +125,7 @@ def test_imputed_benefit_round_trips_through_wealth() -> None:
 def test_pension_accrual_no_income() -> None:
     result = pensions.accrual(
         labor_income=jnp.array(-1000.0),
+        age=jnp.int32(60),
         period=jnp.int32(20),
         his=jnp.int32(0),
         accrual_intercept=ACCRUAL_INTERCEPT,
@@ -139,6 +140,7 @@ def test_pension_accrual_no_income() -> None:
 def test_pension_accrual_positive() -> None:
     result = pensions.accrual(
         labor_income=jnp.array(10000.0),
+        age=jnp.int32(60),
         period=jnp.int32(20),
         his=jnp.int32(0),
         accrual_intercept=ACCRUAL_INTERCEPT,

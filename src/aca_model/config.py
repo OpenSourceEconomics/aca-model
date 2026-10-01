@@ -17,6 +17,9 @@ class ModelConfig:
     ss_forced_age: int = 70
     work_forced_out_age: int = 72
     medicare_age: int = 65
+    # Pension benefits must be drawn from this age on; pension wealth no longer
+    # accrues from earnings.
+    pension_must_receive_age: int = 71
 
 
 @dataclass(frozen=True)

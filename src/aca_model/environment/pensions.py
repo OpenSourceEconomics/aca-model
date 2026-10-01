@@ -4,7 +4,9 @@ Ported from struct-ret/src/model/baseline/soc_sec_pensions_taxes.py.
 """
 
 import jax.numpy as jnp
-from lcm.typing import FloatND, IntND, Period, ScalarFloat
+from lcm.typing import Age, FloatND, IntND, Period, ScalarFloat
+
+from aca_model.config import MODEL_CONFIG
 
 
 def full_benefit(
@@ -106,6 +108,7 @@ def total_to_pia(
 
 def accrual(
     labor_income: FloatND,
+    age: Age,
     period: Period,
     his: IntND,
     accrual_intercept: FloatND,
@@ -119,6 +122,9 @@ def accrual(
     Accrual has two components:
     - Accrual rate among holders (linear in log earnings)
     - Probability of accrual (logistic in log earnings)
+
+    Accrual stops at `MODEL_CONFIG.pension_must_receive_age`, from which
+    pension benefits must be drawn.
     """
     lli = jnp.log(jnp.maximum(1.0, labor_income))
 
@@ -134,7 +140,8 @@ def accrual(
     )
     prob = jnp.exp(logit) / (1.0 + jnp.exp(logit))
 
-    return jnp.where(labor_income > 0.0, rate * prob * labor_income, 0.0)
+    accrues = (labor_income > 0.0) & (age < MODEL_CONFIG.pension_must_receive_age)
+    return jnp.where(accrues, rate * prob * labor_income, 0.0)
 
 
 def wealth(

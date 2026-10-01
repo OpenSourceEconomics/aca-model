@@ -126,7 +126,11 @@ def test_zero_adjustment_when_his_unchanged() -> None:
         period=PERIOD,
     )
     accrual_val = pensions.accrual(
-        labor_income=labor_income, period=PERIOD, his=his, **ACCRUAL_KWARGS
+        labor_income=labor_income,
+        age=jnp.int32(60),
+        period=PERIOD,
+        his=his,
+        **ACCRUAL_KWARGS,
     )
 
     next_exact = pensions.wealth_next_before_adjustment(
@@ -173,7 +177,11 @@ def test_rebalancing_preserves_total_wealth_across_his_change() -> None:
         period=PERIOD,
     )
     accrual_val = pensions.accrual(
-        labor_income=labor_income, period=PERIOD, his=old_his, **ACCRUAL_KWARGS
+        labor_income=labor_income,
+        age=jnp.int32(60),
+        period=PERIOD,
+        his=old_his,
+        **ACCRUAL_KWARGS,
     )
 
     next_exact = pensions.wealth_next_before_adjustment(
@@ -224,7 +232,11 @@ def _solve_phase_adjustment_across_his_change() -> jnp.ndarray:
         period=PERIOD,
     )
     accrual_val = pensions.accrual(
-        labor_income=labor_income, period=PERIOD, his=old_his, **ACCRUAL_KWARGS
+        labor_income=labor_income,
+        age=jnp.int32(60),
+        period=PERIOD,
+        his=old_his,
+        **ACCRUAL_KWARGS,
     )
     next_exact = pensions.wealth_next_before_adjustment(
         pension_wealth=pw_old,
