@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from aca_model.aca import health_insurance as aca_health_insurance
 from aca_model.baseline import health_insurance
 from aca_model.baseline.health_insurance import BuyPrivate
 from aca_model.baseline.regimes import _nongroup
@@ -210,3 +211,26 @@ def test_nongroup_regimes_constrain_private_cover_to_paid_premiums(
     assert {name: func.__name__ for name, func in constraints.items()} == {
         name: name for name in expected
     }
+
+
+@pytest.mark.parametrize(
+    ("is_married", "expected"),
+    [
+        (0, 1109.843 + (10000.0 - 1109.843) * 0.1774133),
+        (1, 2219.686 + (10000.0 - 2219.686) * 0.1774133),
+    ],
+)
+def test_aca_primary_oop_doubles_couples_deductible_and_oop_max(
+    is_married: int, expected: float
+) -> None:
+    """Under the ACA plan too, couples' deductible and OOP maximum double."""
+    result = aca_health_insurance.primary_oop(
+        total_health_costs=jnp.asarray(10000.0),
+        cost_sharing_scale=jnp.asarray(1.0),
+        buy_private=jnp.array(BuyPrivate.yes),
+        is_married=jnp.int32(is_married),
+        deductible=jnp.asarray(1109.843),
+        coinsurance_rate=jnp.asarray(0.1774133),
+        oop_max=jnp.asarray(6500.0),
+    )
+    np.testing.assert_allclose(result, expected, atol=1e-6)
