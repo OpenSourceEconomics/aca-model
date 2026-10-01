@@ -64,7 +64,7 @@ def test_scaled_bequest_weight_positive() -> None:
         consumption_weight=CONSUMPTION_WEIGHT,
         coefficient_rra=jnp.asarray(5.0),
         time_endowment=TIME_ENDOWMENT,
-        time_discount_factor=TIME_DISCOUNT_FACTOR,
+        discount_factor=TIME_DISCOUNT_FACTOR,
         rate_of_return=RATE_OF_RETURN,
     )
     assert jnp.isclose(result, 0.820_137_639_127_977_3, rtol=1e-6)
@@ -76,7 +76,7 @@ def test_scaled_bequest_weight_log() -> None:
         consumption_weight=CONSUMPTION_WEIGHT,
         coefficient_rra=jnp.asarray(1.0),
         time_endowment=TIME_ENDOWMENT,
-        time_discount_factor=TIME_DISCOUNT_FACTOR,
+        discount_factor=TIME_DISCOUNT_FACTOR,
         rate_of_return=RATE_OF_RETURN,
     )
     assert jnp.isclose(result, 58.235_294_117_647_05, rtol=1e-6)
@@ -88,7 +88,7 @@ def test_scaled_bequest_weight_zero() -> None:
         consumption_weight=CONSUMPTION_WEIGHT,
         coefficient_rra=jnp.asarray(5.0),
         time_endowment=TIME_ENDOWMENT,
-        time_discount_factor=TIME_DISCOUNT_FACTOR,
+        discount_factor=TIME_DISCOUNT_FACTOR,
         rate_of_return=RATE_OF_RETURN,
     )
     assert result == 0.0
@@ -179,7 +179,7 @@ def test_bequest_log_regression() -> None:
         consumption_weight=CONSUMPTION_WEIGHT,
         coefficient_rra=jnp.asarray(1.0),
         time_endowment=TIME_ENDOWMENT,
-        time_discount_factor=TIME_DISCOUNT_FACTOR,
+        discount_factor=TIME_DISCOUNT_FACTOR,
         rate_of_return=RATE_OF_RETURN,
     )
     result = preferences.bequest(
@@ -207,7 +207,7 @@ def test_bequest_crra_regression() -> None:
         consumption_weight=CONSUMPTION_WEIGHT,
         coefficient_rra=jnp.asarray(5.0),
         time_endowment=TIME_ENDOWMENT,
-        time_discount_factor=TIME_DISCOUNT_FACTOR,
+        discount_factor=TIME_DISCOUNT_FACTOR,
         rate_of_return=RATE_OF_RETURN,
     )
     result = preferences.bequest(
@@ -244,7 +244,7 @@ def test_bequest_uses_signed_assets_for_indebted_decedent() -> None:
         consumption_weight=consumption_weight,
         coefficient_rra=coefficient_rra,
         time_endowment=TIME_ENDOWMENT,
-        time_discount_factor=TIME_DISCOUNT_FACTOR,
+        discount_factor=TIME_DISCOUNT_FACTOR,
         rate_of_return=RATE_OF_RETURN,
     )
     result = preferences.bequest(
@@ -288,7 +288,7 @@ def test_bequest_floors_estate_base_when_debt_exceeds_the_shifter() -> None:
         consumption_weight=consumption_weight,
         coefficient_rra=coefficient_rra,
         time_endowment=TIME_ENDOWMENT,
-        time_discount_factor=TIME_DISCOUNT_FACTOR,
+        discount_factor=TIME_DISCOUNT_FACTOR,
         rate_of_return=RATE_OF_RETURN,
     )
     result = preferences.bequest(
@@ -350,7 +350,7 @@ def test_dead_regime_bequest_uses_per_type_transformed_weight(
     utility = _dead_regime_utility()
     result = utility(
         assets=jnp.asarray(100_000.0),
-        pref_type=jnp.asarray(pref_type),
+        pref_type=jnp.asarray(pref_type, dtype=jnp.int32),
         bequest_shifter=jnp.asarray(334460.20744719007),
         bequest_weight=jnp.asarray(0.02861082652580584),
         consumption_weights=_DRAFT_CONSUMPTION_WEIGHTS,
