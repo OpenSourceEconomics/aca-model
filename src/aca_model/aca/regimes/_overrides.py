@@ -24,9 +24,11 @@ def apply_aca_overrides(
       under-65 MAGI expansion) installed on all regimes. The expansion arm is
       internally scoped to the under-65 population, disabled or not, so only
       post-65 households keep the categorical track with its asset test.
-    - **Subsidies**: premium credits, cost-sharing reductions, and their
-      consuming functions (nongroup+nomc only). All mask to their neutral
-      value when Medicaid-eligible (minimum-essential coverage).
+    - **Subsidies**: the reformed non-group market (nongroup+nomc only): the
+      community-rated plan premium, premium credits, cost-sharing
+      reductions, and their consuming functions. Credits and cost-sharing
+      mask to their neutral value when Medicaid-eligible (minimum-essential
+      coverage).
     - **Mandate**: individual mandate penalty (nongroup+nomc only, requires
       subsidies), waived when Medicaid-eligible.
     """
@@ -48,6 +50,7 @@ def apply_aca_overrides(
             functions["mandate_penalty"] = aca_hi.mandate_penalty
         # No mandate: mandate_penalty is a fixed param (0.0) in the params
         # dict, not a DAG function — no entry needed here.
+        functions["plan_premium"] = aca_hi.community_rated_premium
         functions["hic_premium_subsidy"] = aca_hi.premium_subsidy
         functions["cost_sharing_scale"] = aca_hi.cost_sharing
         functions["premium_default"] = aca_hi.premium_default
