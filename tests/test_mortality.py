@@ -42,7 +42,7 @@ def _tied(health: int) -> jnp.ndarray:
         period=jnp.int32(4),
         health=jnp.int32(health),
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
 
@@ -54,7 +54,7 @@ def _retiree(health: int) -> jnp.ndarray:
         period=jnp.int32(4),
         health=jnp.int32(health),
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
 
@@ -65,7 +65,7 @@ def _retiree_forcedout(health: int) -> jnp.ndarray:
         age=jnp.int32(80),
         period=jnp.int32(29),
         health=jnp.int32(health),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
 
