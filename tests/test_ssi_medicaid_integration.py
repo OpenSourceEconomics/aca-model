@@ -175,6 +175,7 @@ def test_medicaid_reduces_oop() -> None:
     oop_medicaid = combined(
         total_health_costs=jnp.array(10000.0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_married=jnp.int32(0),
         deductible=jnp.asarray(500.0),
         coinsurance_rate=jnp.asarray(0.2),
         oop_max=jnp.asarray(5000.0),
@@ -188,6 +189,7 @@ def test_medicaid_reduces_oop() -> None:
     oop_no_medicaid = combined(
         total_health_costs=jnp.array(10000.0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_married=jnp.int32(0),
         deductible=jnp.asarray(500.0),
         coinsurance_rate=jnp.asarray(0.2),
         oop_max=jnp.asarray(5000.0),

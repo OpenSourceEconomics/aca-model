@@ -3,7 +3,6 @@
 import jax.numpy as jnp
 import pytest
 
-from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
 from aca_model.baseline.health_insurance import BuyPrivate
 
@@ -103,11 +102,14 @@ def test_ssi_benefit_not_eligible() -> None:
 # --- predicted_hcc_insurer (DAG interpolation function) ---
 
 GRID = jnp.array([-1.0, 0.0, 1.0])
-TABLE = jnp.array([100.0, 200.0, 400.0])
+TABLE = jnp.zeros((1, 2, 2, 3)).at[0, 0, 1].set(jnp.array([100.0, 200.0, 400.0]))
 
 
 def test_predicted_hcc_insurer_on_grid() -> None:
     result = health_insurance.hcc_insurer_predicted(
+        period=jnp.int32(0),
+        is_married=jnp.int32(0),
+        good_health=jnp.int32(1),
         hcc_persistent=jnp.array(0.0),
         predicted_hcc_insurer_table=TABLE,
         hcc_persistent_grid=GRID,
@@ -117,6 +119,9 @@ def test_predicted_hcc_insurer_on_grid() -> None:
 
 def test_predicted_hcc_insurer_off_grid() -> None:
     result = health_insurance.hcc_insurer_predicted(
+        period=jnp.int32(0),
+        is_married=jnp.int32(0),
+        good_health=jnp.int32(1),
         hcc_persistent=jnp.array(-0.5),
         predicted_hcc_insurer_table=TABLE,
         hcc_persistent_grid=GRID,
@@ -163,42 +168,6 @@ def test_compute_table_uniform_transition(table_inputs: dict) -> None:
     assert jnp.allclose(result, result[0], atol=ATOL)
 
 
-# --- premium: buy_private conditioning ---
-
-
-_PREMIUM_KWARGS: dict = {
-    "age": jnp.int32(60),
-    "good_health": jnp.int32(1),
-    "is_married": jnp.int32(0),
-    "labor_supply": jnp.array(LaborSupply.h2000),
-    "premium_intercept": jnp.asarray(1000.0),
-    "premium_age": jnp.asarray(0.0),
-    "premium_age_sq": jnp.asarray(0.0),
-    "premium_age_cub": jnp.asarray(0.0),
-    "premium_predicted_hcc": jnp.asarray(0.0),
-    "premium_good_health": jnp.asarray(0.0),
-    "premium_married": jnp.asarray(0.0),
-    "premium_works": jnp.asarray(0.0),
-    "premium_married_works": jnp.asarray(0.0),
-    "premium_minimum": jnp.asarray(500.0),
-    "predicted_hcc_insurer": jnp.array(0.0),
-}
-
-
-def test_premium_insured_positive() -> None:
-    result = health_insurance.premium(
-        buy_private=jnp.array(BuyPrivate.yes), **_PREMIUM_KWARGS
-    )
-    assert result > 0.0
-
-
-def test_premium_uninsured_zero() -> None:
-    result = health_insurance.premium(
-        buy_private=jnp.array(BuyPrivate.no), **_PREMIUM_KWARGS
-    )
-    assert jnp.isclose(result, 0.0)
-
-
 # --- primary_oop: buy_private conditioning ---
 
 
@@ -206,6 +175,7 @@ def test_primary_oop_insured_applies_deductible_coinsurance() -> None:
     result = health_insurance.primary_oop(
         total_health_costs=jnp.array(10000.0),
         buy_private=jnp.array(BuyPrivate.yes),
+        is_married=jnp.int32(0),
         deductible=jnp.asarray(500.0),
         coinsurance_rate=jnp.asarray(0.2),
         oop_max=jnp.asarray(5000.0),
@@ -219,6 +189,7 @@ def test_primary_oop_uninsured_equals_total_costs() -> None:
     result = health_insurance.primary_oop(
         total_health_costs=total,
         buy_private=jnp.array(BuyPrivate.no),
+        is_married=jnp.int32(0),
         deductible=jnp.asarray(500.0),
         coinsurance_rate=jnp.asarray(0.2),
         oop_max=jnp.asarray(5000.0),

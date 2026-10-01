@@ -92,6 +92,7 @@ def test_baseline_primary_oop_no_cost_sharing_scale() -> None:
     result = health_insurance.primary_oop(
         total_health_costs=costs,
         buy_private=jnp.array(BuyPrivate.yes),
+        is_married=jnp.int32(0),
         deductible=deductible,
         coinsurance_rate=coinsurance,
         oop_max=oop_max_val,
