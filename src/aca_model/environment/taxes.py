@@ -178,3 +178,43 @@ def _payroll_tax(
         taxes_at_lower[bracket_id]
         + (labor_income - bracket_lower) * marginal_rates[bracket_id]
     )
+
+
+# ACA surtaxes (the 2013 net investment income tax and additional Medicare tax).
+ACA_INVESTMENT_SURTAX_RATE = 0.038
+ACA_INVESTMENT_SURTAX_THRESHOLD = 200_000.0
+ACA_PAYROLL_SURTAX_RATE = 0.009
+ACA_PAYROLL_SURTAX_THRESHOLD = 200_000.0
+
+
+def after_tax_income_with_aca_surtaxes(
+    after_tax_income_before_aca_surtaxes: FloatND,
+    gross_income: FloatND,
+    labor_income: FloatND,
+) -> FloatND:
+    """Subtract both ACA surtaxes from after-tax income.
+
+    - 3.8% on unearned income (`gross_income - labor_income`: asset income,
+      spousal income, taxable SS benefits and pension benefits) above 200,000;
+    - 0.9% on earnings above 200,000.
+    """
+    unearned_income = gross_income - labor_income
+    return (
+        after_tax_income_before_aca_surtaxes
+        - ACA_INVESTMENT_SURTAX_RATE
+        * jnp.maximum(0.0, unearned_income - ACA_INVESTMENT_SURTAX_THRESHOLD)
+        - ACA_PAYROLL_SURTAX_RATE
+        * jnp.maximum(0.0, labor_income - ACA_PAYROLL_SURTAX_THRESHOLD)
+    )
+
+
+def after_tax_income_with_aca_investment_surtax(
+    after_tax_income_before_aca_surtaxes: FloatND,
+    gross_income: FloatND,
+    labor_income: FloatND,
+) -> FloatND:
+    """Subtract the 3.8% ACA surtax on unearned income above 200,000."""
+    unearned_income = gross_income - labor_income
+    return after_tax_income_before_aca_surtaxes - ACA_INVESTMENT_SURTAX_RATE * (
+        jnp.maximum(0.0, unearned_income - ACA_INVESTMENT_SURTAX_THRESHOLD)
+    )
