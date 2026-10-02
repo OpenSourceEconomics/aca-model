@@ -14,7 +14,6 @@ import pytest
 from helpers.model import _DERIVED_CATEGORICALS
 from lcm import DiscreteGrid, IrregSpacedGrid, Model, Regime
 from lcm.consumption_savings_regime import ConsumptionSavingsRegime
-from lcm.exceptions import ModelInitializationError
 from lcm.solvers import DCEGM
 
 from aca_model.agent import assets_and_income
@@ -144,14 +143,6 @@ def test_benchmark_consumption_points_pin_both_floors() -> None:
     np.testing.assert_allclose(points[:2], [floor, floor * 2.0**exponent], rtol=1e-12)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ModelInitializationError,
-    reason=(
-        "DC-EGM carries only deterministically reached discrete states into a "
-        "terminal target, and `dead` keeps the medical-cost shock states"
-    ),
-)
 def test_dcegm_benchmark_model_builds() -> None:
     """The benchmark model accepts `solver="dcegm"` end to end."""
     model = create_model(

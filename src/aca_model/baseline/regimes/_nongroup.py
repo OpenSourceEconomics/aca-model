@@ -22,7 +22,7 @@ from aca_model.baseline.regimes._common import (
     build_pension_functions,
     build_regime_probs,
     build_regime_probs_with_di_medicare,
-    build_scheduled_regime_transition,
+    build_regime_transition,
     build_state_transitions,
     build_states,
     make_targets,
@@ -170,7 +170,7 @@ def build_regime(
         functions = {**functions, **build_nbegm_functions()}
     return build_alive_regime(
         egm_solver=egm_solver,
-        regime_transitions=build_scheduled_regime_transition(
+        regime_transitions=build_regime_transition(
             spec=spec, transition_func=transition_func, target_groups=(own,)
         ),
         states=states,

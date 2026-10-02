@@ -20,7 +20,7 @@ import pytest
 from helpers.model import _DERIVED_CATEGORICALS, aca_fixed_params
 from lcm import DiscreteGrid, Model, Regime
 from lcm.consumption_savings_regime import ConsumptionSavingsRegime, LiquidMargin
-from lcm.exceptions import ModelInitializationError, RegimeInitializationError
+from lcm.exceptions import RegimeInitializationError
 from lcm.solvers import NBEGM
 
 from aca_model.aca import PolicyVariant
@@ -51,16 +51,6 @@ _BRUTE_REGIME = "retiree_nomc_inelig_canwork"
 # two cannot both satisfy, so a regime carrying `labor_supply` needs the bridged read.
 _BRIDGED_GRID_CONFIG = dataclasses.replace(
     BENCHMARK_GRID_CONFIG, nbegm_jump_read="bridged"
-)
-
-# NBEGM compiles only constraints with a boundary on the liquid state, so it refuses
-# the always-true `medical_cost_shocks_carried` constraint that keeps the lagged
-# medical-cost shock states. A model that realises medical costs after the period's
-# choices therefore does not build under NBEGM.
-_REFUSES_POST_CHOICE_MEDICAL_COSTS = pytest.mark.xfail(
-    strict=True,
-    raises=ModelInitializationError,
-    reason="NBEGM cannot compile the constraint keeping the medical-cost shock states",
 )
 
 
@@ -179,7 +169,6 @@ def test_nbegm_m1_regime_declares_both_discrete_actions() -> None:
     assert discrete == {"buy_private", "labor_supply"}
 
 
-@_REFUSES_POST_CHOICE_MEDICAL_COSTS
 def test_nbegm_model_builds_a_regime_declaring_several_discrete_actions() -> None:
     """The M1 regime builds under NBEGM with both of its discrete actions live.
 
@@ -212,7 +201,6 @@ def test_nbegm_m1_regime_takes_the_savings_form_assets_laws() -> None:
         assert law is expected, target_name
 
 
-@_REFUSES_POST_CHOICE_MEDICAL_COSTS
 def test_nbegm_gives_every_living_regime_the_savings_form_budget() -> None:
     """Under NBEGM every living regime carries `resources` and `savings`.
 
@@ -229,7 +217,6 @@ def test_nbegm_gives_every_living_regime_the_savings_form_budget() -> None:
     assert missing == []
 
 
-@_REFUSES_POST_CHOICE_MEDICAL_COSTS
 def test_nbegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
     """NBEGM inverts the Euler equation internally, so the M1 regime never
     carries the DC-EGM `inverse_marginal_utility` function (whose
@@ -239,7 +226,6 @@ def test_nbegm_m1_regime_does_not_carry_inverse_marginal_utility() -> None:
     assert "inverse_marginal_utility" not in model.user_regimes[_M1_REGIME].functions
 
 
-@_REFUSES_POST_CHOICE_MEDICAL_COSTS
 def test_nbegm_m1_regime_keeps_the_borrowing_constraint() -> None:
     """The M1 regime declares the borrowing constraint like every brute regime.
 
@@ -292,7 +278,6 @@ def test_ssi_benefit_declares_the_income_test_kink() -> None:
     assert income_test.indexed_by == "spousal_income"
 
 
-@_REFUSES_POST_CHOICE_MEDICAL_COSTS
 def test_nbegm_labor_supply_requires_the_bridged_cliff_read() -> None:
     """The M1 regime builds under NBEGM only with `nbegm_jump_read="bridged"`.
 
@@ -307,7 +292,6 @@ def test_nbegm_labor_supply_requires_the_bridged_cliff_read() -> None:
     assert isinstance(_build_model_with("nbegm", _BRIDGED_GRID_CONFIG), Model)
 
 
-@_REFUSES_POST_CHOICE_MEDICAL_COSTS
 @pytest.mark.parametrize("policy", list(PolicyVariant))
 def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     """Every ACA policy variant builds a model under NBEGM with the M1 regime on
@@ -336,7 +320,6 @@ def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     assert "labor_supply" in regimes[_M1_REGIME].actions
 
 
-@_REFUSES_POST_CHOICE_MEDICAL_COSTS
 @pytest.mark.parametrize("policy", list(PolicyVariant))
 def test_nbegm_aca_variants_leave_no_free_buy_private_params(
     policy: PolicyVariant,

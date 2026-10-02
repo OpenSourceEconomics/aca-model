@@ -22,7 +22,7 @@ from aca_model.baseline.regimes import _retiree as retiree
 from aca_model.baseline.regimes import _tied as tied
 from aca_model.baseline.regimes._common import (
     ENTRY_REGIMES,
-    INITIAL_REGIMES,
+    INITIAL_NODES,
     REGIME_SPECS,
     Grids,
     RegimeId,
@@ -30,6 +30,7 @@ from aca_model.baseline.regimes._common import (
     build_dead_regime,
     build_grids,
     build_model_constraints,
+    build_model_edges,
     build_model_functions,
     build_model_state_transitions,
     build_model_states,
@@ -40,7 +41,7 @@ from aca_model.config import GridConfig
 
 __all__ = [
     "ENTRY_REGIMES",
-    "INITIAL_REGIMES",
+    "INITIAL_NODES",
     "REGIME_SPECS",
     "RegimeId",
     "build_all_regimes",
@@ -128,9 +129,9 @@ def build_model_slots(
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
 ) -> dict[str, Any]:
-    """Build the model-level regime slots broadcast into every regime.
+    """Build the shared model topology and broadcast regime slots.
 
-    Returns keyword arguments for `lcm.Model(...)`: the functions,
+    Returns keyword arguments for `lcm.Model(...)`: the edges, functions,
     constraint, states, and laws of motion shared by all living regimes.
     Both the baseline and the ACA `create_model` consume this — the ACA
     overlay swaps only regime-level functions, so the broadcast slots are
@@ -144,6 +145,7 @@ def build_model_slots(
         pref_type_grid=pref_type_grid,
     )
     return {
+        "edges": build_model_edges(),
         "functions": build_model_functions(solver=solver),
         "constraints": build_model_constraints(solver=solver),
         "states": build_model_states(grids),

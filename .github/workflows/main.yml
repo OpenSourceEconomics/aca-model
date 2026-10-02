@@ -35,7 +35,7 @@ jobs:
         # install; move it together with the aca-dev pylcm submodule pointer.
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@f2b97fbb96dac55782adb940cc9f669a5b10d259"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@93d96bf11eb754d0e66472a7f076fee9b3bf9feb"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest

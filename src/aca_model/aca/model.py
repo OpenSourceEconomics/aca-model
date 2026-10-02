@@ -14,7 +14,7 @@ from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
 from aca_model.baseline.model import _fail_if_dcegm_without_consumption_points
 from aca_model.baseline.regimes import (
-    INITIAL_REGIMES,
+    INITIAL_NODES,
     RegimeId,
     SolverName,
     build_model_slots,
@@ -91,7 +91,7 @@ def create_model(
 
     return Model(
         regimes=regimes,
-        initial_regimes=INITIAL_REGIMES,
+        initial_nodes=INITIAL_NODES,
         ages=ages,
         regime_id_class=RegimeId,
         description=f"Structural retirement model ({policy.name})",

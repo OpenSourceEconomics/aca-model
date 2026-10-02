@@ -23,22 +23,22 @@ def test_initial_nodes_are_the_age_51_to_60_entry_regimes(model):
         for age in range(MODEL_CONFIG.start_age, MODEL_CONFIG.last_start_age + 1)
         for regime in ENTRY_REGIMES
     }
-    assert {(float(a), r) for a, r in model.initial_nodes} == {
+    assert {(float(a), r) for a, r in model.graph.initial_nodes} == {
         (float(a), r) for a, r in expected
     }
 
 
 def test_solved_domain_has_184_nodes(model):
-    assert len(model.reachability.nodes) == 184
+    assert len(model.graph.nodes) == 184
 
 
 def test_dead_at_the_first_age_is_not_solved(model):
-    assert (51, "dead") not in model.reachability.nodes
+    assert (51, "dead") not in model.graph.nodes
 
 
 def test_later_living_nodes_are_solved_but_not_admissible(model):
     node = (64, "retiree_nomc_choose_canwork")
-    assert (node in model.reachability.nodes, node in model.initial_nodes) == (
+    assert (node in model.graph.nodes, node in model.graph.initial_nodes) == (
         True,
         False,
     )
@@ -70,40 +70,45 @@ def test_simulate_rejects_starts_outside_the_entry_contract(model, age, regime):
         model.simulate(params=params, initial_conditions=ic, log_level="off")
 
 
-def test_boundary_targets_change_but_numeric_cells_are_shared(model):
-    schedule = model.user_regimes[
-        "retiree_nomc_inelig_canwork"
-    ].regime_transitions.resolve(model.ages)
-    assert set(schedule.at(60)) == {
+def test_boundary_targets_change_with_source_age(model):
+    assert set(
+        model.graph.solution.targets(period=9, source="retiree_nomc_inelig_canwork")
+    ) == {
         "retiree_nomc_inelig_canwork",
         "retiree_dimc_inelig_canwork",
         "nongroup_nomc_inelig_canwork",
         "nongroup_dimc_inelig_canwork",
         "dead",
     }
-    assert set(schedule.at(61)) == {
+    assert set(
+        model.graph.solution.targets(period=10, source="retiree_nomc_inelig_canwork")
+    ) == {
         "retiree_nomc_choose_canwork",
         "retiree_dimc_choose_canwork",
         "nongroup_nomc_choose_canwork",
         "nongroup_dimc_choose_canwork",
         "dead",
     }
-    assert schedule.at(60)["dead"] is schedule.at(61)["dead"]
+    edges = model.graph.edges.solve["retiree_nomc_inelig_canwork"]
+    assert (
+        60 in edges["retiree_nomc_inelig_canwork"],
+        61 in edges["retiree_nomc_inelig_canwork"],
+    ) == (True, False)
 
 
 def test_bequest_continuation_is_not_removed(model):
     regime = model.user_regimes["retiree_oamc_forced_forcedout"]
-    assert set(regime.regime_transitions.resolve(model.ages).at(95)) == {"dead"}
+    assert model.graph.solution.targets(
+        period=44, source="retiree_oamc_forced_forcedout"
+    ) == ("dead",)
     assert "consumption_dollars" in regime.actions
-    assert (95, "retiree_oamc_forced_forcedout") in model.reachability.nodes
-    assert (96, "dead") in model.reachability.nodes
+    assert (95, "retiree_oamc_forced_forcedout") in model.graph.nodes
+    assert (96, "dead") in model.graph.nodes
 
 
 def test_terminal_regime_keeps_the_original_none_declaration(model):
     assert model.user_regimes["dead"].regime_transitions is None
-    assert {
-        (age, "dead") for age in model.ages.exact_values[1:]
-    } <= model.reachability.nodes
+    assert {(age, "dead") for age in model.ages.exact_values[1:]} <= model.graph.nodes
 
 
 def test_select_admissible_starts_drops_starts_at_61_and_above(model):
@@ -117,3 +122,13 @@ def test_select_admissible_starts_drops_starts_at_61_and_above(model):
     )
     kept = select_admissible_starts(model=model, initial_conditions=ic)
     assert list(kept.index) == [1]
+
+
+def test_medical_cost_draws_keep_living_states_without_choice_constraints(model):
+    """Living regimes carry medical shocks; bequests depend only on assets and type."""
+    for name, regime in model.user_regimes.items():
+        assert "medical_cost_shocks_carried" not in regime.constraints
+        if name == "dead":
+            assert set(regime.states) == {"assets", "pref_type"}
+        else:
+            assert {"hcc_persistent", "hcc_transitory"} <= set(regime.states)

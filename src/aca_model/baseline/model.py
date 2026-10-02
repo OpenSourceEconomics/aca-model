@@ -17,7 +17,7 @@ from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, Model
 from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import (
-    INITIAL_REGIMES,
+    INITIAL_NODES,
     RegimeId,
     SolverName,
     build_all_regimes,
@@ -102,7 +102,7 @@ def create_model(
 
     return Model(
         regimes=regimes,
-        initial_regimes=INITIAL_REGIMES,
+        initial_nodes=INITIAL_NODES,
         ages=ages,
         regime_id_class=RegimeId,
         description="Baseline structural retirement model (pre-ACA)",

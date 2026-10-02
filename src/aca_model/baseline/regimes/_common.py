@@ -14,18 +14,16 @@ from typing import Any, Literal, TypedDict
 import jax.numpy as jnp
 import numpy as np
 from lcm import (
-    AgeRange,
-    ByAge,
     DiscreteGrid,
     GridBreakpoint,
     IrregSpacedGrid,
     LinSpacedGrid,
-    MarkovTransition,
     NormalIIDProcess,
     Phased,
     PiecewiseLinSpacedGrid,
     Regime,
     RouwenhorstAR1Process,
+    StochasticTransition,
     categorical,
     fixed_transition,
 )
@@ -38,7 +36,7 @@ from lcm.solvers import OneMarginSolver
 from lcm.typing import (
     BoolND,
     FloatND,
-    InitialRegimes,
+    InitialNodes,
     IntND,
     Period,
     RegimeName,
@@ -495,8 +493,11 @@ ENTRY_REGIMES = (
 # Admissible starting (age, regime) pairs, shared by every model variant: the
 # baseline estimation-sample ages. Later ages, and `dead` at any age, are reached only
 # through transitions.
-INITIAL_REGIMES: InitialRegimes = MappingProxyType(
-    {AgeRange(start=config.start_age, stop=config.last_start_age + 1): ENTRY_REGIMES}
+INITIAL_NODES: InitialNodes = tuple(
+    (age, regime)
+    for age in MODEL_AGES
+    if config.start_age <= age <= config.last_start_age
+    for regime in ENTRY_REGIMES
 )
 
 _STAGE_KEY = {
@@ -541,42 +542,48 @@ def _target_pair(next_age: int, group: dict[str, int]) -> tuple[int, int]:
     raise ValueError(f"Next age {next_age} is outside the declared stages")
 
 
-def build_scheduled_regime_transition(
+def build_regime_edges(
     *,
     spec: RegimeSpec,
-    transition_func: Callable[..., FloatND],
     target_groups: tuple[dict[str, int], ...],
-) -> ByAge:
-    """Schedule support while sharing the original numerical law and cells.
-
-    Unlike the first proposal, no boundary-specific numeric closure is made.
-    Parameter paths and global regime-code order stay unchanged. Only declared
-    target subsets vary; upstream may still need distinct continuation kernels
-    when destination schemas differ, so this is not a compile-time claim.
-    """
+) -> dict[RegimeName, tuple[int, ...]]:
+    """Map each destination to the exact source ages that can reach it."""
     # Both Medicare branches are reachable from every living regime: before 65 a
     # non-worker who becomes disabled moves onto disability Medicare.
-    grouped: dict[tuple[int, ...], list[int]] = {}
+    id_to_name = {
+        int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
+    }
+    grouped: dict[RegimeName, list[int]] = {}
     next_age_by_age = dict(itertools.pairwise(MODEL_AGES))
     for age in transition_ages(spec):
         next_age = next_age_by_age[age]
         pairs = tuple(_target_pair(next_age, group) for group in target_groups)
         supported_ids = {target for pair in pairs for target in pair}
         target_ids = tuple(sorted(supported_ids | {int(RegimeId.dead)}))
-        grouped.setdefault(target_ids, []).append(age)
-    all_ids = {i for target_ids in grouped for i in target_ids}
-    # One probability-cell wrapper per target, reused at every applicable age.
-    cells = build_granular_regime_transition(
-        transition_func=transition_func, target_ids=all_ids
-    )
-    id_to_name = {
-        int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
+        for target_id in target_ids:
+            grouped.setdefault(id_to_name[target_id], []).append(age)
+    return {target: tuple(source_ages) for target, source_ages in grouped.items()}
+
+
+def build_model_edges() -> dict[RegimeName, dict[RegimeName, tuple[int, ...]]]:
+    """Declare the policy-invariant topology of the living ACA regimes."""
+    return {
+        name: build_regime_edges(spec=spec, target_groups=make_targets(name))
+        for name, spec in REGIME_SPECS.items()
     }
-    return ByAge(
-        cases={
-            tuple(source_ages): {id_to_name[i]: cells[id_to_name[i]] for i in ids}
-            for ids, source_ages in grouped.items()
-        }
+
+
+def build_regime_transition(
+    *,
+    spec: RegimeSpec,
+    transition_func: Callable[..., FloatND],
+    target_groups: tuple[dict[str, int], ...],
+) -> dict[RegimeName, StochasticTransition]:
+    """Reuse one scalar probability cell per destination across all source ages."""
+    edges = build_regime_edges(spec=spec, target_groups=target_groups)
+    return build_granular_regime_transition(
+        transition_func=transition_func,
+        target_ids=(int(getattr(RegimeId, target)) for target in edges),
     )
 
 
@@ -675,19 +682,19 @@ def build_granular_regime_transition(
     *,
     transition_func: Callable[..., FloatND],
     target_ids: Iterable[int],
-) -> dict[RegimeName, MarkovTransition]:
-    """Declare the regime's reachable targets via per-target probability cells.
+) -> dict[RegimeName, StochasticTransition]:
+    """Build the regime's per-target probability cells.
 
     Each cell evaluates the regime's probability vector and selects its
-    target's entry — identical arithmetic to the coarse vector form, with the
-    key set making every other regime structurally unreachable.
+    target's entry. The model graph supplies the source-age support for these
+    cells.
     """
     id_to_name = {
         int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
     }
     declared = sorted({*(int(i) for i in target_ids), int(RegimeId.dead)})
     return {
-        id_to_name[target_id]: MarkovTransition(
+        id_to_name[target_id]: StochasticTransition(
             func=_prob_of_target(transition_func=transition_func, target_id=target_id)
         )
         for target_id in declared
@@ -731,10 +738,8 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
       other broadcast function is masked with `None` so its unresolvable
       inputs (e.g. `pension_benefit`) don't surface as params in the dead
       template.
-    - constraints: every broadcast constraint but `medical_cost_shocks_carried`
-      is masked — `dead` has no consumption action. That one keeps the
-      medical-cost shock states, whose draws set the final period's
-      out-of-pocket bill and hence the bequest.
+    - constraints: every broadcast constraint is masked because `dead` has no
+      consumption action.
     - `pension_wealth` is masked explicitly: a carried state is rejected in
       terminal regimes before pruning could drop it.
     """
@@ -743,11 +748,7 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
         for name in build_model_functions(solver=solver)
         if name not in _DEAD_KEEPS
     }
-    constraint_masks = dict.fromkeys(
-        name
-        for name in build_model_constraints(solver=solver)
-        if name != "medical_cost_shocks_carried"
-    )
+    constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
     return Regime(
         regime_transitions=None,
         functions={
@@ -869,9 +870,7 @@ def build_nbegm_functions() -> dict:
 def build_model_constraints(*, solver: SolverName) -> dict:
     """Build the model-level constraints broadcast into every regime.
 
-    `dead` masks every constraint except `medical_cost_shocks_carried` — it
-    has no consumption action, but its bequest integrates over the final
-    period's medical-cost shocks, so it keeps their states.
+    `dead` masks every constraint because it has no consumption action.
 
     Grid search evaluates the action-level predicates directly: the borrowing
     constraint and the household's own consumption floor. An EGM-family
@@ -886,7 +885,6 @@ def build_model_constraints(*, solver: SolverName) -> dict:
     )
     constraints = {
         "borrowing_constraint": borrowing_constraint,
-        "medical_cost_shocks_carried": health_insurance.medical_cost_shocks_carried,
     }
     if solver == "brute_force":
         constraints["consumption_floor_constraint"] = (
@@ -929,7 +927,7 @@ def build_model_state_transitions() -> dict:
     """
     return {
         "pref_type": fixed_transition("pref_type"),
-        "spousal_income": MarkovTransition(func=labor_market.next_spousal_income),
+        "spousal_income": StochasticTransition(func=labor_market.next_spousal_income),
         # Carried state: evolved only in simulate (in solve, `pension_wealth`
         # is re-imputed from AIME each period and has no transition).
         "pension_wealth": pensions.wealth_next_before_adjustment,
@@ -1249,7 +1247,7 @@ def _build_per_target_regime_assets(
 
 def _build_per_target_regime_health(
     spec: RegimeSpec,
-) -> dict[RegimeName, MarkovTransition]:
+) -> dict[RegimeName, StochasticTransition]:
     """Build per-target health transitions.
 
     Pre-65 regimes use HealthWithDisability (3-state), post-65 use Health (2-state).
@@ -1263,7 +1261,7 @@ def _build_per_target_regime_health(
     target_regimes = precompute_target_regimes(spec)
     id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
-    result: dict[RegimeName, MarkovTransition] = {}
+    result: dict[RegimeName, StochasticTransition] = {}
     seen_ids: set[int] = set()
 
     for target_id in target_regimes.values():
@@ -1275,13 +1273,17 @@ def _build_per_target_regime_health(
             continue
         target_mc = REGIME_SPECS[target_name]["mc"]
         if spec["mc"] == "oamc":
-            result[target_name] = MarkovTransition(func=health.next_health)
+            result[target_name] = StochasticTransition(func=health.next_health)
         elif target_mc == "oamc":
-            result[target_name] = MarkovTransition(func=health.next_health_cross)
+            result[target_name] = StochasticTransition(func=health.next_health_cross)
         elif target_mc == "dimc":
-            result[target_name] = MarkovTransition(func=health.next_health_into_dimc)
+            result[target_name] = StochasticTransition(
+                func=health.next_health_into_dimc
+            )
         else:
-            result[target_name] = MarkovTransition(func=health.next_health_into_nomc)
+            result[target_name] = StochasticTransition(
+                func=health.next_health_into_nomc
+            )
 
     return result
 

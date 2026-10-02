@@ -91,8 +91,8 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 - `hcc_persistent` / `hcc_transitory`: last period's health-cost shocks (Rouwenhorst
   AR(1) and Gauss-Hermite IID). Policy conditions on the lagged persistent shock, which
   predicts this period's costs and prices the private premium; nothing reads the lagged
-  transitory shock. The always-true `medical_cost_shocks_carried` constraint keeps both
-  states in every regime, `dead` included.
+  transitory shock. The draw dependencies retain both states in living regimes; `dead`
+  carries only assets and preference type.
 - Regime transitions determined by `select_target_for_age()` based on age and actions;
   death has probability `1 − survival_probs[age, health]`, a per-regime param on the
   regime's own health grid. Ages run 51–96: 95 is the last age anyone is alive (survival

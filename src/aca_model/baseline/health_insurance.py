@@ -595,19 +595,3 @@ def total_costs(
         + log_std[period, is_married, good_health]
         * (next_hcc_persistent * std_xsect_persistent + next_hcc_transitory * std_trans)
     )
-
-
-def medical_cost_shocks_carried(
-    hcc_persistent: ContinuousState,
-    hcc_transitory: ContinuousState,
-) -> BoolND:
-    """Hold for every state: the lagged medical-cost shocks restrict no choice.
-
-    A regime reads its lagged shocks only through the draws of this period's
-    shocks, which the transitions make. pylcm keeps a state in a regime only
-    when a root computation reads it, so this always-true constraint is that
-    read, in every regime, including `dead`, whose bequest integrates over the
-    shocks of the final period.
-    """
-    del hcc_persistent, hcc_transitory
-    return jnp.array(True)
