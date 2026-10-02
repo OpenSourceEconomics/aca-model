@@ -87,7 +87,7 @@ def test_factory_preserves_axis_width_validation(kind):
             ),
             400,
         ),
-        (ExecutionConfig(devices=(0,)), None),
+        (ExecutionConfig(devices=(0,)), ExecutionConfig().device_memory_bytes),
     ],
 )
 def test_factory_supplies_the_requested_or_measured_budget(
