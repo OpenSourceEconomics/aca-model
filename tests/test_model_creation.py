@@ -372,14 +372,23 @@ def test_baseline_model_creates() -> None:
 
 def test_dead_regime_prunes_unused_broadcast_states() -> None:
     """States every living regime shares are declared once at the model level;
-    `dead` keeps only what the bequest DAG reads (`assets`, `pref_type`).
+    `dead` keeps what the bequest DAG reads (`assets`, `pref_type`) and the
+    medical-cost shock states, whose draws set the final period's bill.
     `pension_wealth` is masked (carried states are illegal in terminal
     regimes); the other unused broadcast states are pruned by reachability."""
     model = make_baseline_model()
-    assert model.pruned_variables["dead"] == frozenset(
-        {"aime", "spousal_income", "hcc_persistent", "hcc_transitory"}
-    )
-    assert set(model.user_regimes["dead"].states) == {"assets", "pref_type"}
+    assert model.pruned_variables["dead"] == frozenset({"aime", "spousal_income"})
+
+
+def test_dead_regime_keeps_the_medical_cost_shock_states() -> None:
+    """`dead` carries the bequest states and the medical-cost shock states."""
+    model = make_baseline_model()
+    assert set(model.user_regimes["dead"].states) == {
+        "assets",
+        "pref_type",
+        "hcc_persistent",
+        "hcc_transitory",
+    }
 
 
 def test_living_regimes_keep_every_broadcast_state() -> None:
