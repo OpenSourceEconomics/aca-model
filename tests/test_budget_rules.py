@@ -336,6 +336,8 @@ def test_married_household_cannot_consume_below_its_own_floor(
                 consumption_dollars=jnp.asarray(consumption),
                 cash_on_hand=jnp.asarray(500.0),
                 consumption_dollars_floor=jnp.asarray(MARRIED_FLOOR),
+                hcc_persistent=jnp.asarray(0.0),
+                hcc_transitory=jnp.asarray(0.0),
             )
         )
         for constraint in constraints.values()
