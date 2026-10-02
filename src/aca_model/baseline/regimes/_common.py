@@ -35,7 +35,16 @@ from lcm.consumption_savings_regime import (
     post_decision_lower_bound,
 )
 from lcm.solvers import OneMarginSolver
-from lcm.typing import BoolND, FloatND, IntND, Period, RegimeName, ScalarInt, UserParams
+from lcm.typing import (
+    BoolND,
+    FloatND,
+    InitialRegimes,
+    IntND,
+    Period,
+    RegimeName,
+    ScalarInt,
+    UserParams,
+)
 
 from aca_model.agent import (
     assets_and_income,
@@ -451,26 +460,26 @@ def _compute_max_annual_labor_income(
 
 
 # Structural stage data, shared by scheduled support and the numerical router.
-# Intervals select existing grid points, not integer-year ranges.
+# Each stage covers the half-open age interval `[start, stop)`.
 _AGE_STAGES = (
     (
-        AgeRange(start=config.start_age, stop=config.ss_early_age),
+        (config.start_age, config.ss_early_age),
         ("nomc_inelig", "dimc_inelig"),
     ),
     (
-        AgeRange(start=config.ss_early_age, stop=config.medicare_age),
+        (config.ss_early_age, config.medicare_age),
         ("nomc_choose", "dimc_choose"),
     ),
     (
-        AgeRange(start=config.medicare_age, stop=config.ss_forced_age),
+        (config.medicare_age, config.ss_forced_age),
         ("forced_choose",) * 2,
     ),
     (
-        AgeRange(start=config.ss_forced_age, stop=config.work_forced_out_age),
+        (config.ss_forced_age, config.work_forced_out_age),
         ("forced_forced",) * 2,
     ),
     (
-        AgeRange(start=config.work_forced_out_age, stop=MODEL_AGES[-1]),
+        (config.work_forced_out_age, MODEL_AGES[-1]),
         ("forcedout",) * 2,
     ),
 )
@@ -486,7 +495,7 @@ ENTRY_REGIMES = (
 # Admissible starting (age, regime) pairs, shared by every model variant: the
 # baseline estimation-sample ages. Later ages, and `dead` at any age, are reached only
 # through transitions.
-INITIAL_REGIMES = MappingProxyType(
+INITIAL_REGIMES: InitialRegimes = MappingProxyType(
     {AgeRange(start=config.start_age, stop=config.last_start_age + 1): ENTRY_REGIMES}
 )
 
@@ -506,11 +515,9 @@ _NEXT_AGES = np.asarray([float(a) for a in MODEL_AGES[1:]])
 def transition_ages(spec: RegimeSpec) -> tuple[int, ...]:
     """Exact source coordinates at which the template declares its law."""
     key = _STAGE_KEY.get((spec["mc"], spec["ss"], spec["canwork"]))
-    for interval, branches in _AGE_STAGES:
+    for (start, stop), branches in _AGE_STAGES:
         if key in branches:
-            return tuple(
-                age for age in MODEL_AGES if interval.start <= age < interval.stop
-            )
+            return tuple(age for age in MODEL_AGES if start <= age < stop)
     raise ValueError(f"Unknown regime spec: {spec}")
 
 
@@ -526,9 +533,10 @@ def next_model_age(period: Period) -> FloatND:
 
 def _target_pair(next_age: int, group: dict[str, int]) -> tuple[int, int]:
     if next_age == MODEL_AGES[-1]:
-        return (int(RegimeId.dead),) * 2
-    for interval, branches in _AGE_STAGES:
-        if interval.start <= next_age < interval.stop:
+        dead = int(RegimeId.dead)
+        return dead, dead
+    for (start, stop), branches in _AGE_STAGES:
+        if start <= next_age < stop:
             return group[branches[0]], group[branches[1]]
     raise ValueError(f"Next age {next_age} is outside the declared stages")
 
@@ -1132,9 +1140,9 @@ def select_target_for_age(
 ) -> IntND:
     """Select with the same stage table that supplies the schedule's support."""
     result = jnp.asarray(RegimeId.dead)
-    for interval, branches in reversed(_AGE_STAGES):
+    for (start, stop), branches in reversed(_AGE_STAGES):
         target = jnp.where(jnp.array(mc_next), tgts[branches[1]], tgts[branches[0]])
-        inside = (next_age >= interval.start) & (next_age < interval.stop)
+        inside = (next_age >= start) & (next_age < stop)
         result = jnp.where(inside, target, result)
     return result
 
