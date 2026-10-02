@@ -6,9 +6,12 @@ the surviving mass by next-period disability; each target's health law is the
 health distribution conditional on landing there.
 """
 
+from collections.abc import Callable
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from lcm import AgeGrid, ByAge
 
 from aca_model.agent import health
 from aca_model.agent.health import HealthWithDisability
@@ -27,7 +30,7 @@ from aca_model.baseline.regimes._retiree import (
     _make_transition_canwork as retiree_canwork,
 )
 from aca_model.baseline.regimes._tied import _make_transition_canwork as tied_canwork
-from aca_model.config import MODEL_CONFIG
+from aca_model.config import MODEL_AGES, MODEL_CONFIG
 
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
 SURVIVAL = jnp.full((N_PERIODS, 3), 0.99)
@@ -209,36 +212,54 @@ def test_per_target_health_law(source: str, target: str, law: str) -> None:
     assert laws[target].func is getattr(health, law)
 
 
+def _nongroup_schedule(regime: str) -> ByAge:
+    own, _ = make_targets(regime)
+    return build_scheduled_regime_transition(
+        spec=REGIME_SPECS[regime],
+        transition_func=nongroup_canwork(own=own),
+        target_groups=(own,),
+    )
+
+
+def _retiree_schedule(regime: str) -> ByAge:
+    own, ng = make_targets(regime)
+    return build_scheduled_regime_transition(
+        spec=REGIME_SPECS[regime],
+        transition_func=retiree_canwork(own=own, ng=ng),
+        target_groups=(own, ng),
+    )
+
+
+def _tied_schedule(regime: str) -> ByAge:
+    own, ng = make_targets(regime)
+    return build_scheduled_regime_transition(
+        spec=REGIME_SPECS[regime],
+        transition_func=tied_canwork(own=own, ng=ng),
+        target_groups=(own, ng),
+    )
+
+
 @pytest.mark.parametrize(
-    ("regime", "make_transition", "dimc_target"),
+    ("build_schedule", "regime", "dimc_target"),
     [
         (
+            _nongroup_schedule,
             "nongroup_nomc_inelig_canwork",
-            nongroup_canwork,
             "nongroup_dimc_inelig_canwork",
         ),
-        ("retiree_nomc_inelig_canwork", retiree_canwork, "retiree_dimc_inelig_canwork"),
-        ("tied_nomc_inelig_canwork", tied_canwork, "nongroup_dimc_inelig_canwork"),
+        (
+            _retiree_schedule,
+            "retiree_nomc_inelig_canwork",
+            "retiree_dimc_inelig_canwork",
+        ),
+        (_tied_schedule, "tied_nomc_inelig_canwork", "nongroup_dimc_inelig_canwork"),
     ],
 )
 def test_scheduled_targets_include_disability_medicare_entry(
-    regime: str, make_transition: object, dimc_target: str
+    build_schedule: Callable[[str], ByAge], regime: str, dimc_target: str
 ) -> None:
     """A pre-65 regime without Medicare declares its disability-Medicare target."""
-    own, ng = make_targets(regime)
-    transition_func = (
-        make_transition(own=own)
-        if make_transition is nongroup_canwork
-        else make_transition(own=own, ng=ng)
+    targets_at_55 = (
+        build_schedule(regime).resolve(AgeGrid(exact_values=MODEL_AGES)).at(55)
     )
-    schedule = build_scheduled_regime_transition(
-        spec=REGIME_SPECS[regime],
-        transition_func=transition_func,
-        target_groups=(own,) if make_transition is nongroup_canwork else (own, ng),
-    )
-    targets_at_55 = next(
-        targets
-        for ages, targets in schedule._cases  # noqa: SLF001
-        if 55 in ages
-    )
-    assert dimc_target in targets_at_55
+    assert dimc_target in set(targets_at_55)  # ty: ignore[invalid-argument-type]
