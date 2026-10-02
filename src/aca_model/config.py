@@ -12,6 +12,7 @@ BLD = ROOT / "bld"
 @dataclass(frozen=True)
 class ModelConfig:
     start_age: int = 51
+    last_start_age: int = 60
     end_age: int = 96
     """First age at which everybody is dead; the model's last period."""
     ss_early_age: int = 62
@@ -49,6 +50,11 @@ class GridConfig:
 
 
 MODEL_CONFIG = ModelConfig()
+# ACA is calibrated annually. Keep the exact clock on the host until Model build;
+# importing a task or regime builder must not initialize a JAX device allocator.
+MODEL_AGES: tuple[int, ...] = tuple(
+    range(MODEL_CONFIG.start_age, MODEL_CONFIG.end_age + 1)
+)
 GRID_CONFIG = GridConfig()
 
 BENCHMARK_GRID_CONFIG = GridConfig(

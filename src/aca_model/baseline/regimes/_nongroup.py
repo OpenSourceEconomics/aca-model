@@ -18,15 +18,15 @@ from aca_model.baseline.regimes._common import (
     build_actions,
     build_alive_regime,
     build_common_functions,
-    build_granular_regime_transition,
     build_nbegm_functions,
     build_pension_functions,
     build_regime_probs,
     build_regime_probs_with_di_medicare,
+    build_scheduled_regime_transition,
     build_state_transitions,
     build_states,
-    make_active_func,
     make_targets,
+    next_model_age,
     prob_di_medicare_next,
     select_ss_benefit,
     select_target_for_age,
@@ -50,9 +50,10 @@ def _make_transition_canwork(
         survival_probs: FloatND,
         prob_disabled_next: FloatND,
     ) -> FloatND:
+        del age  # Keep the legacy signature; period owns the clock lookup.
         return build_regime_probs_with_di_medicare(
-            target_dimc=select_target_for_age(age + 1, True, own),
-            target_nomc=select_target_for_age(age + 1, False, own),
+            target_dimc=select_target_for_age(next_model_age(period), True, own),
+            target_nomc=select_target_for_age(next_model_age(period), False, own),
             prob_dimc=prob_di_medicare_next(
                 labor_supply, prob_disabled_next[period, health]
             ),
@@ -78,7 +79,8 @@ def _make_transition_forcedout(
         health: DiscreteState,
         survival_probs: FloatND,
     ) -> FloatND:
-        target = select_target_for_age(age + 1, gets_medicare, own)
+        del age  # Keep the legacy signature; period owns the clock lookup.
+        target = select_target_for_age(next_model_age(period), gets_medicare, own)
         return build_regime_probs(target, survival_probs[period, health])
 
     return transition
@@ -168,10 +170,9 @@ def build_regime(
         functions = {**functions, **build_nbegm_functions()}
     return build_alive_regime(
         egm_solver=egm_solver,
-        transition=build_granular_regime_transition(
-            transition_func=transition_func, target_ids=own.values()
+        regime_transitions=build_scheduled_regime_transition(
+            spec=spec, transition_func=transition_func, target_groups=(own,)
         ),
-        active=make_active_func(spec),
         states=states,
         state_transitions=build_state_transitions(spec, solver=state_solver),
         actions=build_actions(spec, grids),

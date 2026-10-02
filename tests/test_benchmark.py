@@ -63,7 +63,7 @@ def test_benchmark_model_simulates_end_to_end() -> None:
         log_level="off",
     )
 
-    df = result.to_dataframe()
+    df = result.to_dataframe(terminal_rows="all")
     assert len(df) == n_subjects * model.n_periods
     # Period 0 rows reflect initial conditions — no NaN in continuous states.
     period_0 = df.loc[df["period"] == 0]

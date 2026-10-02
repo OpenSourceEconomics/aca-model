@@ -66,7 +66,7 @@ def test_nbegm_m1_value_function_agrees_with_brute_in_the_bulk() -> None:
     bq = _solve_m1("nbegm")
     brute = _solve_m1("brute_force")
 
-    assert bq.keys() == brute.keys()
+    assert bq.keys() == brute.keys() == set(range(11))
     rel_diffs = []
     for period in bq:
         finite_bq = np.isfinite(bq[period])

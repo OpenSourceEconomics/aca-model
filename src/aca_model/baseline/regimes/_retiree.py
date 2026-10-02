@@ -28,15 +28,15 @@ from aca_model.baseline.regimes._common import (
     build_actions,
     build_alive_regime,
     build_common_functions,
-    build_granular_regime_transition,
     build_nbegm_functions,
     build_pension_functions,
     build_regime_probs,
     build_regime_probs_with_di_medicare,
+    build_scheduled_regime_transition,
     build_state_transitions,
     build_states,
-    make_active_func,
     make_targets,
+    next_model_age,
     prob_di_medicare_next,
     select_ss_benefit,
     select_target_for_age,
@@ -64,7 +64,8 @@ def _make_transition_canwork(
         survival_probs: FloatND,
         prob_disabled_next: FloatND,
     ) -> FloatND:
-        next_age = age + 1
+        del age  # Keep the legacy signature; period owns the clock lookup.
+        next_age = next_model_age(period)
 
         def target(mc_next: bool) -> IntND:
             own_target = select_target_for_age(next_age, mc_next, own)
@@ -101,8 +102,9 @@ def _make_transition_forcedout(
         is_ssi_eligible: BoolND,
         survival_probs: FloatND,
     ) -> FloatND:
+        del age  # Keep the legacy signature; period owns the clock lookup.
         sp = survival_probs[period, health]
-        next_age = age + 1
+        next_age = next_model_age(period)
         target = select_target_for_age(next_age, gets_medicare, own)
         ng_ssi = select_target_for_age(next_age, gets_medicare, ng)
         target = jnp.where(is_ssi_eligible, ng_ssi, target)
@@ -164,10 +166,9 @@ def build_regime(
         functions = {**functions, **build_nbegm_functions()}
     return build_alive_regime(
         egm_solver=egm_solver,
-        transition=build_granular_regime_transition(
-            transition_func=transition_func, target_ids=(*own.values(), *ng.values())
+        regime_transitions=build_scheduled_regime_transition(
+            spec=spec, transition_func=transition_func, target_groups=(own, ng)
         ),
-        active=make_active_func(spec),
         states=states,
         state_transitions=build_state_transitions(spec, solver=state_solver),
         actions=build_actions(spec, grids),

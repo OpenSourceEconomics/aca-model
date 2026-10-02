@@ -17,6 +17,7 @@ from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
     RegimeId,
     _build_per_target_regime_health,
+    build_scheduled_regime_transition,
     make_targets,
 )
 from aca_model.baseline.regimes._nongroup import (
@@ -206,3 +207,38 @@ def test_per_target_health_law(source: str, target: str, law: str) -> None:
     """Pre-65 targets condition next health on the Medicare outcome."""
     laws = _build_per_target_regime_health(REGIME_SPECS[source])
     assert laws[target].func is getattr(health, law)
+
+
+@pytest.mark.parametrize(
+    ("regime", "make_transition", "dimc_target"),
+    [
+        (
+            "nongroup_nomc_inelig_canwork",
+            nongroup_canwork,
+            "nongroup_dimc_inelig_canwork",
+        ),
+        ("retiree_nomc_inelig_canwork", retiree_canwork, "retiree_dimc_inelig_canwork"),
+        ("tied_nomc_inelig_canwork", tied_canwork, "nongroup_dimc_inelig_canwork"),
+    ],
+)
+def test_scheduled_targets_include_disability_medicare_entry(
+    regime: str, make_transition: object, dimc_target: str
+) -> None:
+    """A pre-65 regime without Medicare declares its disability-Medicare target."""
+    own, ng = make_targets(regime)
+    transition_func = (
+        make_transition(own=own)
+        if make_transition is nongroup_canwork
+        else make_transition(own=own, ng=ng)
+    )
+    schedule = build_scheduled_regime_transition(
+        spec=REGIME_SPECS[regime],
+        transition_func=transition_func,
+        target_groups=(own,) if make_transition is nongroup_canwork else (own, ng),
+    )
+    targets_at_55 = next(
+        targets
+        for ages, targets in schedule._cases  # noqa: SLF001
+        if 55 in ages
+    )
+    assert dimc_target in targets_at_55

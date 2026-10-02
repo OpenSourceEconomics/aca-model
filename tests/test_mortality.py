@@ -11,9 +11,9 @@ from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
     RegimeId,
-    make_active_func,
     make_targets,
     select_target_for_age,
+    transition_ages,
 )
 from aca_model.baseline.regimes._nongroup import (
     _make_transition_canwork as nongroup_canwork,
@@ -28,7 +28,7 @@ from aca_model.baseline.regimes._retiree import (
     _make_transition_forcedout as retiree_forcedout,
 )
 from aca_model.baseline.regimes._tied import _make_transition_canwork as tied_canwork
-from aca_model.config import MODEL_CONFIG
+from aca_model.config import MODEL_AGES, MODEL_CONFIG
 
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
 # Survival by (period, health): distinct per health state.
@@ -128,4 +128,9 @@ def test_everybody_is_dead_at_96() -> None:
 )
 def test_forcedout_regimes_are_active_at_95(regime: str) -> None:
     """The work-forced-out regimes are active through the last alive age, 95."""
-    assert bool(make_active_func(REGIME_SPECS[regime])(95))
+    assert transition_ages(REGIME_SPECS[regime])[-1] == 95
+
+
+def test_model_ages_run_from_51_through_96() -> None:
+    """The age grid spans 51 to 96; 96 is the age at which everybody is dead."""
+    assert (MODEL_AGES[0], MODEL_AGES[-1], len(MODEL_AGES)) == (51, 96, 46)

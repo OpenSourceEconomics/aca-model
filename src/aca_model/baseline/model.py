@@ -17,12 +17,13 @@ from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, Model
 from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import (
+    INITIAL_REGIMES,
     RegimeId,
     SolverName,
     build_all_regimes,
     build_model_slots,
 )
-from aca_model.config import MODEL_CONFIG, GridConfig
+from aca_model.config import MODEL_AGES, GridConfig
 from aca_model.execution import execution_config_for_devices
 
 
@@ -79,11 +80,7 @@ def create_model(
         the `<his>_<medicare>_<ss>_<work>` scheme.
 
     """
-    ages = AgeGrid(
-        start=MODEL_CONFIG.start_age,
-        stop=MODEL_CONFIG.end_age,
-        step="Y",
-    )
+    ages = AgeGrid(exact_values=MODEL_AGES)
     _fail_if_dcegm_without_consumption_points(
         solver=solver, consumption_dollars_points=consumption_dollars_points
     )
@@ -105,6 +102,7 @@ def create_model(
 
     return Model(
         regimes=regimes,
+        initial_regimes=INITIAL_REGIMES,
         ages=ages,
         regime_id_class=RegimeId,
         description="Baseline structural retirement model (pre-ACA)",
