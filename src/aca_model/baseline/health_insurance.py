@@ -514,8 +514,9 @@ def hcc_insurer_predicted(
 ) -> FloatND:
     """Interpolate the private insurer's expected cost for the household.
 
-    The table holds E[total_costs - oop_costs | age, married, good health,
-    persistent node] on `[period, is_married, good_health, node]`. Linear
+    `hcc_persistent` is last period's persistent shock, so the table holds
+    this period's E[total_costs - oop_costs | age, married, good health,
+    lagged persistent node] on `[period, is_married, good_health, node]`. Linear
     interpolation handles off-grid values during simulation (where
     draw_shock returns continuous AR1 values).
     """
@@ -540,8 +541,9 @@ def compute_hcc_insurer_table(
 ) -> FloatND:
     """Compute predicted insurer costs table for all persistent grid points.
 
-    For each source persistent state i, integrate over (target persistent j,
-    transitory k) weighted by transition probs and quadrature weights.
+    For each lagged persistent state i, integrate over this period's
+    (persistent j, transitory k) weighted by transition probs and quadrature
+    weights.
     """
     std_trans = jnp.sqrt(1.0 - std_xsect_persistent**2)
     # total_costs[j, k] for all (persistent, transitory) combinations
@@ -572,11 +574,17 @@ def total_costs(
     good_health: IntND,
     log_mean: FloatND,
     log_std: FloatND,
-    hcc_persistent: ContinuousState,
-    hcc_transitory: ContinuousState,
+    next_hcc_persistent: ContinuousState,
+    next_hcc_transitory: ContinuousState,
     std_xsect_persistent: ScalarFloat,
 ) -> FloatND:
-    """Compute total health care costs from log-normal model.
+    """Compute this period's total health care costs from the log-normal model.
+
+    Costs are realised after the period's choices. The persistent and
+    transitory shocks that drive them are the draws the transition makes,
+    `next_hcc_persistent` and `next_hcc_transitory`: the next period carries
+    them as its lagged shocks. Age, marital status and health are this
+    period's.
 
     ``log_mean`` and ``log_std`` are ``pd.Series`` with ``(age, is_married,
     good_health)`` MultiIndex, resolved by pylcm via ``derived_categoricals``.
@@ -585,5 +593,21 @@ def total_costs(
     return jnp.exp(
         log_mean[period, is_married, good_health]
         + log_std[period, is_married, good_health]
-        * (hcc_persistent * std_xsect_persistent + hcc_transitory * std_trans)
+        * (next_hcc_persistent * std_xsect_persistent + next_hcc_transitory * std_trans)
     )
+
+
+def medical_cost_shocks_carried(
+    hcc_persistent: ContinuousState,
+    hcc_transitory: ContinuousState,
+) -> BoolND:
+    """Hold for every state: the lagged medical-cost shocks restrict no choice.
+
+    A regime reads its lagged shocks only through the draws of this period's
+    shocks, which the transitions make. pylcm keeps a state in a regime only
+    when a root computation reads it, so this always-true constraint is that
+    read, in every regime, including `dead`, whose bequest integrates over the
+    shocks of the final period.
+    """
+    del hcc_persistent, hcc_transitory
+    return jnp.array(True)

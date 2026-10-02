@@ -63,9 +63,8 @@ def cash_on_hand(
     part (`premium_default`) is never paid, so the effective premium is
     `hic_premium - premium_default`.
 
-    OOP health costs are NOT deducted here — they are deducted from
-    next-period assets instead, matching the timing where HCC shocks are
-    integrated over (agent does not condition consumption on OOP).
+    Out-of-pocket health costs are not deducted here: they are realised after
+    the period's choices and come off end-of-period assets (`next_assets`).
     """
     effective_premium = hic_premium - premium_default
     return assets + after_tax_income + ssi_benefit - effective_premium
@@ -96,8 +95,10 @@ def next_assets(
 ) -> ContinuousState:
     """Compute beginning-of-next-period assets for non-terminal targets.
 
-    OOP health costs are deducted here (not from cash_on_hand) so that the
-    consumption choice does not condition on the HCC shock realization.
+    `oop_costs` is the bill for this period's medical-cost shocks, which are
+    drawn after the period's choices; the continuation integrates over them.
+    End-of-period assets can therefore fall below the borrowing limit that
+    binds consumption (medical debt).
     """
     return (
         cash_on_hand

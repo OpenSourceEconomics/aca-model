@@ -88,8 +88,11 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 - `health`: `HealthWithDisability` (disabled/bad/good) pre-65, `Health` (bad/good)
   post-65
 - `log_ft_wage_res`: AR(1) wage residual shock (5-point Rouwenhorst)
-- `hcc_persistent` / `hcc_transitory`: Health cost shocks (`_ShockGrid` — integrated
-  over, policy does not condition on them)
+- `hcc_persistent` / `hcc_transitory`: last period's health-cost shocks (Rouwenhorst
+  AR(1) and Gauss-Hermite IID). Policy conditions on the lagged persistent shock, which
+  predicts this period's costs and prices the private premium; nothing reads the lagged
+  transitory shock. The always-true `medical_cost_shocks_carried` constraint keeps both
+  states in every regime, `dead` included.
 - Regime transitions determined by `select_target_for_age()` based on age and actions;
   death has probability `1 − survival_probs[age, health]`, a per-regime param on the
   regime's own health grid. Ages run 51–96: 95 is the last age anyone is alive (survival
@@ -99,8 +102,11 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 
 - **AgeGrid with int ages**: Model uses `AgeGrid` with integer start/stop — all `age`
   parameters are `int`, not `float`
-- **OOP timing**: OOP health costs are in `next_assets` (post-consumption), not
-  `cash_on_hand`. Matches struct-ret: agent doesn't condition consumption on OOP.
+- **OOP timing**: medical costs are realised after the period's choices, and the state
+  carries the lagged persistent shock ζ\_{t−1}. `total_health_costs` reads the
+  transition's draws `next_hcc_persistent` / `next_hcc_transitory`, so OOP enters
+  `next_assets` and the continuation integrates over it; `cash_on_hand`, transfers and
+  the consumption floor see no OOP.
 - **DAG key ≠ function name**: `functions["marginal_tax_rate"] = taxes.marginal_rate` —
   the dict key must match consuming functions' parameter names, not the definition name.
   Don't stutter module name in function name (`taxes.marginal_rate` not

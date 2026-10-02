@@ -731,8 +731,10 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
       other broadcast function is masked with `None` so its unresolvable
       inputs (e.g. `pension_benefit`) don't surface as params in the dead
       template.
-    - constraints: every broadcast constraint is masked — `dead` has no
-      consumption action.
+    - constraints: every broadcast constraint but `medical_cost_shocks_carried`
+      is masked — `dead` has no consumption action. That one keeps the
+      medical-cost shock states, whose draws set the final period's
+      out-of-pocket bill and hence the bequest.
     - `pension_wealth` is masked explicitly: a carried state is rejected in
       terminal regimes before pruning could drop it.
     """
@@ -741,7 +743,11 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
         for name in build_model_functions(solver=solver)
         if name not in _DEAD_KEEPS
     }
-    constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
+    constraint_masks = dict.fromkeys(
+        name
+        for name in build_model_constraints(solver=solver)
+        if name != "medical_cost_shocks_carried"
+    )
     return Regime(
         regime_transitions=None,
         functions={
@@ -863,7 +869,10 @@ def build_nbegm_functions() -> dict:
 def build_model_constraints(*, solver: SolverName) -> dict:
     """Build the model-level constraints broadcast into every regime.
 
-    `dead` masks every constraint — it has no consumption action.
+    `dead` masks every constraint except `medical_cost_shocks_carried` — it
+    has no consumption action, but its bequest integrates over the final
+    period's medical-cost shocks, so it keeps their states.
+
     Grid search evaluates the action-level predicates directly: the borrowing
     constraint and the household's own consumption floor. An EGM-family
     solve proves the equivalent post-decision lower bound from its savings
@@ -875,7 +884,10 @@ def build_model_constraints(*, solver: SolverName) -> dict:
         if solver == "brute_force"
         else post_decision_lower_bound(margin=ACA_LIQUID_MARGIN, lower=0.0)
     )
-    constraints = {"borrowing_constraint": borrowing_constraint}
+    constraints = {
+        "borrowing_constraint": borrowing_constraint,
+        "medical_cost_shocks_carried": health_insurance.medical_cost_shocks_carried,
+    }
     if solver == "brute_force":
         constraints["consumption_floor_constraint"] = (
             assets_and_income.consumption_above_floor
