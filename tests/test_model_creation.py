@@ -14,6 +14,7 @@ from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes as _build_aca_regimes
 from aca_model.agent.preferences import BenchmarkPrefType
+from aca_model.baseline import health_insurance as base_hi
 from aca_model.baseline.regimes import REGIME_SPECS, RegimeId
 from aca_model.baseline.regimes import build_regime as _build_regime
 from aca_model.baseline.regimes._common import (
@@ -396,3 +397,44 @@ def test_living_regimes_keep_every_broadcast_state() -> None:
     model = make_baseline_model()
     for name in REGIME_SPECS:
         assert model.pruned_variables[name] == frozenset()
+
+
+def _leaf_paths(tree: Mapping, prefix: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+    paths: list[tuple[str, ...]] = []
+    for key, value in tree.items():
+        if isinstance(value, Mapping):
+            paths.extend(_leaf_paths(value, (*prefix, key)))
+        else:
+            paths.append((*prefix, key))
+    return paths
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [p for p in PolicyVariant if p != PolicyVariant.ACA_ONLY_MEDICAID_EXPANSION],
+)
+def test_aca_nongroup_template_has_no_risk_rated_premium_params(
+    policy: PolicyVariant,
+) -> None:
+    """Under the reformed non-group market no regime asks for a risk-rated premium.
+
+    The community-rated premium replaces the risk-rated one in the non-group
+    regimes before Medicare, so their params template carries none of the
+    risk-rated premium's `premium_` parameters: callers drop exactly those
+    parameters from those regimes.
+    """
+    risk_rated_params = {
+        name
+        for func in (base_hi.premium, base_hi.private_premium_intercept)
+        for name in inspect.signature(func).parameters
+        if name.startswith("premium_")
+    }
+    template = make_aca_model(policy=policy).get_params_template()
+    asked = [
+        (regime, *path)
+        for regime, spec in REGIME_SPECS.items()
+        if spec["his"] == "nongroup" and spec["mc"] == "nomc"
+        for path in _leaf_paths(template[regime])
+        if path[-1] in risk_rated_params
+    ]
+    assert asked == []

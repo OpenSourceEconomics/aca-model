@@ -63,6 +63,9 @@ def apply_aca_overrides(
         # No mandate: mandate_penalty is a fixed param (0.0) in the params
         # dict, not a DAG function — no entry needed here.
         functions["plan_premium"] = aca_hi.community_rated_premium
+        # Only the risk-rated premium reads its intercept; leaving the node
+        # would keep asking for the risk-rated premium's parameters.
+        functions.pop("private_premium_intercept", None)
         functions["hic_premium_subsidy"] = aca_hi.premium_subsidy
         functions["cost_sharing_scale"] = aca_hi.cost_sharing
         functions["premium_default"] = aca_hi.premium_default
