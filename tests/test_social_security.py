@@ -6,6 +6,7 @@ Parameter values from French & Jones (2011) Appendix C.
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+import pytest
 from helpers.social_security import (
     compute_di_dropout_scale,
     compute_pia_table,
@@ -14,7 +15,7 @@ from helpers.social_security import (
 from lcm.typing import ScalarInt
 
 from aca_model.agent.labor_market import LaborSupply
-from aca_model.environment import social_security
+from aca_model.environment import pensions, social_security
 from aca_model.environment.social_security import ClaimedSS
 
 ATOL = 0.01
@@ -253,7 +254,7 @@ def test_next_aime_no_indexing_low_income() -> None:
 
 
 def test_next_aime_high_aime_high_income_is_capped_at_taxable_max() -> None:
-    """Labor accrual cannot lift an AIME at the taxable max above it."""
+    """Labor accrual cannot lift an AIME just below the taxable max above it."""
     result = next_aime_from_state(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
@@ -264,7 +265,7 @@ def test_next_aime_high_aime_high_income_is_capped_at_taxable_max() -> None:
         earnings_test_repealed_age=jnp.int32(70),
         pia_table=PIA_TABLE,
         pia_aime_grid=PIA_AIME_GRID,
-        aime=jnp.array(40000.0),
+        aime=jnp.array(38900.0),
         labor_income=jnp.array(20000.0),
         period=jnp.int32(62),
         age=jnp.int32(62),
@@ -277,7 +278,8 @@ def test_next_aime_high_aime_high_income_is_capped_at_taxable_max() -> None:
     assert jnp.isclose(result, AIME_KINK_2, atol=ATOL)
 
 
-def test_next_aime_cap_high_aime_low_income() -> None:
+def test_next_aime_above_taxable_max_is_carried_unchanged() -> None:
+    """An AIME above the taxable max holds its credit; earnings add nothing to it."""
     result = next_aime_from_state(
         claim_ss=jnp.array(ClaimedSS.no),
         claimed_ss=jnp.array(ClaimedSS.no),
@@ -298,7 +300,7 @@ def test_next_aime_cap_high_aime_low_income() -> None:
         aime_kink_2=AIME_KINK_2_SCALAR,
         ratio_lowest_earnings=RATIO,
     )
-    assert jnp.isclose(result, 39000, atol=ATOL)
+    assert jnp.isclose(result, 40000, atol=ATOL)
 
 
 # --- pia DAG function (lookup table) ---
@@ -692,3 +694,126 @@ def test_pia_unadjusted_next_period_ignores_claim_bake() -> None:
     np.testing.assert_allclose(unadjusted, _pia_of(aime), rtol=1e-4)
     # The baked AIME's PIA is strictly lower (early reduction applied).
     assert _pia_of(baked) < unadjusted
+
+
+# --- credits carried above the taxable max (2014 rules) ---
+
+# 2014 bend points, conversion rates and taxable max from aca-data's
+# `social_security_rules.json`; the extension point sits at 1.32 x max PIA.
+_AIME_MAX_2014 = 117_000.0
+_grid_2014_np, _table_2014_np = compute_pia_table(
+    9792.0, 59004.0, 0.9, 0.32, 0.15, _AIME_MAX_2014, MAX_DELAYED_FACTOR
+)
+PIA_AIME_GRID_2014 = jnp.asarray(_grid_2014_np)
+PIA_TABLE_2014 = jnp.asarray(_table_2014_np)
+_ZEROS_BY_HIS = jnp.zeros((100, 1))
+_ZEROS_BY_PERIOD = jnp.zeros(100)
+
+
+def _carried_pia(
+    *, phase: str, pia_adjusted: jnp.ndarray, pia_unadjusted: jnp.ndarray
+) -> jnp.ndarray:
+    """The PIA the next-period AIME encodes, per phase, with no pension imputed."""
+    if phase == "simulate":
+        return social_security.carried_pia_simulate(pia_adjusted)
+    return pensions.total_to_pia(
+        pia_adjusted_next_period=pia_adjusted,
+        pia_unadjusted_next_period=pia_unadjusted,
+        full_benefit_next_period=jnp.array(0.0),
+        target_his=jnp.int32(0),
+        period=jnp.int32(0),
+        marginal_tax_rate=jnp.array(0.0),
+        imp_intercept_next_period=_ZEROS_BY_HIS,
+        imp_pia_coeff_next_period=_ZEROS_BY_HIS,
+        imp_pia_kink_0_coeff_next_period=_ZEROS_BY_HIS,
+        imp_pia_kink_1_coeff_next_period=_ZEROS_BY_HIS,
+        imp_kink_0_next_period=_ZEROS_BY_PERIOD,
+        imp_kink_1_next_period=_ZEROS_BY_PERIOD,
+    )
+
+
+def _step_aime_2014(
+    *,
+    phase: str,
+    aime: jnp.ndarray,
+    age: int,
+    claimed: ScalarInt,
+    labor_income: float = 0.0,
+    benefit_withheld_fraction: float = 0.0,
+) -> jnp.ndarray:
+    """Advance AIME one `ss=choose` period under the 2014 PIA table."""
+    accrual = {
+        "aime": aime,
+        "labor_income": jnp.array(labor_income),
+        "period": jnp.int32(age),
+        "age": jnp.int32(age),
+        "pia_table": PIA_TABLE_2014,
+        "pia_aime_grid": PIA_AIME_GRID_2014,
+        "aime_accrual_factor": jnp.asarray(1 / 35),
+        "aggregate_wage_growth": jnp.asarray(0.008),
+        "aime_last_age_with_indexing": jnp.int32(60),
+        "aime_kink_2": jnp.asarray(_AIME_MAX_2014),
+        "ratio_lowest_earnings": jnp.full(100, 0.6),
+    }
+    pia_adjusted = social_security.pia_adjusted_next_period(
+        **accrual,
+        claim_ss=jnp.array(claimed),
+        claimed_ss=jnp.array(claimed),
+        normal_retirement_age=NORMAL_RETIREMENT_AGE,
+        early_ret_adjustment=EARLY_RET_ADJ,
+        benefit_withheld_fraction=jnp.array(benefit_withheld_fraction),
+        earnings_test_credited_back=EARLY_RET_ADJ[1:] / EARLY_RET_ADJ[:-1] - 1.0,
+        earnings_test_repealed_age=jnp.int32(67),
+    )
+    pia_unadjusted = social_security.pia_unadjusted_next_period(**accrual)
+    carried = _carried_pia(
+        phase=phase, pia_adjusted=pia_adjusted, pia_unadjusted=pia_unadjusted
+    )
+    return social_security.next_aime(
+        carried_pia=carried, pia_table=PIA_TABLE_2014, pia_aime_grid=PIA_AIME_GRID_2014
+    )
+
+
+def _pia_2014(aime: jnp.ndarray) -> jnp.ndarray:
+    return social_security.pia(
+        aime=aime, pia_table=PIA_TABLE_2014, pia_aime_grid=PIA_AIME_GRID_2014
+    )
+
+
+@pytest.mark.parametrize("phase", ["simulate", "solve"])
+@pytest.mark.parametrize("aime_at_66", [40_000.0, _AIME_MAX_2014])
+def test_delaying_from_nra_to_70_pays_full_credit_at_any_aime(
+    phase: str, aime_at_66: float
+) -> None:
+    """Deferring the claim from 66 to 70 pays 1.32 x PIA, at the taxable max too.
+
+    Each year's delayed-retirement credit lifts the carried AIME; for a top
+    earner that AIME lies above the taxable max and must stay there, so the
+    four yearly credits compound to the cumulative 1.32 factor.
+    """
+    aime = jnp.array(aime_at_66)
+    for age in range(66, 70):
+        aime = _step_aime_2014(phase=phase, aime=aime, age=age, claimed=ClaimedSS.no)
+    ratio = _pia_2014(aime) / _pia_2014(jnp.array(aime_at_66))
+    np.testing.assert_allclose(ratio, 1.32, rtol=1e-6)
+
+
+@pytest.mark.parametrize("phase", ["simulate", "solve"])
+def test_earnings_test_credit_of_claimed_top_earner_survives(phase: str) -> None:
+    """A top earner who claims at 66 and works keeps the withholding credit.
+
+    Half the benefit withheld at 66 credits back half the one-year factor
+    (1.08 / 1.00 - 1). The credited AIME lies above the taxable max; the
+    following year without earnings carries it unchanged.
+    """
+    aime = _step_aime_2014(
+        phase=phase,
+        aime=jnp.array(_AIME_MAX_2014),
+        age=66,
+        claimed=ClaimedSS.yes,
+        labor_income=_AIME_MAX_2014,
+        benefit_withheld_fraction=0.5,
+    )
+    aime = _step_aime_2014(phase=phase, aime=aime, age=67, claimed=ClaimedSS.yes)
+    max_pia = float(_table_2014_np[3])
+    np.testing.assert_allclose(_pia_2014(aime), max_pia * (1 + 0.5 * 0.08), rtol=1e-6)
