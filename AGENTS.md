@@ -176,7 +176,11 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   The `pia_aime_grid` / `pia_table` carry a fifth bend point above the taxable max
   (`max_delayed_factor * max_pia`, round-tripped to AIME), so a top earner who delays
   keeps the delayed-retirement credit in the carried AIME instead of clamping at the
-  taxable max. Which PIA the next AIME encodes is the phased `carried_pia` node:
+  taxable max. `_accrue_aime` caps only the new earnings accrual at the taxable max; an
+  incoming AIME above it (a carried delayed-retirement or earnings-test credit) passes
+  through unchanged, up to the extended grid's top point. This departs from struct-ret,
+  which clamps the incoming AIME every year and so wipes those credits. Which PIA the
+  next AIME encodes is the phased `carried_pia` node:
   - solve: `pensions.total_to_pia`, the PIA `PIA*` with
     `PIA* + (1 − τ) pbmax_{t+1}(PIA*) = PIA_adj + (1 − τ) pbmax_{t+1}(PIA_unadj)`,
     because solve re-imputes pension wealth from next period's PIA (French & Jones 2011,

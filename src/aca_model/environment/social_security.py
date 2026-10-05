@@ -421,7 +421,10 @@ def _accrue_aime(
 ) -> FloatND:
     """Accrue AIME from labor income (indexing, taxable cap, lowest-year drop).
 
-    The accrued AIME is capped at the taxable maximum.
+    Only the earnings accrual is capped: it cannot lift AIME above the taxable
+    maximum. An incoming AIME already above the maximum carries delayed-retirement
+    or earnings-test credits and passes through unchanged; the extended PIA grid
+    bounds it.
     """
     indexed_aime = jnp.where(
         age <= aime_last_age_with_indexing,
@@ -434,7 +437,7 @@ def _accrue_aime(
     accrual = (
         jnp.maximum(0.0, capped_labor - lowest_year_earnings) * aime_accrual_factor
     )
-    return jnp.minimum(capped_aime + accrual, aime_kink_2)
+    return jnp.maximum(indexed_aime, jnp.minimum(capped_aime + accrual, aime_kink_2))
 
 
 def _accrue_and_credit_back_pia(
