@@ -6,9 +6,16 @@ Already nongroup, so no SSI/Medicaid override needed for HIS transitions.
 
 from collections.abc import Callable
 
-from lcm import Regime
+from lcm import Regime, StochasticTransition
 from lcm.solvers import DCEGM, NBEGM
-from lcm.typing import Age, DiscreteAction, DiscreteState, FloatND, Period
+from lcm.typing import (
+    Age,
+    DiscreteAction,
+    DiscreteState,
+    FloatND,
+    Period,
+    RegimeName,
+)
 
 from aca_model.baseline import health_insurance
 from aca_model.baseline.regimes._common import (
@@ -131,6 +138,20 @@ def build_constraints(spec: RegimeSpec) -> dict:
     return {}
 
 
+def build_law(name: str) -> dict[RegimeName, StochasticTransition]:
+    """Build the nongroup regime's per-target transition probabilities."""
+    spec = REGIME_SPECS[name]
+    gets_mc = spec["mc"] != "nomc"
+    own, _ng = make_targets(name)
+    if spec["canwork"] == "canwork":
+        transition_func = _make_transition_canwork(own)
+    else:
+        transition_func = _make_transition_forcedout(gets_mc, own)
+    return build_regime_transition(
+        spec=spec, transition_func=transition_func, target_groups=(own,)
+    )
+
+
 def build_regime(
     name: str,
     grids: Grids,
@@ -140,14 +161,6 @@ def build_regime(
 ) -> Regime:
     """Build a nongroup regime."""
     spec = REGIME_SPECS[name]
-    gets_mc = spec["mc"] != "nomc"
-    own, _ng = make_targets(name)
-
-    if spec["canwork"] == "canwork":
-        transition_func = _make_transition_canwork(own)
-    else:
-        transition_func = _make_transition_forcedout(gets_mc, own)
-
     states = build_states(spec, grids)
 
     egm_solver = dcegm_solver if dcegm_solver is not None else nbegm_solver
@@ -170,9 +183,6 @@ def build_regime(
         functions = {**functions, **build_nbegm_functions()}
     return build_alive_regime(
         egm_solver=egm_solver,
-        regime_transitions=build_regime_transition(
-            spec=spec, transition_func=transition_func, target_groups=(own,)
-        ),
         states=states,
         state_transitions=build_state_transitions(spec, solver=state_solver),
         actions=build_actions(spec, grids),

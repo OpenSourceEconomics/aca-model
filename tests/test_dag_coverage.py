@@ -106,8 +106,8 @@ def test_bequest_continuation_is_not_removed(model):
     assert (96, "dead") in model.graph.nodes
 
 
-def test_terminal_regime_keeps_the_original_none_declaration(model):
-    assert model.user_regimes["dead"].regime_transitions is None
+def test_dead_regime_is_terminal_at_every_age(model):
+    assert model.graph.laws["dead"].terminal
     assert {(age, "dead") for age in model.ages.exact_values[1:]} <= model.graph.nodes
 
 

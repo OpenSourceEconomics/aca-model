@@ -64,13 +64,13 @@ def test_model_age_range() -> None:
 
 def test_dead_regime_is_terminal() -> None:
     model = make_baseline_model()
-    assert model.user_regimes["dead"].terminal
+    assert model.graph.laws["dead"].terminal
 
 
 def test_non_terminal_regimes_not_terminal() -> None:
     model = make_baseline_model()
     for name in REGIME_SPECS:
-        assert not model.user_regimes[name].terminal
+        assert not model.graph.laws[name].terminal
 
 
 def test_regime_id_dead_is_last() -> None:

@@ -13,7 +13,7 @@ dedicated submodule. Shared definitions and builders live in _common.
 from collections.abc import Mapping
 from typing import Any
 
-from lcm import DiscreteGrid, Regime
+from lcm import DiscreteGrid, Regime, Transition
 from lcm.solvers import DCEGM, NBEGM
 from lcm.typing import UserParams
 
@@ -56,6 +56,12 @@ _HIS_BUILDERS = {
     "retiree": retiree.build_regime,
     "tied": tied.build_regime,
     "nongroup": nongroup.build_regime,
+}
+
+_HIS_LAWS = {
+    "retiree": retiree.build_law,
+    "tied": tied.build_law,
+    "nongroup": nongroup.build_law,
 }
 
 
@@ -145,9 +151,22 @@ def build_model_slots(
         pref_type_grid=pref_type_grid,
     )
     return {
-        "edges": build_model_edges(),
+        "edges": build_edges(),
         "functions": build_model_functions(solver=solver),
         "constraints": build_model_constraints(solver=solver),
         "states": build_model_states(grids),
         "state_transitions": build_model_state_transitions(),
+    }
+
+
+def build_edges() -> dict[str, Transition]:
+    """Declare each living regime's outgoing edges together with their law.
+
+    `dead` has no outgoing edges and is therefore terminal.
+    """
+    return {
+        name: Transition(
+            targets=targets, law=_HIS_LAWS[REGIME_SPECS[name]["his"]](name)
+        )
+        for name, targets in build_model_edges().items()
     }

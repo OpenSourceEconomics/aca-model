@@ -750,7 +750,6 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
     }
     constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
     return Regime(
-        regime_transitions=None,
         functions={
             "utility": preferences.bequest,
             "scaled_bequest_weight": preferences.scaled_bequest_weight,

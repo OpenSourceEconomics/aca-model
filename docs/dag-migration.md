@@ -17,7 +17,7 @@ cells allowed at each source age. Code order/global regime IDs and parameter
 paths remain; different target schemas can still need different continuation
 programs, so no backend compile-time improvement is claimed.
 
-The dead regime remains `regime_transitions=None` at every age. Age 95 retains its
+The dead regime has no outgoing edges in `Model.edges` and is terminal at every age. Age 95 retains its
 living consumption/saving problem and handoff into the separate age-96 bequest. The
 three-to-two health grid, claim/lagged-work entry and exit, carried pension state
 and phase semantics are not simplified away.

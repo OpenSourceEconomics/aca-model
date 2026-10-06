@@ -9,7 +9,7 @@ the ACA Medicaid expansion leaves employer coverage untouched.
 from collections.abc import Callable
 
 import jax.numpy as jnp
-from lcm import Regime
+from lcm import Regime, StochasticTransition
 from lcm.solvers import DCEGM, NBEGM
 from lcm.typing import (
     Age,
@@ -19,6 +19,7 @@ from lcm.typing import (
     FloatND,
     IntND,
     Period,
+    RegimeName,
 )
 
 from aca_model.agent.labor_market import LaborSupply
@@ -101,6 +102,16 @@ def _build_functions(spec: RegimeSpec) -> dict:
     return functions
 
 
+def build_law(name: str) -> dict[RegimeName, StochasticTransition]:
+    """Build the tied regime's per-target transition probabilities."""
+    spec = REGIME_SPECS[name]
+    own, ng = make_targets(name)
+    transition_func = _make_transition_canwork(own, ng)
+    return build_regime_transition(
+        spec=spec, transition_func=transition_func, target_groups=(own, ng)
+    )
+
+
 def build_regime(
     name: str,
     grids: Grids,
@@ -110,10 +121,6 @@ def build_regime(
 ) -> Regime:
     """Build a tied regime (all tied regimes are canwork)."""
     spec = REGIME_SPECS[name]
-    own, ng = make_targets(name)
-
-    transition_func = _make_transition_canwork(own, ng)
-
     states = build_states(spec, grids)
     egm_solver = dcegm_solver if dcegm_solver is not None else nbegm_solver
     state_solver = (
@@ -129,9 +136,6 @@ def build_regime(
         functions = {**functions, **build_nbegm_functions()}
     return build_alive_regime(
         egm_solver=egm_solver,
-        regime_transitions=build_regime_transition(
-            spec=spec, transition_func=transition_func, target_groups=(own, ng)
-        ),
         states=states,
         state_transitions=build_state_transitions(spec, solver=state_solver),
         actions=build_actions(spec, grids),

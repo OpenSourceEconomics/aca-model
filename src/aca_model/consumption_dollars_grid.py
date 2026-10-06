@@ -68,7 +68,7 @@ def inject_consumption_dollars_points(
     max_consumption_dollars_arr = jnp.asarray(max_consumption_dollars)
     out: dict[str, Any] = dict(params)
     for regime_name, regime in model.user_regimes.items():
-        if regime.terminal:
+        if model.graph.laws[regime_name].terminal:
             continue
         grid = regime.actions.get("consumption_dollars")
         if grid is None:
@@ -131,7 +131,10 @@ def inject_consumption_floor_schedule(
     )
     out: dict[str, Any] = dict(params)
     for regime_name, regime in model.user_regimes.items():
-        if regime.terminal or "resources" not in regime.functions:
+        if (
+            model.graph.laws[regime_name].terminal
+            or "resources" not in regime.functions
+        ):
             continue
         regime_entry = dict(out.get(regime_name, {}))
         resources_entry = dict(regime_entry.get("resources", {}))
