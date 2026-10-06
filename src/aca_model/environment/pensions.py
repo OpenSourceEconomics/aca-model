@@ -87,8 +87,16 @@ def total_to_pia(
     which keeps the after-tax total of Social Security and imputed pension
     benefits at its claim-adjusted value. `pbmax_{t+1}` uses next period's
     coefficients for the target HIS and `τ` this period's marginal tax rate.
-    Without an adjustment (`PIA_adj == PIA_unadj`) the carried PIA is the
-    accrued PIA.
+
+    `pbmax_{t+1}` is floored at zero, so the inverse has two branches, which
+    coincide at the floor:
+    - where the unfloored formula is non-positive at `PIA* = total`, the
+      pension pays nothing and `PIA*` is the total itself;
+    - otherwise `PIA*` inverts the unfloored piecewise-linear total.
+
+    The branch choice is exact when the unfloored `pbmax_{t+1}` is
+    non-decreasing in PIA. Without an adjustment (`PIA_adj == PIA_unadj`) the
+    carried PIA is the accrued PIA.
     """
     after_tax = 1.0 - marginal_tax_rate
     total_ben = after_tax * full_benefit_next_period + pia_adjusted_next_period
@@ -103,7 +111,7 @@ def total_to_pia(
     kink_0_tb = at_intercept + k0 * (1.0 + at_pia)
     kink_1_tb = kink_0_tb + (k1 - k0) * (1.0 + at_pia + at_kink_0)
 
-    inverted = jnp.where(
+    above_floor = jnp.where(
         total_ben < at_intercept,
         0.0,
         jnp.where(
@@ -116,6 +124,15 @@ def total_to_pia(
             ),
         ),
     )
+    # Where `pbmax_{t+1}(total_ben) <= 0` the floored pension pays nothing, so
+    # `PIA* = total_ben` solves the equation exactly.
+    unfloored_at_total = (
+        at_intercept
+        + at_pia * total_ben
+        + at_kink_0 * jnp.maximum(0.0, total_ben - k0)
+        + at_kink_1 * jnp.maximum(0.0, total_ben - k1)
+    )
+    inverted = jnp.where(unfloored_at_total <= 0.0, total_ben, above_floor)
     return jnp.where(
         pia_adjusted_next_period == pia_unadjusted_next_period,
         pia_unadjusted_next_period,

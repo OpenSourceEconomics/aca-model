@@ -11,7 +11,7 @@ from dags import concatenate_functions
 
 from aca_model.agent import assets_and_income
 from aca_model.baseline.regimes._common import REGIME_SPECS, build_pension_functions
-from aca_model.environment import pensions
+from aca_model.environment import pensions, social_security
 
 ATOL = 0.01
 RATE_OF_RETURN = jnp.asarray(0.03)
@@ -113,6 +113,108 @@ def test_total_to_pia_keeps_adjusted_total_via_dag() -> None:
     total_carried = carried + (1.0 - mtr) * pbmax(carried)
     target = 7000.0 + (1.0 - mtr) * pbmax(jnp.array(8000.0))
     assert jnp.isclose(total_carried, target, atol=ATOL)
+
+
+# `pbmax(p) = max(0, -50 + 0.2 p)` at PERIOD for HIS 0 reaches zero at p = 250.
+# With `τ = 0.2` the carried PIA `p` solves `p + 0.8 pbmax(p) = A + 0.8 pbmax(U)`:
+# - below the floor: A = 150, U = 200 → total 150, `p = 150`, `pbmax = 0`
+# - at the floor: A = 250, U = 200 → total 250, `p = 250`, `pbmax = 0`
+# - above the floor: A = 420, U = 1,000 → total 540, `p = 500`, `pbmax = 50`
+# The PIA table is linear with slope 0.9 below 900, so `next_aime = p / 0.9`.
+_FLOOR_CASES = {
+    "below_floor": (150.0, 200.0, 150.0, 0.0),
+    "at_floor": (250.0, 200.0, 250.0, 0.0),
+    "above_floor": (420.0, 1000.0, 500.0, 50.0),
+}
+_PIA_TABLE = jnp.array([0.0, 900.0, 2000.0])
+_PIA_AIME_GRID = jnp.array([0.0, 1000.0, 5000.0])
+
+
+def _carried_pia_outcomes(
+    *, pia_adjusted: float, pia_unadjusted: float
+) -> dict[str, jnp.ndarray]:
+    """Carried PIA, its next-period AIME, and the pension benefit it imputes."""
+    next_period_kwargs = {f"{k}_next_period": v for k, v in PBMAX_KWARGS.items()}
+    functions = {
+        "full_benefit_next_period": pensions.full_benefit_next_period,
+        "carried_pia": pensions.total_to_pia,
+        "next_aime": social_security.next_aime,
+    }
+    combined = concatenate_functions(functions, targets=["carried_pia", "next_aime"])
+    out = combined(
+        pia_adjusted_next_period=jnp.array(pia_adjusted),
+        pia_unadjusted_next_period=jnp.array(pia_unadjusted),
+        target_his=jnp.int32(0),
+        period=PERIOD,
+        marginal_tax_rate=jnp.array(0.2),
+        pia_table=_PIA_TABLE,
+        pia_aime_grid=_PIA_AIME_GRID,
+        **next_period_kwargs,
+    )
+    benefit = pensions.full_benefit_next_period(
+        pia_unadjusted_next_period=out["carried_pia"],
+        target_his=jnp.int32(0),
+        period=PERIOD,
+        **next_period_kwargs,
+    )
+    return {**out, "benefit": benefit}
+
+
+@pytest.mark.parametrize(
+    ("pia_adjusted", "pia_unadjusted", "expected_pia", "expected_benefit"),
+    list(_FLOOR_CASES.values()),
+    ids=list(_FLOOR_CASES),
+)
+def test_carried_pia_solves_the_floored_total(
+    pia_adjusted: float,
+    pia_unadjusted: float,
+    expected_pia: float,
+    expected_benefit: float,
+) -> None:
+    """The carried PIA keeps SS plus after-tax floored pension at its adjusted total."""
+    del expected_benefit
+    out = _carried_pia_outcomes(
+        pia_adjusted=pia_adjusted, pia_unadjusted=pia_unadjusted
+    )
+    assert jnp.isclose(out["carried_pia"], expected_pia, atol=ATOL)
+
+
+@pytest.mark.parametrize(
+    ("pia_adjusted", "pia_unadjusted", "expected_pia", "expected_benefit"),
+    list(_FLOOR_CASES.values()),
+    ids=list(_FLOOR_CASES),
+)
+def test_carried_pia_imputes_the_floored_pension_benefit(
+    pia_adjusted: float,
+    pia_unadjusted: float,
+    expected_pia: float,
+    expected_benefit: float,
+) -> None:
+    """The pension benefit imputed from the carried PIA is the floored `pbmax`."""
+    del expected_pia
+    out = _carried_pia_outcomes(
+        pia_adjusted=pia_adjusted, pia_unadjusted=pia_unadjusted
+    )
+    assert jnp.isclose(out["benefit"], expected_benefit, atol=ATOL)
+
+
+@pytest.mark.parametrize(
+    ("pia_adjusted", "pia_unadjusted", "expected_pia", "expected_benefit"),
+    list(_FLOOR_CASES.values()),
+    ids=list(_FLOOR_CASES),
+)
+def test_carried_pia_sets_next_aime_on_either_side_of_the_floor(
+    pia_adjusted: float,
+    pia_unadjusted: float,
+    expected_pia: float,
+    expected_benefit: float,
+) -> None:
+    """Next period's AIME is the AIME of the floored-consistent carried PIA."""
+    del expected_benefit
+    out = _carried_pia_outcomes(
+        pia_adjusted=pia_adjusted, pia_unadjusted=pia_unadjusted
+    )
+    assert jnp.isclose(out["next_aime"], expected_pia / 0.9, atol=ATOL)
 
 
 def test_next_assets_includes_pension_adjustment() -> None:
