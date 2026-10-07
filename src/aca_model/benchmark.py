@@ -48,11 +48,6 @@ _PARAMS_FILE = (
     Path(__file__).resolve().parent / "_benchmark_data" / "benchmark_params.pkl"
 )
 
-# Arguments of the regime-transition laws declared in `Model(edges=...)`. The
-# snapshot stores them under each source regime; pylcm reads an edge-declared
-# callable's parameters under `params["edges"][source]`.
-_EDGE_LAW_PARAMS = frozenset({"survival_probs", "prob_disabled_next"})
-
 _N_BENCHMARK_PREF_TYPES = len(DiscreteGrid(BenchmarkPrefType).categories)
 
 _DERIVED_CATEGORICALS = {
@@ -117,7 +112,7 @@ def get_benchmark_params(
     """
     with _PARAMS_FILE.open("rb") as fh:
         data = cloudpickle.load(fh)
-    fixed_params = _move_law_params_to_edges(data["fixed_params"])
+    fixed_params = data["fixed_params"]
     wage_params = data["wage_params"]
     params = data["params"]
     max_consumption_dollars = float(fixed_params.pop("max_consumption_dollars"))
@@ -129,34 +124,6 @@ def get_benchmark_params(
         )
         params = inject_consumption_floor_schedule(params=params, model=model)
     return fixed_params, wage_params, params
-
-
-def _move_law_params_to_edges(fixed_params: dict[str, Any]) -> dict[str, Any]:
-    """Move each source regime's law arguments to `edges[source]`.
-
-    Every other entry, including the regime's own function parameters, keeps
-    its path.
-    """
-    regimes = {
-        name: value
-        for name, value in fixed_params.items()
-        if isinstance(value, dict) and not _EDGE_LAW_PARAMS.isdisjoint(value)
-    }
-    edges = {
-        name: {k: v for k, v in value.items() if k in _EDGE_LAW_PARAMS}
-        for name, value in regimes.items()
-    }
-    return {
-        **{
-            name: (
-                {k: v for k, v in value.items() if k not in _EDGE_LAW_PARAMS}
-                if name in regimes
-                else value
-            )
-            for name, value in fixed_params.items()
-        },
-        "edges": edges,
-    }
 
 
 def get_benchmark_consumption_dollars_points(*, n_points: int) -> tuple[float, ...]:
