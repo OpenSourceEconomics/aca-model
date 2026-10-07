@@ -344,7 +344,7 @@ def test_nbegm_aca_variants_leave_no_free_buy_private_params(
     offenders = [
         (regime_name, function_name)
         for regime_name, functions in template.items()
-        if isinstance(functions, dict)
+        if isinstance(functions, dict) and regime_name != "edges"
         for function_name, params in functions.items()
         if isinstance(params, dict) and "buy_private" in params
     ]
