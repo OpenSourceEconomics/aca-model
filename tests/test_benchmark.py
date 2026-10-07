@@ -11,6 +11,7 @@ from lcm import (
 )
 
 from aca_model.agent.preferences import BenchmarkPrefType
+from aca_model.baseline.regimes import REGIME_SPECS
 from aca_model.benchmark import (
     create_benchmark_model,
     get_benchmark_initial_conditions,
@@ -183,3 +184,38 @@ def test_initial_conditions_choose_population_size_after_model_construction() ->
         np.testing.assert_array_equal(values, repeated[name])
     np.testing.assert_array_equal(small["age"], [51.0, 51.0])
     np.testing.assert_array_equal(small["claimed_ss"], [0, 0])
+
+
+_LAW_ARGS = ("survival_probs", "prob_disabled_next")
+
+
+def test_benchmark_law_args_live_under_their_source_edges() -> None:
+    """Each source's law arguments sit at `fixed_params["edges"][source]`."""
+    fixed_params, _, _ = get_benchmark_params(model=None)
+    sources_with_both = {
+        source
+        for source, args in fixed_params["edges"].items()
+        if set(args) == set(_LAW_ARGS)
+    }
+    sources_with_survival_only = {
+        source
+        for source, args in fixed_params["edges"].items()
+        if set(args) == {"survival_probs"}
+    }
+    forcedout = {name for name in REGIME_SPECS if name.endswith("_forcedout")}
+    assert (sources_with_both, sources_with_survival_only) == (
+        set(REGIME_SPECS) - forcedout,
+        forcedout,
+    )
+
+
+def test_benchmark_regimes_hold_no_law_args() -> None:
+    """No law argument stays under a regime, where it would not reach the law."""
+    fixed_params, _, _ = get_benchmark_params(model=None)
+    leftovers = [
+        (name, arg)
+        for name in REGIME_SPECS
+        for arg in _LAW_ARGS
+        if arg in fixed_params[name]
+    ]
+    assert leftovers == []
