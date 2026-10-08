@@ -81,3 +81,52 @@ def test_aca_non_group_premium_is_community_rated(
     The variant without the non-group reform keeps the risk-rated premium.
     """
     assert _aca_premium(policy, spousal_income) == pytest.approx(expected)
+
+
+RISK_RATED_PREMIUM_PARAMS = frozenset(
+    {
+        "premium_markup",
+        "premium_minimum",
+        "premium_predicted_hcc",
+        "premium_sample_insurer_cost",
+        "premium_sample_is_married",
+    }
+)
+
+
+def _free_arguments(policy: PolicyVariant, regime: str) -> frozenset[str]:
+    """Arguments of a non-group regime's DAG that no function of it produces."""
+    spec = REGIME_SPECS[regime]
+    functions = {**build_model_functions(), **_build_functions(spec)}
+    functions = {name: func for name, func in functions.items() if callable(func)}
+    apply_aca_overrides(functions, spec, policy)
+    arguments = {
+        name
+        for func in functions.values()
+        for name in inspect.signature(func).parameters
+    }
+    return frozenset(arguments - functions.keys())
+
+
+@pytest.mark.parametrize(
+    "regime", ["nongroup_nomc_inelig_canwork", "nongroup_nomc_choose_canwork"]
+)
+@pytest.mark.parametrize(
+    ("policy", "expected"),
+    [
+        (PolicyVariant.ACA, frozenset()),
+        (PolicyVariant.ACA_NO_MANDATE, frozenset()),
+        (PolicyVariant.ACA_NO_MEDICAID_EXPANSION, frozenset()),
+        (PolicyVariant.ACA_NO_MEDICAID_EXPANSION_NO_MANDATE, frozenset()),
+        (PolicyVariant.ACA_ONLY_MEDICAID_EXPANSION, RISK_RATED_PREMIUM_PARAMS),
+    ],
+)
+def test_aca_non_group_regime_reads_risk_rated_premium_params_only_without_reform(
+    policy: PolicyVariant, regime: str, expected: frozenset[str]
+) -> None:
+    """A community-rated non-group market reads none of the risk-rated inputs.
+
+    The variant without the non-group reform still prices private cover by
+    risk and reads all of them.
+    """
+    assert _free_arguments(policy, regime) & RISK_RATED_PREMIUM_PARAMS == expected
