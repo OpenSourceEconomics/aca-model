@@ -30,7 +30,6 @@ from aca_model.baseline.regimes._common import (
     build_dead_regime,
     build_grids,
     build_model_constraints,
-    build_model_edges,
     build_model_functions,
     build_model_state_transitions,
     build_model_states,
@@ -160,13 +159,12 @@ def build_model_slots(
 
 
 def build_edges() -> dict[str, Transition]:
-    """Declare each living regime's outgoing edges together with their law.
+    """Declare each living regime's outgoing edges by their law.
 
-    `dead` has no outgoing edges and is therefore terminal.
+    The law's age schedule names each destination at the source ages that reach
+    it. `dead` has no outgoing edges and is therefore terminal.
     """
     return {
-        name: Transition(
-            targets=targets, law=_HIS_LAWS[REGIME_SPECS[name]["his"]](name)
-        )
-        for name, targets in build_model_edges().items()
+        name: Transition(law=_HIS_LAWS[spec["his"]](name))
+        for name, spec in REGIME_SPECS.items()
     }

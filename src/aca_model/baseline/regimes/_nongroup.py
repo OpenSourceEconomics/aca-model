@@ -6,7 +6,7 @@ Already nongroup, so no SSI/Medicaid override needed for HIS transitions.
 
 from collections.abc import Callable
 
-from lcm import Regime, StochasticTransition
+from lcm import ByAge, Regime
 from lcm.solvers import DCEGM, NBEGM
 from lcm.typing import (
     Age,
@@ -14,7 +14,6 @@ from lcm.typing import (
     DiscreteState,
     FloatND,
     Period,
-    RegimeName,
 )
 
 from aca_model.baseline import health_insurance
@@ -138,8 +137,8 @@ def build_constraints(spec: RegimeSpec) -> dict:
     return {}
 
 
-def build_law(name: str) -> dict[RegimeName, StochasticTransition]:
-    """Build the nongroup regime's per-target transition probabilities."""
+def build_law(name: str) -> ByAge:
+    """Build the nongroup regime's per-target transition probabilities by source age."""
     spec = REGIME_SPECS[name]
     gets_mc = spec["mc"] != "nomc"
     own, _ng = make_targets(name)

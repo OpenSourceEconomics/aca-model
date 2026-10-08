@@ -6,7 +6,8 @@ import pytest
 from helpers.model import make_baseline_model
 from lcm.exceptions import InvalidInitialConditionsError
 
-from aca_model.baseline.regimes import ENTRY_REGIMES
+from aca_model.baseline.regimes import ENTRY_REGIMES, REGIME_SPECS
+from aca_model.baseline.regimes._common import build_model_edges
 from aca_model.benchmark import get_benchmark_initial_conditions, get_benchmark_params
 from aca_model.config import MODEL_CONFIG
 from aca_model.simulation import select_admissible_starts
@@ -94,6 +95,14 @@ def test_boundary_targets_change_with_source_age(model):
         60 in edges["retiree_nomc_inelig_canwork"],
         61 in edges["retiree_nomc_inelig_canwork"],
     ) == (True, False)
+
+
+@pytest.mark.parametrize("regime", list(REGIME_SPECS))
+def test_each_regime_law_reaches_exactly_its_declared_targets(model, regime):
+    """The law's age schedule names each target at the ages that can reach it."""
+    assert dict(model.graph.edges.solve[regime]) == {
+        target: frozenset(ages) for target, ages in build_model_edges()[regime].items()
+    }
 
 
 def test_bequest_continuation_is_not_removed(model):

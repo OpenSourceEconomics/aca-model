@@ -9,7 +9,7 @@ the ACA Medicaid expansion leaves employer coverage untouched.
 from collections.abc import Callable
 
 import jax.numpy as jnp
-from lcm import Regime, StochasticTransition
+from lcm import ByAge, Regime
 from lcm.solvers import DCEGM, NBEGM
 from lcm.typing import (
     Age,
@@ -19,7 +19,6 @@ from lcm.typing import (
     FloatND,
     IntND,
     Period,
-    RegimeName,
 )
 
 from aca_model.agent.labor_market import LaborSupply
@@ -102,8 +101,8 @@ def _build_functions(spec: RegimeSpec) -> dict:
     return functions
 
 
-def build_law(name: str) -> dict[RegimeName, StochasticTransition]:
-    """Build the tied regime's per-target transition probabilities."""
+def build_law(name: str) -> ByAge:
+    """Build the tied regime's per-target transition probabilities by source age."""
     spec = REGIME_SPECS[name]
     own, ng = make_targets(name)
     transition_func = _make_transition_canwork(own, ng)

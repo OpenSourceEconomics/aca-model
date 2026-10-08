@@ -14,6 +14,7 @@ from typing import Any, Literal, TypedDict
 import jax.numpy as jnp
 import numpy as np
 from lcm import (
+    ByAge,
     DiscreteGrid,
     GridBreakpoint,
     IrregSpacedGrid,
@@ -578,12 +579,26 @@ def build_regime_transition(
     spec: RegimeSpec,
     transition_func: Callable[..., FloatND],
     target_groups: tuple[dict[str, int], ...],
-) -> dict[RegimeName, StochasticTransition]:
-    """Reuse one scalar probability cell per destination across all source ages."""
+) -> ByAge:
+    """Name each destination's probability cell at the source ages that reach it.
+
+    One scalar probability cell per destination is shared by every source age;
+    the ages with the same destinations form one case.
+    """
     edges = build_regime_edges(spec=spec, target_groups=target_groups)
-    return build_granular_regime_transition(
+    cells = build_granular_regime_transition(
         transition_func=transition_func,
         target_ids=(int(getattr(RegimeId, target)) for target in edges),
+    )
+    ages_by_targets: dict[tuple[RegimeName, ...], list[int]] = {}
+    for age in transition_ages(spec):
+        targets = tuple(target for target, ages in edges.items() if age in ages)
+        ages_by_targets.setdefault(targets, []).append(age)
+    return ByAge(
+        cases={
+            tuple(ages): {target: cells[target] for target in targets}
+            for targets, ages in ages_by_targets.items()
+        }
     )
 
 
@@ -686,8 +701,7 @@ def build_granular_regime_transition(
     """Build the regime's per-target probability cells.
 
     Each cell evaluates the regime's probability vector and selects its
-    target's entry. The model graph supplies the source-age support for these
-    cells.
+    target's entry. `build_regime_transition` schedules the cells by source age.
     """
     id_to_name = {
         int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
