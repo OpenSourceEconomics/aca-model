@@ -16,7 +16,7 @@ from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model as _create_baseline_model
 from aca_model.baseline.regimes import REGIME_SPECS
 from aca_model.benchmark import get_benchmark_params
-from aca_model.config import BENCHMARK_GRID_CONFIG
+from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
 
 _NONGROUP_BEFORE_MEDICARE = frozenset(
     name
@@ -33,14 +33,14 @@ _DERIVED_CATEGORICALS = {
 }
 
 
-def make_baseline_model() -> Model:
-    """Baseline model on `BENCHMARK_GRID_CONFIG` with the benchmark snapshot params."""
+def make_baseline_model(*, grid_config: GridConfig = BENCHMARK_GRID_CONFIG) -> Model:
+    """Baseline model on `grid_config` with the benchmark snapshot params."""
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return _create_baseline_model(
         fixed_params=fixed_params,
         wage_params=wage_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=grid_config,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
 

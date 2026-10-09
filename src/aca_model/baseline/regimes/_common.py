@@ -325,6 +325,7 @@ def build_grids(
         gauss_hermite=True,
         mu=0.0,
         sigma=1.0,
+        fold=grid_config.fold_hcc_transitory,
     )
 
     assets_start = -_compute_max_annual_labor_income(

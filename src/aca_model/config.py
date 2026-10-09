@@ -34,6 +34,10 @@ class GridConfig:
     n_wage_res_gridpoints: int = 5
     n_hcc_persistent_gridpoints: int = 3
     n_hcc_transitory_gridpoints: int = 5
+    # Fold the transitory medical-cost shock out of the state space. Nothing a
+    # period computes reads last year's transitory shock, so with the fold it is
+    # drawn on the transition only and no value carries its axis.
+    fold_hcc_transitory: bool = False
     # The post-decision savings grid is cubically clustered toward the borrowing
     # constraint. Its node count controls resolution under DC-EGM and NB-EGM.
     n_savings_gridpoints: int = 200
