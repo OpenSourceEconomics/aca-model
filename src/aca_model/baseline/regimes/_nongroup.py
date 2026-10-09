@@ -92,10 +92,10 @@ def _make_transition_forcedout(
     return transition
 
 
-def _build_functions(spec: RegimeSpec) -> dict:
+def _build_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> dict:
     """Build functions dict for a nongroup regime."""
     can_work = spec["canwork"] == "canwork"
-    functions = build_common_functions(spec)
+    functions = build_common_functions(spec, subtract_bill=subtract_bill)
 
     functions["ss_benefit"] = select_ss_benefit(spec)
 
@@ -168,7 +168,9 @@ def build_regime(
         if egm_solver is None
         else ("nbegm" if nbegm_solver is not None else "dcegm")
     )
-    functions = _build_functions(spec)
+    functions = _build_functions(
+        spec, subtract_bill=grids.grid_config.subtract_hcc_bill
+    )
     # The EGM solvers reject constraints that read the continuous state, which
     # the private-cover constraint does through `premium_default`.
     constraints = build_constraints(spec) if egm_solver is None else {}
@@ -183,7 +185,11 @@ def build_regime(
     return build_alive_regime(
         egm_solver=egm_solver,
         states=states,
-        state_transitions=build_state_transitions(spec, solver=state_solver),
+        state_transitions=build_state_transitions(
+            spec,
+            solver=state_solver,
+            subtract_bill=grids.grid_config.subtract_hcc_bill,
+        ),
         actions=build_actions(spec, grids),
         functions=functions,
         constraints=constraints,

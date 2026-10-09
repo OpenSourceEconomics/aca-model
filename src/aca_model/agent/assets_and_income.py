@@ -109,6 +109,31 @@ def next_assets(
     )
 
 
+def assets_before_bill(
+    cash_on_hand: FloatND,
+    transfers: FloatND,
+    pension_assets_adjustment: FloatND,
+    consumption_dollars: ContinuousAction,
+) -> FloatND:
+    """Compute next-period assets for non-terminal targets before the medical bill.
+
+    `next_assets` is this minus `oop_costs`.
+    """
+    return cash_on_hand + transfers + pension_assets_adjustment - consumption_dollars
+
+
+def assets_before_bill_when_dead(
+    cash_on_hand: FloatND,
+    transfers: FloatND,
+    consumption_dollars: ContinuousAction,
+) -> FloatND:
+    """Compute assets for the dead/terminal target before the medical bill.
+
+    `next_assets_when_dead` is this minus `oop_costs`.
+    """
+    return cash_on_hand + transfers - consumption_dollars
+
+
 def next_assets_when_dead(
     cash_on_hand: FloatND,
     transfers: FloatND,
