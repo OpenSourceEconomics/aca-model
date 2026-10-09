@@ -372,3 +372,34 @@ def test_premium_subsidy_just_below_400_fpl() -> None:
         premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
     )
     assert result > 0.0
+
+
+@pytest.mark.parametrize(
+    ("income_fpl_frac", "buy_private", "is_medicaid_eligible"),
+    [
+        (0.5, BuyPrivate.yes, False),
+        (1.2, BuyPrivate.yes, False),
+        (1.7, BuyPrivate.yes, False),
+        (2.3, BuyPrivate.yes, False),
+        (3.0, BuyPrivate.yes, False),
+        (1.2, BuyPrivate.no, False),
+        (1.2, BuyPrivate.yes, True),
+    ],
+)
+def test_cost_sharing_scale_of_its_bracket_equals_the_cost_sharing_scale(
+    income_fpl_frac: float, buy_private: int, is_medicaid_eligible: bool
+) -> None:
+    """The scale read off the bracket is the scale the bracket lookup gives."""
+    kwargs = {
+        "gross_income": jnp.array(income_fpl_frac * FPL_SINGLE),
+        "spousal_income": jnp.int32(0),
+        "buy_private": jnp.array(buy_private),
+        "is_medicaid_eligible": jnp.array(is_medicaid_eligible),
+        "cost_sharing_schedule": COST_SHARING_SCHEDULE,
+    }
+    bracket = aca_hi.cost_sharing_bracket(**kwargs)
+    scale = aca_hi.cost_sharing_scale_of_bracket(
+        cost_sharing_bracket=bracket, cost_sharing_schedule=COST_SHARING_SCHEDULE
+    )
+
+    assert scale == aca_hi.cost_sharing(**kwargs)

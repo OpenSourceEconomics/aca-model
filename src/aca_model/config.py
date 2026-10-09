@@ -38,6 +38,11 @@ class GridConfig:
     # period computes reads last year's transitory shock, so with the fold it is
     # drawn on the transition only and no value carries its axis.
     fold_hcc_transitory: bool = False
+    # Declare the asset law toward living targets as resources minus the
+    # out-of-pocket bill, so the solve averages each target's value over the
+    # transitory shock once per period instead of at every source point. Needs
+    # `fold_hcc_transitory` and the brute-force asset law.
+    subtract_hcc_bill: bool = False
     # The post-decision savings grid is cubically clustered toward the borrowing
     # constraint. Its node count controls resolution under DC-EGM and NB-EGM.
     n_savings_gridpoints: int = 200

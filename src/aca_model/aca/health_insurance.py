@@ -129,6 +129,39 @@ def cost_sharing(
     return jnp.where(is_insured & ~is_medicaid_eligible, scale, 1.0)
 
 
+def cost_sharing_bracket(
+    gross_income: FloatND,
+    spousal_income: DiscreteState,
+    buy_private: DiscreteAction,
+    is_medicaid_eligible: BoolND,
+    cost_sharing_schedule: MappingLeaf,
+) -> IntND:
+    """Return the household's cost-sharing bracket, `n_kinks + 1` when neutral.
+
+    The bracket is the FPL bracket of `cost_sharing`; a household without
+    private cover, or Medicaid-eligible, falls in the neutral bracket one past
+    the last, whose scale is 1.0. The bracket takes finitely many values, so
+    the out-of-pocket bill can be averaged per bracket.
+    """
+    sched = cast("Mapping[str, Any]", cost_sharing_schedule.data)
+    kinks = sched["kinks"]  # [n_kinks, 3]
+    bracket = jnp.searchsorted(kinks[:, spousal_income], gross_income, side="right")
+    is_insured = buy_private == BuyPrivate.yes
+    return jnp.where(
+        is_insured & ~is_medicaid_eligible, bracket, kinks.shape[0] + 1
+    ).astype(jnp.int32)
+
+
+def cost_sharing_scale_of_bracket(
+    cost_sharing_bracket: IntND,
+    cost_sharing_schedule: MappingLeaf,
+) -> FloatND:
+    """Return the cost-sharing scale of a bracket from `cost_sharing_bracket`."""
+    sched = cast("Mapping[str, Any]", cost_sharing_schedule.data)
+    factors = sched["factors"]  # [n_kinks + 1]
+    return jnp.append(factors, jnp.ones((), dtype=factors.dtype))[cost_sharing_bracket]
+
+
 def is_medicaid_eligible(
     is_ssi_eligible: BoolND,
     aca_magi: FloatND,

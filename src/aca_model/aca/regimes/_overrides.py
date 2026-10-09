@@ -67,7 +67,10 @@ def apply_aca_overrides(
         # risk-rated premium's zero-profit intercept has no consumer left.
         functions.pop("private_premium_intercept", None)
         functions["hic_premium_subsidy"] = aca_hi.premium_subsidy
-        functions["cost_sharing_scale"] = aca_hi.cost_sharing
+        # Split at the bracket, which takes finitely many values, so the
+        # out-of-pocket bill can be averaged per bracket.
+        functions["cost_sharing_bracket"] = aca_hi.cost_sharing_bracket
+        functions["cost_sharing_scale"] = aca_hi.cost_sharing_scale_of_bracket
         functions["premium_default"] = aca_hi.premium_default
         functions["cash_on_hand"] = aca_hi.cash_on_hand
         functions["primary_oop"] = aca_hi.primary_oop

@@ -26,6 +26,7 @@ from lcm import (
     Regime,
     RouwenhorstAR1Process,
     StochasticTransition,
+    SubtractedBill,
     categorical,
     fixed_transition,
 )
@@ -949,7 +950,7 @@ def build_model_state_transitions() -> dict:
     }
 
 
-def build_common_functions(spec: RegimeSpec) -> dict:
+def build_common_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> dict:
     """Build the regime-level functions dict for a non-dead regime.
 
     Contains the spec-dependent selections and the overlay-swapped names;
@@ -1004,6 +1005,11 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     # Swapped per policy variant by the ACA overlay, hence regime-level
     functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
     functions["after_tax_income"] = taxes.after_tax_income
+    if subtract_bill:
+        functions["assets_before_bill"] = assets_and_income.assets_before_bill
+        functions["assets_before_bill_when_dead"] = (
+            assets_and_income.assets_before_bill_when_dead
+        )
     functions["premium_default"] = assets_and_income.premium_default
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
 
@@ -1173,7 +1179,7 @@ def select_target_for_age(
 
 
 def build_state_transitions(
-    spec: RegimeSpec, *, solver: SolverName = "brute_force"
+    spec: RegimeSpec, *, solver: SolverName = "brute_force", subtract_bill: bool = False
 ) -> dict:
     """Build the regime-level state transitions dict for a non-dead regime.
 
@@ -1184,7 +1190,9 @@ def build_state_transitions(
     post-decision (savings) form.
     """
     transitions: dict = {}
-    transitions["assets"] = _build_per_target_regime_assets(spec, solver=solver)
+    transitions["assets"] = _build_per_target_regime_assets(
+        spec, solver=solver, subtract_bill=subtract_bill
+    )
     transitions["health"] = _build_per_target_regime_health(spec)
     claimed_ss_transition = _build_per_target_regime_claimed_ss(spec)
     if claimed_ss_transition:
@@ -1222,8 +1230,24 @@ def _select_aime_law(spec: RegimeSpec) -> Callable[..., FloatND]:
     )
 
 
+# Every input of the out-of-pocket bill that varies across a source's states and
+# actions, with its support. The bill reads nothing else besides next period's
+# medical-cost draws, the period and parameters.
+_BILL_CONDITIONERS: Mapping[str, tuple[int | bool, ...]] = MappingProxyType(
+    {
+        "is_married": (0, 1),
+        "good_health": (0, 1),
+        "is_medicaid_eligible": (False, True),
+        "buy_private": (BuyPrivate.no, BuyPrivate.yes),
+        # Under the ACA policy: the four FPL kinks of the cost-sharing schedule
+        # give brackets 0-4, and 5 is the neutral bracket.
+        "cost_sharing_bracket": tuple(range(6)),
+    }
+)
+
+
 def _build_per_target_regime_assets(
-    spec: RegimeSpec, *, solver: SolverName = "brute_force"
+    spec: RegimeSpec, *, solver: SolverName = "brute_force", subtract_bill: bool = False
 ) -> dict[RegimeName, Callable[..., FloatND]]:
     """Build per-target assets transitions.
 
@@ -1232,11 +1256,30 @@ def _build_per_target_regime_assets(
     pull in the `next_aime`-dependent imputation chain — `dead` has no
     `aime` state and pylcm cannot resolve `next_aime` there. Non-dead
     targets use the full `next_assets` with the pension correction.
-    Under DC-EGM both laws take their post-decision (savings) form.
+    Under DC-EGM both laws take their post-decision (savings) form. With
+    `subtract_bill`, each law is declared as its resources before the bill
+    (`assets_before_bill`, `assets_before_bill_when_dead`) minus `oop_costs`,
+    conditioned on every source-side input of the bill.
     """
+    if subtract_bill and solver != "brute_force":
+        msg = f"subtract_hcc_bill needs the brute-force asset law, not {solver!r}."
+        raise ValueError(msg)
+    living_law: Callable[..., FloatND]
+    dead_law: Callable[..., FloatND]
     if solver in ("dcegm", "nbegm"):
         living_law = assets_and_income.next_assets_from_savings
         dead_law = assets_and_income.next_assets_when_dead_from_savings
+    elif subtract_bill:
+        living_law = SubtractedBill(
+            resources="assets_before_bill",
+            bill="oop_costs",
+            conditioners=_BILL_CONDITIONERS,
+        )
+        dead_law = SubtractedBill(
+            resources="assets_before_bill_when_dead",
+            bill="oop_costs",
+            conditioners=_BILL_CONDITIONERS,
+        )
     else:
         living_law = assets_and_income.next_assets
         dead_law = assets_and_income.next_assets_when_dead
