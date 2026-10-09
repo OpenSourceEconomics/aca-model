@@ -17,6 +17,7 @@ from lcm import (
     ByAge,
     DiscreteGrid,
     GridBreakpoint,
+    InitialNodes,
     IrregSpacedGrid,
     LinSpacedGrid,
     NormalIIDProcess,
@@ -37,7 +38,6 @@ from lcm.solvers import OneMarginSolver
 from lcm.typing import (
     BoolND,
     FloatND,
-    InitialNodes,
     IntND,
     Period,
     RegimeName,
@@ -494,11 +494,12 @@ ENTRY_REGIMES = (
 # Admissible starting (age, regime) pairs, shared by every model variant: the
 # baseline estimation-sample ages. Later ages, and `dead` at any age, are reached only
 # through transitions.
-INITIAL_NODES: InitialNodes = tuple(
-    (age, regime)
-    for age in MODEL_AGES
-    if config.start_age <= age <= config.last_start_age
-    for regime in ENTRY_REGIMES
+INITIAL_NODES = InitialNodes(
+    by_age={
+        age: ENTRY_REGIMES
+        for age in MODEL_AGES
+        if config.start_age <= age <= config.last_start_age
+    }
 )
 
 _STAGE_KEY = {

@@ -1,8 +1,11 @@
 """Tests for the pylcm simulate-interaction helpers."""
 
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
+from lcm import InitialNodes
 
 from aca_model.simulation import restore_subject_ids, simulate_with_dense_index
 
@@ -12,7 +15,10 @@ class _StubModel:
 
     def __init__(self) -> None:
         self.seen_index: list[int] = []
-        self.initial_nodes = frozenset({(51, "a"), (51, "b"), (51, "c"), (52, "a")})
+        self.initial_nodes = InitialNodes(by_age={51: ("a", "b", "c"), 52: "a"})
+        self.graph = SimpleNamespace(
+            initial_nodes=frozenset({(51, "a"), (51, "b"), (51, "c"), (52, "a")})
+        )
 
     def simulate(self, *, initial_conditions: pd.DataFrame, **_kwargs: object) -> str:
         self.seen_index = list(initial_conditions.index)

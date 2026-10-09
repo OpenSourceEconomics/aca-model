@@ -54,22 +54,23 @@ def select_admissible_starts(
 ) -> pd.DataFrame:
     """Keep the rows that start at or before the model's last admissible start age.
 
-    Rows older than every age in `model.initial_nodes` are outside the sample
+    Rows older than every age in `model.graph.initial_nodes` are outside the sample
     the model is meant to simulate and are dropped. Every kept row must start at
     an admissible `(age, regime_name)` pair; any other kept row raises.
 
     Args:
-        model: A pylcm `Model` (anything exposing `initial_nodes`).
+        model: A pylcm `Model` (anything exposing `graph.initial_nodes`, the
+            admissible `(age, regime_name)` pairs).
         initial_conditions: Seed DataFrame with `age` and `regime_name` columns.
 
     Returns:
         The rows of `initial_conditions` inside the model's entry ages.
 
     Raises:
-        ValueError: If a kept row starts at a pair outside `model.initial_nodes`.
+        ValueError: If a kept row starts at a pair outside `model.graph.initial_nodes`.
 
     """
-    admitted = {(float(age), regime) for age, regime in model.initial_nodes}
+    admitted = {(float(age), regime) for age, regime in model.graph.initial_nodes}
     last_entry_age = max(age for age, _ in admitted)
     kept = initial_conditions.loc[initial_conditions["age"] <= last_entry_age]
     pairs = set(zip(kept["age"].astype(float), kept["regime_name"], strict=True))
