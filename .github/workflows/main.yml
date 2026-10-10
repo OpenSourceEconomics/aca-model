@@ -30,12 +30,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pylcm at the revision aca-dev pins
+      - name: Install pylcm at the supported API revision
         # Pinned by commit so a deleted or rewritten branch cannot break the
-        # install; move it together with the aca-dev pylcm submodule pointer.
+        # install; keep it compatible with the model's graph declarations.
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@ccf35fc6a2ddc1cec7ea8320819c4980476c166d"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@43a4bf2b0ad003b7308dd3478cd008458b528102"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest
