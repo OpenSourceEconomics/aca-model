@@ -357,6 +357,11 @@ def oop_costs(
     return jnp.minimum(oop, oop_max)
 
 
+def negative_oop_costs(oop_costs: FloatND) -> FloatND:
+    """Return the out-of-pocket bill as the shock added to assets."""
+    return -oop_costs
+
+
 def insured_oop(
     total_health_costs: FloatND,
     is_married: IntND,
