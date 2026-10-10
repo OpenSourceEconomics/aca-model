@@ -14,6 +14,7 @@ from typing import Any, Literal, TypedDict
 import jax.numpy as jnp
 import numpy as np
 from lcm import (
+    AdditiveShockTransition,
     ByAge,
     DiscreteGrid,
     GridBreakpoint,
@@ -26,7 +27,6 @@ from lcm import (
     Regime,
     RouwenhorstAR1Process,
     StochasticTransition,
-    SubtractedBill,
     categorical,
     fixed_transition,
 )
@@ -1007,6 +1007,7 @@ def build_common_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> 
     functions["after_tax_income"] = taxes.after_tax_income
     if subtract_bill:
         functions["assets_before_bill"] = assets_and_income.assets_before_bill
+        functions["negative_oop_costs"] = health_insurance.negative_oop_costs
         functions["assets_before_bill_when_dead"] = (
             assets_and_income.assets_before_bill_when_dead
         )
@@ -1258,8 +1259,8 @@ def _build_per_target_regime_assets(
     targets use the full `next_assets` with the pension correction.
     Under DC-EGM both laws take their post-decision (savings) form. With
     `subtract_bill`, each law is declared as its resources before the bill
-    (`assets_before_bill`, `assets_before_bill_when_dead`) minus `oop_costs`,
-    conditioned on every source-side input of the bill.
+    (`assets_before_bill`, `assets_before_bill_when_dead`) plus the shock
+    `negative_oop_costs`, conditioned on every source-side input of the bill.
     """
     if subtract_bill and solver != "brute_force":
         msg = f"subtract_hcc_bill needs the brute-force asset law, not {solver!r}."
@@ -1270,14 +1271,14 @@ def _build_per_target_regime_assets(
         living_law = assets_and_income.next_assets_from_savings
         dead_law = assets_and_income.next_assets_when_dead_from_savings
     elif subtract_bill:
-        living_law = SubtractedBill(
-            resources="assets_before_bill",
-            bill="oop_costs",
+        living_law = AdditiveShockTransition(
+            base="assets_before_bill",
+            shock="negative_oop_costs",
             conditioners=_BILL_CONDITIONERS,
         )
-        dead_law = SubtractedBill(
-            resources="assets_before_bill_when_dead",
-            bill="oop_costs",
+        dead_law = AdditiveShockTransition(
+            base="assets_before_bill_when_dead",
+            shock="negative_oop_costs",
             conditioners=_BILL_CONDITIONERS,
         )
     else:
