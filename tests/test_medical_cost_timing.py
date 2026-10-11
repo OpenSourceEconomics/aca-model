@@ -8,6 +8,8 @@ choice in period t depend on the lagged persistent shock, which predicts this
 year's costs, and not at all on the lagged transitory shock.
 """
 
+from dataclasses import replace
+
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
@@ -20,6 +22,7 @@ from aca_model.benchmark import (
     get_benchmark_initial_conditions,
     get_benchmark_params,
 )
+from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _SHOCKS = ("hcc_persistent", "hcc_transitory")
 
@@ -27,9 +30,16 @@ _SHOCKS = ("hcc_persistent", "hcc_transitory")
 @pytest.fixture(scope="module")
 def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
     """Period-0 rows of twins that differ in one lagged shock, at its grid ends."""
-    model = create_benchmark_model(pref_type_grid=DiscreteGrid(BenchmarkPrefType))
+    grid_config = replace(
+        BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
+    )
+    model = create_benchmark_model(
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType), grid_config=grid_config
+    )
     _, _, params = get_benchmark_params(model=model)
-    base = get_benchmark_initial_conditions(model=model, n_subjects=1, seed=0)
+    base = get_benchmark_initial_conditions(
+        model=model, n_subjects=1, seed=0, grid_config=grid_config
+    )
     grids = model.user_regimes["retiree_nomc_inelig_canwork"].states
     initial_conditions = {name: jnp.tile(values, 4) for name, values in base.items()}
     for row, shock in enumerate(_SHOCKS):
