@@ -18,7 +18,9 @@ from lcm import Model
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
-_FOLDED = replace(BENCHMARK_GRID_CONFIG, fold_hcc_transitory=True)
+_FOLDED = replace(
+    BENCHMARK_GRID_CONFIG, fold_hcc_transitory=True, subtract_hcc_bill=False
+)
 
 
 @pytest.fixture(scope="module")
