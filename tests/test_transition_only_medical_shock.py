@@ -13,6 +13,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from helpers.model import make_baseline_model
+from lcm import Model
 
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
@@ -22,18 +23,18 @@ _REGIME = "retiree_nomc_inelig_canwork"
 
 
 @pytest.fixture(scope="module")
-def folded_model():
+def folded_model() -> Model:
     return make_baseline_model(grid_config=_FOLDED)
 
 
-def test_living_regimes_carry_no_lagged_transitory_shock(folded_model):
+def test_living_regimes_carry_no_lagged_transitory_shock(folded_model: Model) -> None:
     assert not any(
         "hcc_transitory" in folded_model.state_names(regime_name=name)
         for name in folded_model.user_regimes
     )
 
 
-def test_living_regimes_keep_the_lagged_persistent_shock(folded_model):
+def test_living_regimes_keep_the_lagged_persistent_shock(folded_model: Model) -> None:
     assert all(
         "hcc_persistent" in folded_model.state_names(regime_name=name)
         for name in folded_model.user_regimes
@@ -43,10 +44,14 @@ def test_living_regimes_keep_the_lagged_persistent_shock(folded_model):
 
 @pytest.mark.long_running
 def test_folded_value_equals_every_transitory_slice_of_the_unfolded_value(
-    folded_model,
-):
+    folded_model: Model,
+) -> None:
     """The two models' sums differ only in order, so they agree to rounding."""
-    unfolded_model = make_baseline_model()
+    unfolded_model = make_baseline_model(
+        grid_config=replace(
+            BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
+        )
+    )
     _, _, params = get_benchmark_params(model=unfolded_model)
     unfolded = np.asarray(
         unfolded_model.solve(params=params, log_level="off").values[0][_REGIME]

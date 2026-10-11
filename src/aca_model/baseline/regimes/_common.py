@@ -1239,7 +1239,7 @@ _BILL_CONDITIONERS: Mapping[str, tuple[int | bool, ...]] = MappingProxyType(
         "is_married": (0, 1),
         "good_health": (0, 1),
         "is_medicaid_eligible": (False, True),
-        "buy_private": (BuyPrivate.no, BuyPrivate.yes),
+        "buy_private": (int(BuyPrivate.no), int(BuyPrivate.yes)),
         # Under the ACA policy: the four FPL kinks of the cost-sharing schedule
         # give brackets 0-4, and 5 is the neutral bracket.
         "cost_sharing_bracket": tuple(range(6)),

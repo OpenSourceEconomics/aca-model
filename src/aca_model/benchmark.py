@@ -37,7 +37,7 @@ from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model
 from aca_model.baseline.regimes import ENTRY_REGIMES
-from aca_model.config import BENCHMARK_GRID_CONFIG
+from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
 from aca_model.consumption_dollars_grid import (
     compute_consumption_dollars_points,
     inject_consumption_dollars_points,
@@ -66,6 +66,7 @@ _DERIVED_CATEGORICALS = {
 def create_benchmark_model(
     *,
     pref_type_grid: DiscreteGrid,
+    grid_config: GridConfig = BENCHMARK_GRID_CONFIG,
     execution_config: ExecutionConfig | None = None,
 ) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
@@ -75,13 +76,14 @@ def create_benchmark_model(
 
     Args:
         pref_type_grid: Pref-type grid; pass `DiscreteGrid(BenchmarkPrefType)`.
+        grid_config: Economic resolution and medical-shock folding declarations.
         execution_config: Explicit hardware-local policy forwarded unchanged.
             None uses the smallest selected accelerator allocator limit as the
             device-memory budget; CPU construction remains unbudgeted.
     """
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return create_model(
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=grid_config,
         fixed_params=fixed_params,
         wage_params=wage_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
@@ -151,7 +153,11 @@ def get_benchmark_consumption_dollars_points(*, n_points: int) -> tuple[float, .
 
 
 def get_benchmark_initial_conditions(
-    *, model: Model, n_subjects: int, seed: int
+    *,
+    model: Model,
+    n_subjects: int,
+    seed: int,
+    grid_config: GridConfig = BENCHMARK_GRID_CONFIG,
 ) -> dict[str, Array]:
     """Draw random feasible initial conditions across five age-51 regimes.
 
@@ -177,7 +183,13 @@ def get_benchmark_initial_conditions(
     assets_lo, assets_hi = float(assets_pts.min()), float(assets_pts.max())
     aime_lo, aime_hi = float(aime_pts.min()), float(aime_pts.max())
     hcc_p_pts = np.asarray(grids["hcc_persistent"].to_jax())  # ty: ignore[unresolved-attribute]
-    hcc_t_pts = np.asarray(grids["hcc_transitory"].to_jax())  # ty: ignore[unresolved-attribute]
+    hcc_t_grid = grids.get("hcc_transitory")
+    # Preserve the random stream for shared states when the folded state is absent.
+    hcc_t_pts = (
+        np.asarray(hcc_t_grid.to_jax())  # ty: ignore[unresolved-attribute]
+        if hcc_t_grid is not None
+        else np.arange(grid_config.n_hcc_transitory_gridpoints)
+    )
     wage_res_pts = np.asarray(grids["log_ft_wage_res"].to_jax())  # ty: ignore[unresolved-attribute]
 
     # For lagged_labor_supply: 0 for tied rows (regime lacks the state),
@@ -187,7 +199,7 @@ def get_benchmark_initial_conditions(
         np.int32
     )
 
-    return {
+    initial = {
         "regime_id": jnp.asarray(regime),
         "age": jnp.full(n_subjects, 51.0),
         "assets": jnp.asarray(rng.uniform(assets_lo, assets_hi, n_subjects)),
@@ -208,3 +220,6 @@ def get_benchmark_initial_conditions(
         # everyone starts as not-yet-claimed.
         "claimed_ss": jnp.zeros(n_subjects, dtype=jnp.int32),
     }
+    if "hcc_transitory" not in model.state_names(regime_name=ENTRY_REGIMES[0]):
+        initial.pop("hcc_transitory")
+    return initial

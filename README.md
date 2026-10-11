@@ -2,6 +2,14 @@
 
 Core lifecycle model for the ACA structural retirement project.
 
+The benchmark folds the IID transitory medical-cost shock and declares its asset
+transition as resources plus the negated medical bill. Production grid defaults remain
+unfolded. To measure the unfolded benchmark control, pass
+`grid_config=replace(BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False)`
+to `create_benchmark_model`. Pass the same grid configuration to
+`get_benchmark_initial_conditions`; both routes retain identical seeded draws for their
+shared initial states.
+
 Model factories accept `execution_config=ExecutionConfig(...)`. An omitted policy uses
 the smallest JAX allocator `bytes_limit` among the selected accelerators as an explicit
 per-device budget. This enables budget-aware width selection; CPU construction remains

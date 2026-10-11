@@ -67,6 +67,8 @@ MODEL_AGES: tuple[int, ...] = tuple(
 GRID_CONFIG = GridConfig()
 
 BENCHMARK_GRID_CONFIG = GridConfig(
+    fold_hcc_transitory=True,
+    subtract_hcc_bill=True,
     n_assets_gridpoints=3,
     n_aime_gridpoints=3,
     n_consumption_dollars_gridpoints=5,
