@@ -5,6 +5,8 @@ out fixed_params, wage_params, and a pref-type grid at every call site.
 Production callers (aca-slurm, scripts) assemble these explicitly.
 """
 
+from dataclasses import replace
+
 from lcm import DiscreteGrid, Model
 
 from aca_model.aca.health_insurance import PolicyVariant
@@ -32,8 +34,12 @@ _DERIVED_CATEGORICALS = {
     "pref_type": DiscreteGrid(BenchmarkPrefType),
 }
 
+_UNFOLDED_GRID_CONFIG = replace(
+    BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
+)
 
-def make_baseline_model(*, grid_config: GridConfig = BENCHMARK_GRID_CONFIG) -> Model:
+
+def make_baseline_model(*, grid_config: GridConfig = _UNFOLDED_GRID_CONFIG) -> Model:
     """Baseline model on `grid_config` with the benchmark snapshot params."""
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return _create_baseline_model(
@@ -65,14 +71,16 @@ def aca_fixed_params(*, fixed_params: dict, policy: PolicyVariant) -> dict:
     }
 
 
-def make_aca_model(*, policy: PolicyVariant) -> Model:
-    """ACA model on `BENCHMARK_GRID_CONFIG` with the benchmark snapshot params."""
+def make_aca_model(
+    *, policy: PolicyVariant, grid_config: GridConfig = _UNFOLDED_GRID_CONFIG
+) -> Model:
+    """ACA model on `grid_config` with the benchmark snapshot params."""
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return _create_aca_model(
         policy=policy,
         fixed_params=aca_fixed_params(fixed_params=fixed_params, policy=policy),
         wage_params=wage_params,
         derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=grid_config,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
