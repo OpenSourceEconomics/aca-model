@@ -19,7 +19,6 @@ from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _FOLDED = replace(BENCHMARK_GRID_CONFIG, fold_hcc_transitory=True)
-_REGIME = "retiree_nomc_inelig_canwork"
 
 
 @pytest.fixture(scope="module")
@@ -53,15 +52,27 @@ def test_folded_value_equals_every_transitory_slice_of_the_unfolded_value(
         )
     )
     _, _, params = get_benchmark_params(model=unfolded_model)
-    unfolded = np.asarray(
-        unfolded_model.solve(params=params, log_level="off").values[0][_REGIME]
-    )
-    folded = np.asarray(
-        folded_model.solve(params=params, log_level="off").values[0][_REGIME]
-    )
-    axis = unfolded_model.state_names(regime_name=_REGIME).index("hcc_transitory")
-    by_slice = np.moveaxis(unfolded, axis, 0)
-
-    np.testing.assert_allclose(
-        by_slice, np.broadcast_to(folded, by_slice.shape), rtol=1e-6, atol=0
-    )
+    unfolded_values = unfolded_model.solve(params=params, log_level="off").values
+    folded_values = folded_model.solve(params=params, log_level="off").values
+    assert set(folded_values) == set(unfolded_values)
+    for period, regimes in unfolded_values.items():
+        assert set(folded_values[period]) == set(regimes)
+        for name, values in regimes.items():
+            unfolded = np.asarray(values)
+            folded = np.asarray(folded_values[period][name])
+            states = unfolded_model.state_names(regime_name=name)
+            by_slice = (
+                np.moveaxis(unfolded, states.index("hcc_transitory"), 0)
+                if "hcc_transitory" in states
+                else unfolded
+            )
+            expected = np.broadcast_to(folded, by_slice.shape)
+            np.testing.assert_array_equal(np.isfinite(by_slice), np.isfinite(expected))
+            np.testing.assert_allclose(
+                by_slice,
+                expected,
+                rtol=1e-6,
+                atol=0,
+                equal_nan=False,
+                err_msg=f"period={period}, regime={name}",
+            )
