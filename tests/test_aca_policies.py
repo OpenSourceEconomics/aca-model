@@ -3,6 +3,7 @@
 import inspect
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from lcm.params import MappingLeaf
 
@@ -402,4 +403,4 @@ def test_cost_sharing_scale_of_its_bracket_equals_the_cost_sharing_scale(
         cost_sharing_bracket=bracket, cost_sharing_schedule=COST_SHARING_SCHEDULE
     )
 
-    assert scale == aca_hi.cost_sharing(**kwargs)
+    np.testing.assert_allclose(scale, aca_hi.cost_sharing(**kwargs), rtol=0, atol=0)
