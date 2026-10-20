@@ -11,6 +11,7 @@ laws) and is algebraically identical to the brute-force spec (locked by
 the one piece that needs `lcm.solvers`.
 """
 
+import numpy as np
 from lcm import IrregSpacedGrid
 from lcm.solvers import DCEGM
 
@@ -31,7 +32,9 @@ def build_dcegm_solver(grids: Grids) -> DCEGM:
     assets_points = grids.assets.to_jax()
     savings_stop = float(assets_points[-1]) - float(assets_points[0])
     savings_grid = IrregSpacedGrid(
-        points=tuple(savings_stop * (i / (n_points - 1)) ** 3 for i in range(n_points)),
+        points=np.array(
+            [savings_stop * (i / (n_points - 1)) ** 3 for i in range(n_points)]
+        ),
     )
     return DCEGM(savings_grid=savings_grid)
 

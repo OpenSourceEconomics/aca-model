@@ -342,7 +342,7 @@ def build_grids(
         consumption_dollars=(
             IrregSpacedGrid(n_points=grid_config.n_consumption_dollars_gridpoints)
             if consumption_dollars_points is None
-            else IrregSpacedGrid(points=consumption_dollars_points)
+            else IrregSpacedGrid(points=np.asarray(consumption_dollars_points))
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
@@ -378,7 +378,7 @@ def build_assets_grid(*, floor: float, n_points: int) -> IrregSpacedGrid:
     )
     negative[0] = floor
     positive[-1] = _ASSETS_TOP
-    return IrregSpacedGrid(points=np.concatenate([negative, positive]).tolist())
+    return IrregSpacedGrid(points=np.concatenate([negative, positive]))
 
 
 def get_hcc_persistent_shock(*, grid_config: GridConfig) -> RouwenhorstAR1Process:
