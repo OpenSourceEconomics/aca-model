@@ -296,7 +296,9 @@ def test_aca_nongroup_inelig_has_real_functions() -> None:
     regime = regimes["nongroup_nomc_inelig_canwork"]
     assert regime.functions["mandate_penalty"] is aca_hi.mandate_penalty
     assert regime.functions["hic_premium_subsidy"] is aca_hi.premium_subsidy
-    assert regime.functions["cost_sharing_scale"] is aca_hi.cost_sharing
+    assert (
+        regime.functions["cost_sharing_scale"] is aca_hi.cost_sharing_scale_of_bracket
+    )
     assert regime.functions["cash_on_hand"] is aca_hi.cash_on_hand
     assert regime.functions["primary_oop"] is aca_hi.primary_oop
     assert regime.functions["is_medicaid_eligible"] is aca_hi.is_medicaid_eligible
@@ -308,7 +310,9 @@ def test_aca_no_mandate_has_no_mandate_function() -> None:
     regime = regimes["nongroup_nomc_inelig_canwork"]
     assert "mandate_penalty" not in regime.functions
     assert regime.functions["hic_premium_subsidy"] is aca_hi.premium_subsidy
-    assert regime.functions["cost_sharing_scale"] is aca_hi.cost_sharing
+    assert (
+        regime.functions["cost_sharing_scale"] is aca_hi.cost_sharing_scale_of_bracket
+    )
     assert regime.functions["cash_on_hand"] is aca_hi.cash_on_hand
 
 

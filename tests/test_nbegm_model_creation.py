@@ -42,6 +42,10 @@ from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
 
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
+# The EGM solvers take the savings-form asset law, so the medical bill stays inside
+# `next_assets` rather than being declared as an additive shock.
+_EGM_GRID_CONFIG = dataclasses.replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
+
 _M1_REGIME = "nongroup_nomc_inelig_canwork"
 _BRUTE_REGIME = "retiree_nomc_inelig_canwork"
 
@@ -49,14 +53,12 @@ _BRUTE_REGIME = "retiree_nomc_inelig_canwork"
 # labor level puts that breakpoint at a different liquid level. The one-sided read
 # publishes its cliff limits on a single query grid shared across branches, which the
 # two cannot both satisfy, so a regime carrying `labor_supply` needs the bridged read.
-_BRIDGED_GRID_CONFIG = dataclasses.replace(
-    BENCHMARK_GRID_CONFIG, nbegm_jump_read="bridged"
-)
+_BRIDGED_GRID_CONFIG = dataclasses.replace(_EGM_GRID_CONFIG, nbegm_jump_read="bridged")
 
 
 def _build_regimes(solver: SolverName) -> dict[str, Regime]:
     return build_all_regimes(
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=_EGM_GRID_CONFIG,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
@@ -81,7 +83,7 @@ def _build_model(solver: SolverName) -> Model:
 
 def _grids() -> Grids:
     return build_grids(
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=_EGM_GRID_CONFIG,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
@@ -135,7 +137,7 @@ def test_build_nbegm_solver_forwards_the_jump_read_mode() -> None:
     `"bridged"` is the fast estimation setting (plain carry rows, fold kept);
     `"one_sided"` (the default) publishes exact one-sided cliff limits.
     """
-    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, nbegm_jump_read="bridged")
+    grid_config = dataclasses.replace(_EGM_GRID_CONFIG, nbegm_jump_read="bridged")
     grids = build_grids(
         grid_config=grid_config,
         fixed_params=_FIXED_PARAMS,
@@ -287,7 +289,7 @@ def test_nbegm_labor_supply_requires_the_bridged_cliff_read() -> None:
     branches, so the two cannot both hold and the build is refused.
     """
     with pytest.raises(RegimeInitializationError, match="must not enter any schedule"):
-        _build_model_with("nbegm", BENCHMARK_GRID_CONFIG)
+        _build_model_with("nbegm", _EGM_GRID_CONFIG)
 
     assert isinstance(_build_model_with("nbegm", _BRIDGED_GRID_CONFIG), Model)
 

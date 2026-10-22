@@ -33,10 +33,14 @@ from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
+# The EGM solvers take the savings-form asset law, so the medical bill stays inside
+# `next_assets` rather than being declared as an additive shock.
+_EGM_GRID_CONFIG = dataclasses.replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
+
 
 def _build_regimes(solver: SolverName) -> dict[str, Regime]:
     return build_all_regimes(
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=_EGM_GRID_CONFIG,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
@@ -49,7 +53,7 @@ def _build_model(solver: SolverName) -> Model:
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=_EGM_GRID_CONFIG,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver=solver,
     )
@@ -92,7 +96,7 @@ def test_dcegm_model_slots_broadcast_contract_functions_and_constraint() -> None
     forward simulation re-decides consumption by an argmax over the
     consumption grid and needs the explicit feasibility mask."""
     slots = build_model_slots(
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=_EGM_GRID_CONFIG,
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
@@ -126,7 +130,7 @@ def test_dcegm_requires_construction_time_consumption_points() -> None:
             fixed_params=_FIXED_PARAMS,
             wage_params=_WAGE_PARAMS,
             derived_categoricals=_DERIVED_CATEGORICALS,
-            grid_config=BENCHMARK_GRID_CONFIG,
+            grid_config=_EGM_GRID_CONFIG,
             pref_type_grid=DiscreteGrid(BenchmarkPrefType),
             solver="dcegm",
         )
@@ -149,11 +153,11 @@ def test_dcegm_benchmark_model_builds() -> None:
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=BENCHMARK_GRID_CONFIG,
+        grid_config=_EGM_GRID_CONFIG,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver="dcegm",
         consumption_dollars_points=get_benchmark_consumption_dollars_points(
-            n_points=BENCHMARK_GRID_CONFIG.n_consumption_dollars_gridpoints
+            n_points=_EGM_GRID_CONFIG.n_consumption_dollars_gridpoints
         ),
     )
     assert isinstance(model.user_regimes["retiree_nomc_inelig_canwork"].solver, DCEGM)
@@ -162,7 +166,7 @@ def test_dcegm_benchmark_model_builds() -> None:
 def test_savings_grid_length_follows_grid_config() -> None:
     """`GridConfig.n_savings_gridpoints` sets the number of nodes on every
     living regime's DC-EGM savings grid."""
-    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, n_savings_gridpoints=70)
+    grid_config = dataclasses.replace(_EGM_GRID_CONFIG, n_savings_gridpoints=70)
     regimes = build_all_regimes(
         grid_config=grid_config,
         fixed_params=_FIXED_PARAMS,
@@ -178,7 +182,7 @@ def test_savings_grid_length_follows_grid_config() -> None:
 def test_dcegm_savings_grid_rejects_too_few_points() -> None:
     """`n_savings_gridpoints < 2` cannot form the cubically clustered DC-EGM
     savings grid, so building the dcegm regimes raises a clear `ValueError`."""
-    grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, n_savings_gridpoints=1)
+    grid_config = dataclasses.replace(_EGM_GRID_CONFIG, n_savings_gridpoints=1)
     with pytest.raises(ValueError, match="n_savings_gridpoints"):
         build_all_regimes(
             grid_config=grid_config,
