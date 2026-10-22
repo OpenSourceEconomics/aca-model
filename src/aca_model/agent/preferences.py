@@ -23,6 +23,13 @@ from aca_model.agent.labor_market import LaggedLaborSupply
 # endowment; it only bends the map near and beyond the endowment.
 _LEISURE_SMOOTHING_FRACTION = 0.01
 
+# Positive floor that leisure approaches as work costs exceed the endowment, as a
+# fraction of the time endowment. It keeps felicity and its consumption derivative
+# inside float32's range when leisure_available is far below zero, down to the
+# NB-EGM inverse bracket's lowest consumption; away from the floor its effect decays
+# exponentially.
+_LEISURE_FLOOR_FRACTION = 1e-5
+
 
 @categorical(ordered=False)
 class PrefType:
@@ -71,17 +78,25 @@ def fixed_cost_of_work(
 def _smooth_leisure_floor(
     leisure_available: FloatND, time_endowment: ScalarFloat
 ) -> FloatND:
-    """Bend leisure to a strictly positive floor as work costs approach the endowment.
+    """Bend leisure smoothly onto a positive floor as work costs approach the endowment.
 
-    `softplus(x) = log(1 + e^x)` via `jnp.logaddexp(0, x)`, scaled by a small fraction
-    of the endowment. Where `leisure_available` is large relative to the smoothing width
-    the map reduces to `leisure_available` (bulk unchanged); as it falls to zero leisure
-    bends to `0⁺` — never negative, never a kinked clamp — so the CRRA aggregator never
-    receives a non-positive base. The smoothing width scales with the endowment, so the
-    map is scale-invariant.
+    Leisure is a smooth maximum of `leisure_available` and the floor
+    `F = _LEISURE_FLOOR_FRACTION * time_endowment`:
+    `s * logaddexp(F / s, leisure_available / s)`, with smoothing width
+    `s = _LEISURE_SMOOTHING_FRACTION * time_endowment`.
+
+    - `leisure_available` large relative to `s`: leisure equals `leisure_available`
+      up to a term that decays like `e^(-leisure_available / s)`.
+    - `leisure_available` at or below zero: leisure bends to `F⁺` — never below the
+      floor, never a kinked clamp — so every work choice stays feasible and the CRRA
+      aggregator's base stays large enough for float32 felicity and marginal
+      felicity.
+
+    Both widths scale with the endowment, so the map is scale-invariant.
     """
     smoothing = _LEISURE_SMOOTHING_FRACTION * time_endowment
-    return smoothing * jnp.logaddexp(0.0, leisure_available / smoothing)
+    floor = _LEISURE_FLOOR_FRACTION * time_endowment
+    return smoothing * jnp.logaddexp(floor / smoothing, leisure_available / smoothing)
 
 
 def leisure_canwork_retiree_or_nongroup(
@@ -269,16 +284,20 @@ def utility_scale_factor(
 
 def scaled_bequest_weight(
     bequest_weight: ScalarFloat,
-    consumption_weight: ScalarFloat,
-    coefficient_rra: ScalarFloat,
+    consumption_weight: FloatND,
+    coefficient_rra: FloatND,
     time_endowment: ScalarFloat,
-    time_discount_factor: ScalarFloat,
+    discount_factor: FloatND,
     rate_of_return: ScalarFloat,
 ) -> FloatND:
-    """Transform raw bequest weight into the form used in the bequest function.
+    """Per-type bequest weight `θ_B` from the estimated bequest MPC.
 
     result = T^ξ * (bw / (1+r-bw))^ξ₂ / β
     where ξ = (1-α)(1-γ) and ξ₂ = α(1-γ) - 1.
+
+    `bw` is the marginal propensity to consume out of final-period wealth, one
+    scalar for all types; α, γ and β are the type's consumption weight, CRRA
+    coefficient and discount factor, so `θ_B` differs by preference type.
     """
     xi = (1.0 - consumption_weight) * (1.0 - coefficient_rra)
     xi2 = consumption_weight * (1.0 - coefficient_rra) - 1.0
@@ -287,7 +306,7 @@ def scaled_bequest_weight(
         bequest_weight > 0.0,
         time_endowment**xi
         * (safe_bw / (1.0 + rate_of_return - safe_bw)) ** xi2
-        / time_discount_factor,
+        / discount_factor,
         0.0,
     )
 
@@ -295,7 +314,7 @@ def scaled_bequest_weight(
 def bequest(
     assets: ContinuousState,
     bequest_shifter: ScalarFloat,
-    scaled_bequest_weight: ScalarFloat,
+    scaled_bequest_weight: FloatND,
     consumption_weight: FloatND,
     coefficient_rra: FloatND,
     utility_scale_factor: FloatND,

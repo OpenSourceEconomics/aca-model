@@ -1,7 +1,11 @@
 """Tests for the pylcm simulate-interaction helpers."""
 
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
+import pytest
+from lcm import InitialNodes
 
 from aca_model.simulation import restore_subject_ids, simulate_with_dense_index
 
@@ -11,6 +15,10 @@ class _StubModel:
 
     def __init__(self) -> None:
         self.seen_index: list[int] = []
+        self.initial_nodes = InitialNodes(by_age={51: ("a", "b", "c"), 52: "a"})
+        self.graph = SimpleNamespace(
+            initial_nodes=frozenset({(51, "a"), (51, "b"), (51, "c"), (52, "a")})
+        )
 
     def simulate(self, *, initial_conditions: pd.DataFrame, **_kwargs: object) -> str:
         self.seen_index = list(initial_conditions.index)
@@ -24,7 +32,7 @@ def test_simulate_with_dense_index_hands_pylcm_a_dense_range() -> None:
     `subject_id` positionally, so a sparse id index would index out of bounds.
     """
     ic = pd.DataFrame(
-        {"regime_name": ["a", "b", "c"]},
+        {"regime_name": ["a", "b", "c"], "age": [51, 51, 51]},
         index=pd.Index([3010, 500_000_000, 959_738_010], name="id"),
     )
     model = _StubModel()
@@ -35,7 +43,7 @@ def test_simulate_with_dense_index_hands_pylcm_a_dense_range() -> None:
 def test_simulate_with_dense_index_returns_ids_aligned_to_subject() -> None:
     """Returned ids align to subject_id: position i is the id of subject i."""
     ic = pd.DataFrame(
-        {"regime_name": ["a", "b"]},
+        {"regime_name": ["a", "b"], "age": [51, 51]},
         index=pd.Index([3010, 959_738_010], name="id"),
     )
     _result, ids = simulate_with_dense_index(
@@ -52,3 +60,30 @@ def test_restore_subject_ids_maps_positional_subject_back_to_original() -> None:
     np.testing.assert_array_equal(
         out["id"].to_numpy(), [3010, 959_738_010, 3010, 959_738_010]
     )
+
+
+def test_simulate_with_dense_index_drops_starts_after_the_last_entry_age() -> None:
+    """Rows older than every admissible start age never reach the simulator."""
+    ic = pd.DataFrame(
+        {"regime_name": ["a", "b", "a"], "age": [51, 62, 52]},
+        index=pd.Index([10, 20, 30], name="id"),
+    )
+    _result, ids = simulate_with_dense_index(
+        model=_StubModel(), initial_conditions=ic, params={}
+    )
+    np.testing.assert_array_equal(ids, [10, 30])
+
+
+@pytest.mark.parametrize(
+    ("age", "regime"), [(51, "dead"), (52, "b")], ids=["dead", "off-contract"]
+)
+def test_simulate_with_dense_index_rejects_inadmissible_pairs_within_entry_ages(
+    age: int, regime: str
+) -> None:
+    """A row inside the entry ages but outside the entry pairs raises."""
+    ic = pd.DataFrame(
+        {"regime_name": ["a", regime], "age": [51, age]},
+        index=pd.Index([10, 20], name="id"),
+    )
+    with pytest.raises(ValueError, match=regime):
+        simulate_with_dense_index(model=_StubModel(), initial_conditions=ic, params={})

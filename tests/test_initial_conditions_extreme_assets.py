@@ -8,8 +8,8 @@ how negative starting assets are. The model's constraints — and pylcm's
 """
 
 import jax.numpy as jnp
+from _lcm.simulation.initial_conditions import validate_initial_conditions
 from lcm import DiscreteGrid
-from lcm.model import validate_initial_conditions
 
 from aca_model.agent.assets_and_income import borrowing_constraint
 from aca_model.agent.preferences import BenchmarkPrefType
@@ -101,7 +101,6 @@ def test_extreme_negative_assets_subject_passes_validation() -> None:
     """
     n_subjects = 1
     model = create_benchmark_model(
-        n_subjects=n_subjects,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
     _, _, params = get_benchmark_params(model=model)

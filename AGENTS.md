@@ -72,27 +72,41 @@ ACA variants don't create new regimes — they swap functions on baseline regime
 - ACA replaces stubs with real policy functions from `aca/policies.py`
 - `PolicyVariant` enum controls which policies are active (full ACA, no mandate,
   Medicaid only)
+- Every variant with the reformed non-group market (all but Medicaid-only) swaps the
+  non-group-nomc `plan_premium` for the community-rated
+  `aca_premium_single + aca_premium_married_extra * is_married`; aca-slurm puts the ACA
+  plan's copay parameters into those regimes and drops the risk-rated premium's params
 
 ### Key State Variables
 
-- `assets`: Savings grid `[≈ −221k, 500k]`, 24 points (lower bound = minus one year of
-  maximum full-time earnings, so it shifts with the wage parameters; finer at low
-  levels)
+- `assets`: Savings grid from minus one year of maximum full-time earnings (so the lower
+  bound shifts with the wage parameters) to 12M (the largest initial holding), 24
+  points, sinh-spaced around zero (5 nodes below zero, a node at zero, 5 nodes in
+  `[0, 30k]`, geometric above; `build_assets_grid`)
 - `aime`: Average Indexed Monthly Earnings — piecewise grid at the PIA bend points (32
   points total; `n_aime_gridpoints` is ignored on this path)
 - `health`: `HealthWithDisability` (disabled/bad/good) pre-65, `Health` (bad/good)
   post-65
 - `log_ft_wage_res`: AR(1) wage residual shock (5-point Rouwenhorst)
-- `hcc_persistent` / `hcc_transitory`: Health cost shocks (`_ShockGrid` — integrated
-  over, policy does not condition on them)
-- Regime transitions determined by `select_target_for_age()` based on age and actions
+- `hcc_persistent` / `hcc_transitory`: last period's health-cost shocks (Rouwenhorst
+  AR(1) and Gauss-Hermite IID). Policy conditions on the lagged persistent shock, which
+  predicts this period's costs and prices the private premium; nothing reads the lagged
+  transitory shock. The draw dependencies retain both states in living regimes; `dead`
+  carries only assets and preference type.
+- Regime transitions determined by `select_target_for_age()` based on age and actions;
+  death has probability `1 − survival_probs[age, health]`, a per-regime param on the
+  regime's own health grid. Ages run 51–96: 95 is the last age anyone is alive (survival
+  1e-4 at 94, 0 at 95), and only `dead` is active at 96.
 
 ### Key Design Decisions
 
 - **AgeGrid with int ages**: Model uses `AgeGrid` with integer start/stop — all `age`
   parameters are `int`, not `float`
-- **OOP timing**: OOP health costs are in `next_assets` (post-consumption), not
-  `cash_on_hand`. Matches struct-ret: agent doesn't condition consumption on OOP.
+- **OOP timing**: medical costs are realised after the period's choices, and the state
+  carries the lagged persistent shock ζ\_{t−1}. `total_health_costs` reads the
+  transition's draws `next_hcc_persistent` / `next_hcc_transitory`, so OOP enters
+  `next_assets` and the continuation integrates over it; `cash_on_hand`, transfers and
+  the consumption floor see no OOP.
 - **DAG key ≠ function name**: `functions["marginal_tax_rate"] = taxes.marginal_rate` —
   the dict key must match consuming functions' parameter names, not the definition name.
   Don't stutter module name in function name (`taxes.marginal_rate` not
@@ -107,6 +121,13 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   an action. Those use `premium()` and `primary_oop()` which condition on it. All other
   regimes use `premium_insured()` / `premium_retired()` and `oop_costs` directly — no
   `buy_private` parameter at all.
+- **Medicaid in the non-group regimes**: their `hic_premium` is
+  `medicaid_adjusted_premium(plan_premium)`, zero when Medicaid-eligible (Medicaid
+  replaces private cover before Medicare and pays the Medicare premium after). Before
+  Medicare, `oop_costs` is Medicaid's cost-sharing on total costs when eligible,
+  whatever `buy_private` says, so a Medicaid-eligible household can neither hold private
+  cover nor stay uninsured; both `buy_private` values give the same outcome. Elsewhere
+  Medicaid pays on top of the primary OOP (`oop_with_medicaid`).
 - **`reference_age` parameter**: Fixed cost of work uses `age - reference_age` (not a
   hardcoded constant). Same parameter appears in `leisure()`, `tied()`, `with_hours()`,
   and `utility_scale_factor()`.
@@ -116,36 +137,57 @@ ACA variants don't create new regimes — they swap functions on baseline regime
   `premium_default = max(0, hic_premium − max(0, resources − consumption_dollars_floor))`
   is a tracked DAG node; `cash_on_hand` subtracts only the affordable part. The floor is
   therefore on pre-premium resources; OOP stays the post-decision shock in
-  `next_assets`. Coverage is unchanged on default (the defaulted premium is
-  uncompensated care).
+  `next_assets`. Employer and Medicare coverage is unchanged on default (the defaulted
+  premium is uncompensated care). Private non-group cover is not: under the brute-force
+  solver the `private_cover_paid_in_full` constraint makes `buy_private = yes`
+  infeasible whenever `premium_default > 0`, so no household holds private cover
+  financed by the floor.
+- **Private non-group premium**:
+  `max(premium_minimum[is_married], p0 + b (1 + markup) E[insurer cost])`, with `b`
+  estimated. The intercept `p0` is the DAG node `private_premium_intercept`, solved by
+  bisection from the insurer's zero-profit condition on the data sample of private
+  buyers under 65 (`premium_sample_*`), so it moves with `b`.
+- **Couples' cost sharing**: `deductible` and `oop_max` are the single household's;
+  `insured_oop` doubles both for married households.
 - **Two-track Medicaid eligibility**: `is_medicaid_eligible` is the union of a
   *categorical* track — `(crossed_oamc_threshold OR is_disabled)` AND the SSI asset and
   income tests (on SSI countable income) — and, under the ACA Medicaid-expansion
   variant, an *income-only* track — `aca_magi < 138% FPL`, scoped to the under-65
-  non-disabled population. The expansion uses MAGI (full income via `aca_magi`),
-  distinct from the half-counted SSI countable income of the categorical track.
+  population whatever their health (the disabled under 65 included, without the asset
+  test). The expansion uses MAGI (full income via `aca_magi`), distinct from the
+  half-counted SSI countable income of the categorical track. Regime (HIS) transitions
+  and the pension `target_his` read the categorical track only (`is_ssi_eligible`): the
+  ACA leaves employer coverage untouched, so a retiree/tied household eligible only
+  through the expansion keeps its employer coverage, with Medicaid paying on top of its
+  OOP.
 - **`crossed_oamc_threshold`**: per-regime constant fixed param
   (`= spec["mc"] == "oamc"`, i.e. age ≥ 65), the *aged* indicator in eligibility. It
   replaced the `gets_medicare` gate there; `is_disabled` (= `health == disabled`, a DAG
-  function in `nomc`/`dimc` regimes) supplies the disabled arm. The Medicare
-  *transition* still uses its own build-time `gets_medicare` constant (`mc != nomc`) —
-  distinct from this.
+  function in `nomc`/`dimc` regimes) supplies the disabled arm.
+- **Disability Medicare before 65**: a household is on Medicare (`dimc`) next period
+  exactly when it does not work this period and is disabled next period. The canwork
+  regime transitions split survivors between the `dimc` and `nomc` targets by
+  `P(disabled next | health)`, and the per-target health laws condition on the outcome
+  (`next_health_into_dimc`, `next_health_into_nomc`).
 - **SS claim-age adjustment baked into AIME**: at the voluntary claim the
-  early-retirement reduction / delayed-retirement credit is applied to PIA and converted
-  back to AIME via `find_aime` (the exact inverse of `pia`), so the permanent adjustment
-  rides in the carried `aime` with no extra state and persists into the forced regimes.
+  early-retirement reduction / delayed-retirement credit is applied to PIA
+  (`pia_adjusted_next_period`) and converted back to AIME via the exact inverse of
+  `pia`, so the permanent adjustment rides in the carried `aime` with no extra state.
   The `pia_aime_grid` / `pia_table` carry a fifth bend point above the taxable max
   (`max_delayed_factor * max_pia`, round-tripped to AIME), so a top earner who delays
   keeps the delayed-retirement credit in the carried AIME instead of clamping at the
-  taxable max — matching the reference (struct-ret's
-  `convert_pia_to_aime(..., impose_upper_bound_on_aime=False)`). Post-claim labor
-  accrual runs on this adjusted AIME; `_accrue_aime` still caps the labor-earnings base
-  at the taxable max, and the solve-phase `pension_assets_adjustment` corrects the
-  pension imputation gap, with pension imputation reading an *unadjusted* PIA
-  (`pia_unadjusted_next_period`) so the claim-age credit never feeds the pension node —
-  faithful to the reference. The DI path (`ssdi_pia`) reads the un-baked AIME.
-  `inelig`/`forced` regimes use a plain `next_aime` with no claim inputs
-  (`_select_aime_law` routes on `spec["ss"]`).
+  taxable max. Which PIA the next AIME encodes is the phased `carried_pia` node:
+  - solve: `pensions.total_to_pia`, the PIA `PIA*` with
+    `PIA* + (1 − τ) pbmax_{t+1}(PIA*) = PIA_adj + (1 − τ) pbmax_{t+1}(PIA_unadj)`,
+    because solve re-imputes pension wealth from next period's PIA (French & Jones 2011,
+    app. D; struct-ret `convert_total_ben_to_pia`);
+  - simulate: the adjusted PIA itself, since simulate carries true pension wealth.
+    Pension imputation reads the unadjusted PIA (`pia_unadjusted_next_period`), and the
+    solve-phase `pension_assets_adjustment` corrects the accrual-evolved pension against
+    it. The earnings-test credit covers only benefits the earnings test withheld. In the
+    `forced` regimes (70+) AIME is frozen (`next_aime_forced`); `inelig` regimes use
+    plain accrual with no claim inputs (`_select_aime_law` routes on `spec["ss"]`). The
+    DI path reads the un-baked AIME after indexing and labor accrual.
 - **ACA subsidies/mandate respect Medicaid**: `premium_subsidy`, `cost_sharing`, and
   `mandate_penalty` take `is_medicaid_eligible` and return the neutral value when the
   household is Medicaid-eligible (Medicaid is minimum-essential coverage).

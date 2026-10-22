@@ -18,6 +18,7 @@ from lcm.typing import (
     DiscreteAction,
     DiscreteState,
     FloatND,
+    IntND,
     ScalarBool,
     ScalarFloat,
 )
@@ -33,6 +34,23 @@ class PolicyVariant(Enum):
     ACA_NO_MEDICAID_EXPANSION = auto()
     ACA_NO_MEDICAID_EXPANSION_NO_MANDATE = auto()
     ACA_ONLY_MEDICAID_EXPANSION = auto()
+
+
+def community_rated_premium(
+    is_married: IntND,
+    buy_private: DiscreteAction,
+    aca_premium_single: ScalarFloat,
+    aca_premium_married_extra: ScalarFloat,
+) -> FloatND:
+    """Compute the ACA private non-group premium before premium credits.
+
+    With community rating the premium varies only by household size, not
+    with expected medical costs: `aca_premium_single` for a single
+    household plus `aca_premium_married_extra` for a married one. Return 0
+    when not buying (`buy_private=no`).
+    """
+    premium = aca_premium_single + aca_premium_married_extra * is_married
+    return jnp.where(buy_private == BuyPrivate.yes, premium, 0.0)
 
 
 def mandate_penalty(
@@ -111,12 +129,44 @@ def cost_sharing(
     return jnp.where(is_insured & ~is_medicaid_eligible, scale, 1.0)
 
 
+def cost_sharing_bracket(
+    gross_income: FloatND,
+    spousal_income: DiscreteState,
+    buy_private: DiscreteAction,
+    is_medicaid_eligible: BoolND,
+    cost_sharing_schedule: MappingLeaf,
+) -> IntND:
+    """Return the household's cost-sharing bracket, `n_kinks + 1` when neutral.
+
+    The bracket is the FPL bracket of `cost_sharing`; a household without
+    private cover, or Medicaid-eligible, falls in the neutral bracket one past
+    the last, whose scale is 1.0. The bracket takes finitely many values, so
+    the out-of-pocket bill can be averaged per bracket.
+    """
+    sched = cast("Mapping[str, Any]", cost_sharing_schedule.data)
+    kinks = sched["kinks"]  # [n_kinks, 3]
+    bracket = jnp.searchsorted(kinks[:, spousal_income], gross_income, side="right")
+    is_insured = buy_private == BuyPrivate.yes
+    return jnp.where(
+        is_insured & ~is_medicaid_eligible, bracket, kinks.shape[0] + 1
+    ).astype(jnp.int32)
+
+
+def cost_sharing_scale_of_bracket(
+    cost_sharing_bracket: IntND,
+    cost_sharing_schedule: MappingLeaf,
+) -> FloatND:
+    """Return the cost-sharing scale of a bracket from `cost_sharing_bracket`."""
+    sched = cast("Mapping[str, Any]", cost_sharing_schedule.data)
+    factors = sched["factors"]  # [n_kinks + 1]
+    return jnp.append(factors, jnp.ones((), dtype=factors.dtype))[cost_sharing_bracket]
+
+
 def is_medicaid_eligible(
     is_ssi_eligible: BoolND,
     aca_magi: FloatND,
     spousal_income: DiscreteState,
     crossed_oamc_threshold: ScalarBool,
-    is_disabled: BoolND,
     medicaid_schedule: MappingLeaf,
 ) -> BoolND:
     """Determine Medicaid eligibility on two tracks under ACA expansion.
@@ -125,22 +175,18 @@ def is_medicaid_eligible(
 
     - **Categorical** (SSI-linked): `is_ssi_eligible`, which applies the
       aged-or-disabled gate plus the SSI asset and income tests.
-    - **Expansion** (ACA): the under-65, non-disabled population with MAGI
-      below the expansion threshold (138% FPL encoded in
-      `medicaid_schedule["income_threshold"]`). Expansion never reaches the
-      aged or the disabled; they stay on the categorical track with its
-      asset test.
+    - **Expansion** (ACA): every under-65 household with MAGI below the
+      expansion threshold (138% FPL encoded in
+      `medicaid_schedule["income_threshold"]`), regardless of assets or
+      health, so the disabled under 65 qualify without the asset test. The
+      aged stay on the categorical track with its asset test.
 
     Expansion uses full-count MAGI, not the half-counted SSI
     `countable_income`.
     """
     sched = cast("Mapping[str, Any]", medicaid_schedule.data)
     threshold = sched["income_threshold"]
-    expansion = (
-        (~crossed_oamc_threshold)
-        & (~is_disabled)
-        & (aca_magi < threshold[spousal_income])
-    )
+    expansion = (~crossed_oamc_threshold) & (aca_magi < threshold[spousal_income])
     return is_ssi_eligible | expansion
 
 
@@ -203,6 +249,7 @@ def primary_oop(
     total_health_costs: FloatND,
     cost_sharing_scale: FloatND,
     buy_private: DiscreteAction,
+    is_married: IntND,
     deductible: ScalarFloat,
     coinsurance_rate: ScalarFloat,
     oop_max: ScalarFloat,
@@ -210,13 +257,15 @@ def primary_oop(
     """Compute primary OOP costs with ACA cost-sharing reductions.
 
     Scale deductible, coinsurance rate, and OOP max by the cost-sharing
-    factor before applying the standard OOP calculation. When uninsured
+    factor before applying the standard OOP calculation; couples'
+    deductible and OOP max are twice the single ones. When uninsured
     (`buy_private=no`), OOP equals total health costs (no coverage).
     """
+    couple_scale = 1.0 + is_married
     insured_oop = oop_costs(
         total_health_costs,
-        deductible * cost_sharing_scale,
+        deductible * cost_sharing_scale * couple_scale,
         coinsurance_rate * cost_sharing_scale,
-        oop_max * cost_sharing_scale,
+        oop_max * cost_sharing_scale * couple_scale,
     )
     return jnp.where(buy_private == BuyPrivate.yes, insured_oop, total_health_costs)

@@ -13,7 +13,7 @@ dedicated submodule. Shared definitions and builders live in _common.
 from collections.abc import Mapping
 from typing import Any
 
-from lcm import DiscreteGrid, Regime
+from lcm import DiscreteGrid, Regime, Transition
 from lcm.solvers import DCEGM, NBEGM
 from lcm.typing import UserParams
 
@@ -21,6 +21,8 @@ from aca_model.baseline.regimes import _nongroup as nongroup
 from aca_model.baseline.regimes import _retiree as retiree
 from aca_model.baseline.regimes import _tied as tied
 from aca_model.baseline.regimes._common import (
+    ENTRY_REGIMES,
+    INITIAL_NODES,
     REGIME_SPECS,
     Grids,
     RegimeId,
@@ -36,12 +38,9 @@ from aca_model.baseline.regimes._dcegm import build_dcegm_solver
 from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.config import GridConfig
 
-# NBEGM is a per-regime (not global) solver: it solves one 1-D
-# consumption/savings regime with at most one discrete action, so it attaches
-# only to the M1 vertical-slice regime.
-_NBEGM_REGIME = "nongroup_nomc_inelig_canwork"
-
 __all__ = [
+    "ENTRY_REGIMES",
+    "INITIAL_NODES",
     "REGIME_SPECS",
     "RegimeId",
     "build_all_regimes",
@@ -56,6 +55,12 @@ _HIS_BUILDERS = {
     "retiree": retiree.build_regime,
     "tied": tied.build_regime,
     "nongroup": nongroup.build_regime,
+}
+
+_HIS_LAWS = {
+    "retiree": retiree.build_law,
+    "tied": tied.build_law,
+    "nongroup": nongroup.build_law,
 }
 
 
@@ -115,7 +120,7 @@ def build_all_regimes(
             name,
             grids,
             dcegm_solver=dcegm_solver,
-            nbegm_solver=nbegm_solver if name == _NBEGM_REGIME else None,
+            nbegm_solver=nbegm_solver,
         )
     regimes["dead"] = build_dead_regime(solver=solver)
     return regimes
@@ -129,14 +134,14 @@ def build_model_slots(
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
 ) -> dict[str, Any]:
-    """Build the model-level regime slots broadcast into every regime.
+    """Build the shared model topology and broadcast regime slots.
 
-    Returns keyword arguments for `lcm.Model(...)`: the functions,
+    Returns keyword arguments for `lcm.Model(...)`: the edges, functions,
     constraint, states, and laws of motion shared by all living regimes.
     Both the baseline and the ACA `create_model` consume this — the ACA
     overlay swaps only regime-level functions, so the broadcast slots are
     policy-invariant. Under DC-EGM the solver-contract functions join the
-    broadcast set and no borrowing constraint is declared.
+    broadcast set; the borrowing constraint is declared under every solver.
     """
     grids = build_grids(
         grid_config=grid_config,
@@ -145,8 +150,21 @@ def build_model_slots(
         pref_type_grid=pref_type_grid,
     )
     return {
+        "edges": build_edges(),
         "functions": build_model_functions(solver=solver),
-        "constraints": build_model_constraints(),
+        "constraints": build_model_constraints(solver=solver),
         "states": build_model_states(grids),
         "state_transitions": build_model_state_transitions(),
+    }
+
+
+def build_edges() -> dict[str, Transition]:
+    """Declare each living regime's outgoing edges by their law.
+
+    The law's age schedule names each destination at the source ages that reach
+    it. `dead` has no outgoing edges and is therefore terminal.
+    """
+    return {
+        name: Transition(law=_HIS_LAWS[spec["his"]](name))
+        for name, spec in REGIME_SPECS.items()
     }

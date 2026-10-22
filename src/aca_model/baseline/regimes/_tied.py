@@ -2,15 +2,24 @@
 
 Tied regimes: agents with employer-tied health insurance.
 Tied agents who stop working become nongroup.
-Medicaid-eligible agents are also overridden to nongroup.
+Categorically (SSI-) Medicaid-eligible agents are also overridden to nongroup;
+the ACA Medicaid expansion leaves employer coverage untouched.
 """
 
 from collections.abc import Callable
 
 import jax.numpy as jnp
-from lcm import Regime
+from lcm import ByAge, Regime
 from lcm.solvers import DCEGM, NBEGM
-from lcm.typing import Age, BoolND, DiscreteAction, FloatND, Period
+from lcm.typing import (
+    Age,
+    BoolND,
+    DiscreteAction,
+    DiscreteState,
+    FloatND,
+    IntND,
+    Period,
+)
 
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
@@ -19,56 +28,67 @@ from aca_model.baseline.regimes._common import (
     Grids,
     RegimeSpec,
     build_actions,
+    build_alive_regime,
     build_common_functions,
-    build_granular_regime_transition,
+    build_nbegm_functions,
     build_pension_functions,
-    build_regime_probs,
+    build_regime_probs_with_di_medicare,
+    build_regime_transition,
     build_state_transitions,
     build_states,
-    make_active_func,
     make_targets,
+    next_model_age,
+    prob_di_medicare_next,
     select_ss_benefit,
     select_target_for_age,
 )
 
 
 def _make_transition_canwork(
-    gets_medicare: bool,
     own: dict[str, int],
     ng: dict[str, int],
 ) -> Callable[..., FloatND]:
     """Create transition for canwork tied regimes.
 
-    Tied agents who stop working become nongroup (lose employer coverage).
-    Medicaid-eligible agents are also overridden to nongroup targets.
+    Tied agents who stop working become nongroup (lose employer coverage);
+    before 65, those disabled next period hold disability Medicare there.
+    Categorically (SSI-) Medicaid-eligible agents are also overridden to
+    nongroup targets.
     """
 
     def transition(
         age: Age,
         period: Period,
+        health: DiscreteState,
         labor_supply: DiscreteAction,
-        is_medicaid_eligible: BoolND,
+        is_ssi_eligible: BoolND,
         survival_probs: FloatND,
+        prob_disabled_next: FloatND,
     ) -> FloatND:
-        sp = survival_probs[period]
-        next_age = age + 1
-        mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
-        target = select_target_for_age(next_age, mc_next, own)
-        # Tied agents who stop working become nongroup
-        stopped = labor_supply == LaborSupply.do_not_work
-        ng_target = select_target_for_age(next_age, mc_next, ng)
-        target = jnp.where(stopped, ng_target, target)
-        # Medicaid eligibility overrides to nongroup
-        ng_ssi = select_target_for_age(next_age, mc_next, ng)
-        target = jnp.where(is_medicaid_eligible, ng_ssi, target)
-        return build_regime_probs(target, sp)
+        del age  # Keep the legacy signature; period owns the clock lookup.
+        next_age = next_model_age(period)
+        to_nongroup = (labor_supply == LaborSupply.do_not_work) | is_ssi_eligible
+
+        def target(mc_next: bool) -> IntND:
+            own_target = select_target_for_age(next_age, mc_next, own)
+            ng_target = select_target_for_age(next_age, mc_next, ng)
+            return jnp.where(to_nongroup, ng_target, own_target)
+
+        return build_regime_probs_with_di_medicare(
+            target_dimc=target(True),
+            target_nomc=target(False),
+            prob_dimc=prob_di_medicare_next(
+                labor_supply, prob_disabled_next[period, health]
+            ),
+            survival=survival_probs[period, health],
+        )
 
     return transition
 
 
-def _build_functions(spec: RegimeSpec) -> dict:
+def _build_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> dict:
     """Build functions dict for a tied regime."""
-    functions = build_common_functions(spec)
+    functions = build_common_functions(spec, subtract_bill=subtract_bill)
 
     functions["ss_benefit"] = select_ss_benefit(spec)
 
@@ -81,6 +101,16 @@ def _build_functions(spec: RegimeSpec) -> dict:
     return functions
 
 
+def build_law(name: str) -> ByAge:
+    """Build the tied regime's per-target transition probabilities by source age."""
+    spec = REGIME_SPECS[name]
+    own, ng = make_targets(name)
+    transition_func = _make_transition_canwork(own, ng)
+    return build_regime_transition(
+        spec=spec, transition_func=transition_func, target_groups=(own, ng)
+    )
+
+
 def build_regime(
     name: str,
     grids: Grids,
@@ -90,27 +120,29 @@ def build_regime(
 ) -> Regime:
     """Build a tied regime (all tied regimes are canwork)."""
     spec = REGIME_SPECS[name]
-    gets_mc = spec["mc"] != "nomc"
-    own, ng = make_targets(name)
-
-    transition_func = _make_transition_canwork(gets_mc, own, ng)
-
     states = build_states(spec, grids)
     egm_solver = dcegm_solver if dcegm_solver is not None else nbegm_solver
-    solver_kwargs: dict = {} if egm_solver is None else {"solver": egm_solver}
     state_solver = (
         "brute_force"
         if egm_solver is None
         else ("nbegm" if nbegm_solver is not None else "dcegm")
     )
-    return Regime(
-        transition=build_granular_regime_transition(
-            transition_func=transition_func, target_ids=(*own.values(), *ng.values())
-        ),
-        active=make_active_func(spec),
+    functions = _build_functions(
+        spec, subtract_bill=grids.grid_config.subtract_hcc_bill
+    )
+    if nbegm_solver is not None:
+        # NBEGM's solver contract is stated per regime: it reads the budget in
+        # savings form off `resources` and the post-decision node off
+        # `savings`, neither of which the brute-force build needs.
+        functions = {**functions, **build_nbegm_functions()}
+    return build_alive_regime(
+        egm_solver=egm_solver,
         states=states,
-        state_transitions=build_state_transitions(spec, solver=state_solver),
+        state_transitions=build_state_transitions(
+            spec,
+            solver=state_solver,
+            subtract_bill=grids.grid_config.subtract_hcc_bill,
+        ),
         actions=build_actions(spec, grids),
-        functions=_build_functions(spec),
-        **solver_kwargs,
+        functions=functions,
     )

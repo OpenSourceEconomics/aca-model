@@ -221,7 +221,7 @@ def test_taxable_ss_benefit_below_threshold() -> None:
     result = taxes.taxable_ss_benefit(
         capital_income=jnp.array(0.0),
         labor_income=jnp.array(10000.0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         ss_benefit=jnp.array(5000.0),
         pension_benefit=jnp.array(0.0),
         spousal_income=jnp.int32(0),
@@ -235,8 +235,7 @@ def test_gross_income_basic() -> None:
     result = taxes.gross_income(
         capital_income=jnp.array(1000.0),
         labor_income=jnp.array(5000.0),
-        spousal_income=jnp.int32(1),
-        spousal_income_amounts=jnp.array([0.0, 2000.0, 20000.0]),
+        spousal_income_amount=jnp.array(2000.0),
         taxable_ss_benefit=jnp.array(500.0),
         pension_benefit=jnp.array(300.0),
     )
@@ -247,8 +246,7 @@ def test_after_tax_income_zero() -> None:
     gi = taxes.gross_income(
         capital_income=jnp.array(0.0),
         labor_income=jnp.array(0.0),
-        spousal_income=jnp.int32(0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         taxable_ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
     )
@@ -269,8 +267,7 @@ def test_after_tax_income_low_bracket() -> None:
     gi = taxes.gross_income(
         capital_income=jnp.array(0.0),
         labor_income=jnp.array(gross),
-        spousal_income=jnp.int32(0),
-        spousal_income_amounts=jnp.array([0.0, 0.0, 20000.0]),
+        spousal_income_amount=jnp.array(0.0),
         taxable_ss_benefit=jnp.array(0.0),
         pension_benefit=jnp.array(0.0),
     )

@@ -27,15 +27,15 @@ jobs:
           - '3.14'
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pylcm from feat/nb-egm
-        # This slice depends on the NB-EGM solver, which lives on pylcm's
-        # feat/nb-egm branch; revert to @main once that branch merges.
+      - name: Install pylcm at the supported API revision
+        # Pinned by commit so a deleted or rewritten branch cannot break the
+        # install; keep it compatible with the model's graph declarations.
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@feat/nb-egm"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@eea73a8f0e301e88f02278df3595c797fdba24df"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest

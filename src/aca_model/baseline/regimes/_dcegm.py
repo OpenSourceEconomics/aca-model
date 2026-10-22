@@ -32,16 +32,8 @@ def build_dcegm_solver(grids: Grids) -> DCEGM:
     savings_stop = float(assets_points[-1]) - float(assets_points[0])
     savings_grid = IrregSpacedGrid(
         points=tuple(savings_stop * (i / (n_points - 1)) ** 3 for i in range(n_points)),
-        batch_size=grids.grid_config.n_savings_batch_size,
     )
-    return DCEGM(
-        continuous_state="assets",
-        continuous_action="consumption_dollars",
-        resources="resources",
-        post_decision_function="savings",
-        savings_grid=savings_grid,
-        stochastic_node_batch_size=grids.grid_config.n_stochastic_node_batch_size,
-    )
+    return DCEGM(savings_grid=savings_grid)
 
 
 def _fail_if_too_few_savings_gridpoints(n_savings_gridpoints: int) -> None:

@@ -3,6 +3,7 @@
 import inspect
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from lcm.params import MappingLeaf
 
@@ -254,6 +255,7 @@ def _aca_medicaid_kwargs(**overrides: object) -> dict:
 
     Defaults describe an under-65, non-disabled household that is not
     categorically eligible; tests override the expansion-relevant fields.
+    Only the arguments `is_medicaid_eligible` reads are passed on.
     """
     base = {
         "is_ssi_eligible": jnp.array(False),
@@ -264,7 +266,8 @@ def _aca_medicaid_kwargs(**overrides: object) -> dict:
         "medicaid_schedule": MEDICAID_SCHEDULE,
     }
     base.update(overrides)
-    return base
+    read = inspect.signature(aca_hi.is_medicaid_eligible).parameters
+    return {name: value for name, value in base.items() if name in read}
 
 
 def test_medicaid_eligible_aca_expansion_below_threshold() -> None:
@@ -303,14 +306,18 @@ def test_medicaid_eligible_aca_expansion_excludes_aged() -> None:
     assert not result
 
 
-def test_medicaid_eligible_aca_expansion_excludes_disabled() -> None:
-    """Disabled households are not reached by the expansion track."""
+def test_medicaid_eligible_aca_expansion_includes_disabled_under_65() -> None:
+    """A disabled under-65 household below the MAGI threshold gets expansion cover.
+
+    The expansion has no asset test, so the household qualifies even though
+    it fails the categorical track (`is_ssi_eligible` is False).
+    """
     result = aca_hi.is_medicaid_eligible(
         **_aca_medicaid_kwargs(
             is_disabled=jnp.asarray(True), aca_magi=jnp.array(10000.0)
         )
     )
-    assert not result
+    assert result
 
 
 def test_medicaid_eligible_aca_ignores_assets() -> None:
@@ -366,3 +373,34 @@ def test_premium_subsidy_just_below_400_fpl() -> None:
         premium_credit_schedule=PREMIUM_CREDIT_SCHEDULE,
     )
     assert result > 0.0
+
+
+@pytest.mark.parametrize(
+    ("income_fpl_frac", "buy_private", "is_medicaid_eligible"),
+    [
+        (0.5, BuyPrivate.yes, False),
+        (1.2, BuyPrivate.yes, False),
+        (1.7, BuyPrivate.yes, False),
+        (2.3, BuyPrivate.yes, False),
+        (3.0, BuyPrivate.yes, False),
+        (1.2, BuyPrivate.no, False),
+        (1.2, BuyPrivate.yes, True),
+    ],
+)
+def test_cost_sharing_scale_of_its_bracket_equals_the_cost_sharing_scale(
+    income_fpl_frac: float, buy_private: int, is_medicaid_eligible: bool
+) -> None:
+    """The scale read off the bracket is the scale the bracket lookup gives."""
+    kwargs = {
+        "gross_income": jnp.array(income_fpl_frac * FPL_SINGLE),
+        "spousal_income": jnp.int32(0),
+        "buy_private": jnp.array(buy_private),
+        "is_medicaid_eligible": jnp.array(is_medicaid_eligible),
+        "cost_sharing_schedule": COST_SHARING_SCHEDULE,
+    }
+    bracket = aca_hi.cost_sharing_bracket(**kwargs)
+    scale = aca_hi.cost_sharing_scale_of_bracket(
+        cost_sharing_bracket=bracket, cost_sharing_schedule=COST_SHARING_SCHEDULE
+    )
+
+    np.testing.assert_allclose(scale, aca_hi.cost_sharing(**kwargs), rtol=0, atol=0)

@@ -4,55 +4,67 @@ Nongroup regimes: agents purchasing individual-market health insurance.
 Already nongroup, so no SSI/Medicaid override needed for HIS transitions.
 """
 
-import functools
 from collections.abc import Callable
 
-from lcm import Regime
+from lcm import ByAge, Regime
 from lcm.solvers import DCEGM, NBEGM
-from lcm.typing import Age, DiscreteAction, FloatND, Period
+from lcm.typing import (
+    Age,
+    DiscreteAction,
+    DiscreteState,
+    FloatND,
+    Period,
+)
 
-from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline import health_insurance
-from aca_model.baseline.health_insurance import BuyPrivate
 from aca_model.baseline.regimes._common import (
     REGIME_SPECS,
     Grids,
     RegimeSpec,
     build_actions,
+    build_alive_regime,
     build_common_functions,
-    build_granular_regime_transition,
     build_nbegm_functions,
     build_pension_functions,
     build_regime_probs,
+    build_regime_probs_with_di_medicare,
+    build_regime_transition,
     build_state_transitions,
     build_states,
-    make_active_func,
     make_targets,
+    next_model_age,
+    prob_di_medicare_next,
     select_ss_benefit,
     select_target_for_age,
 )
 
 
 def _make_transition_canwork(
-    gets_medicare: bool,
     own: dict[str, int],
 ) -> Callable[..., FloatND]:
     """Create transition for canwork nongroup regimes.
 
-    Already nongroup — no SSI override needed. Gets Medicare if stops working
-    (when gets_medicare is True).
+    Already nongroup — no SSI override needed. Before 65, a household that
+    does not work and is disabled next period holds disability Medicare.
     """
 
     def transition(
         age: Age,
         period: Period,
+        health: DiscreteState,
         labor_supply: DiscreteAction,
         survival_probs: FloatND,
+        prob_disabled_next: FloatND,
     ) -> FloatND:
-        sp = survival_probs[period]
-        mc_next = gets_medicare & (labor_supply == LaborSupply.do_not_work)
-        target = select_target_for_age(age + 1, mc_next, own)
-        return build_regime_probs(target, sp)
+        del age  # Keep the legacy signature; period owns the clock lookup.
+        return build_regime_probs_with_di_medicare(
+            target_dimc=select_target_for_age(next_model_age(period), True, own),
+            target_nomc=select_target_for_age(next_model_age(period), False, own),
+            prob_dimc=prob_di_medicare_next(
+                labor_supply, prob_disabled_next[period, health]
+            ),
+            survival=survival_probs[period, health],
+        )
 
     return transition
 
@@ -70,64 +82,73 @@ def _make_transition_forcedout(
     def transition(
         age: Age,
         period: Period,
+        health: DiscreteState,
         survival_probs: FloatND,
     ) -> FloatND:
-        target = select_target_for_age(age + 1, gets_medicare, own)
-        return build_regime_probs(target, survival_probs[period])
+        del age  # Keep the legacy signature; period owns the clock lookup.
+        target = select_target_for_age(next_model_age(period), gets_medicare, own)
+        return build_regime_probs(target, survival_probs[period, health])
 
     return transition
 
 
-def _fixed_full_time_labor_supply() -> DiscreteAction:
-    """Labor supply fixed to full-time work for the NBEGM M1 slice."""
-    return LaborSupply.h2000
-
-
-def _build_functions(
-    spec: RegimeSpec, *, fix_buy_private: bool = False, fix_labor_supply: bool = False
-) -> dict:
-    """Build functions dict for a nongroup regime.
-
-    The NBEGM M1 slice fixes both discrete actions to a single level so the
-    only choice is continuous consumption:
-
-    - `fix_buy_private` binds `buy_private` to `BuyPrivate.yes` in its consumers
-      (premium, OOP) — the `buy_private == BuyPrivate.yes` arm — leaving the
-      remaining budget structure untouched.
-    - `fix_labor_supply` supplies `labor_supply` as a fixed full-time node read
-      by labor income, AIME accrual, and the lagged-supply transition (which
-      stays a state, so the cross-regime continuation space is unchanged).
-    """
+def _build_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> dict:
+    """Build functions dict for a nongroup regime."""
     can_work = spec["canwork"] == "canwork"
-    functions = build_common_functions(spec)
-
-    if can_work and fix_labor_supply:
-        functions["labor_supply"] = _fixed_full_time_labor_supply
+    functions = build_common_functions(spec, subtract_bill=subtract_bill)
 
     functions["ss_benefit"] = select_ss_benefit(spec)
 
     # his and crossed_oamc_threshold are fixed params (constants per regime),
     # not DAG functions. pylcm resolves them from the params dict.
 
-    has_buy_private = spec["his"] == "nongroup" and spec["mc"] == "nomc"
-    if has_buy_private:
-        functions["hic_premium"] = health_insurance.premium
+    if _has_buy_private(spec):
+        functions["plan_premium"] = health_insurance.premium
+        functions["private_premium_intercept"] = (
+            health_insurance.private_premium_intercept
+        )
     elif can_work:
-        functions["hic_premium"] = health_insurance.premium_insured
+        functions["plan_premium"] = health_insurance.premium_insured
     else:
-        functions["hic_premium"] = health_insurance.premium_retired
-
-    if has_buy_private and fix_buy_private:
-        functions["hic_premium"] = functools.partial(
-            health_insurance.premium, buy_private=BuyPrivate.yes
-        )
-        functions["primary_oop"] = functools.partial(
-            health_insurance.primary_oop, buy_private=BuyPrivate.yes
-        )
+        functions["plan_premium"] = health_insurance.premium_retired
+    # Medicaid-eligible households pay no premium: Medicaid replaces private
+    # cover and pays the Medicare premium.
+    functions["hic_premium"] = health_insurance.medicaid_adjusted_premium
 
     functions.update(build_pension_functions(spec))
 
     return functions
+
+
+def _has_buy_private(spec: RegimeSpec) -> bool:
+    return spec["his"] == "nongroup" and spec["mc"] == "nomc"
+
+
+def build_constraints(spec: RegimeSpec) -> dict:
+    """Build the regime's choice constraints.
+
+    Where private cover is a choice, it is feasible only if its premium is
+    paid in full (`private_cover_paid_in_full`).
+    """
+    if _has_buy_private(spec):
+        return {
+            "private_cover_paid_in_full": health_insurance.private_cover_paid_in_full
+        }
+    return {}
+
+
+def build_law(name: str) -> ByAge:
+    """Build the nongroup regime's per-target transition probabilities by source age."""
+    spec = REGIME_SPECS[name]
+    gets_mc = spec["mc"] != "nomc"
+    own, _ng = make_targets(name)
+    if spec["canwork"] == "canwork":
+        transition_func = _make_transition_canwork(own)
+    else:
+        transition_func = _make_transition_forcedout(gets_mc, own)
+    return build_regime_transition(
+        spec=spec, transition_func=transition_func, target_groups=(own,)
+    )
 
 
 def build_regime(
@@ -139,35 +160,21 @@ def build_regime(
 ) -> Regime:
     """Build a nongroup regime."""
     spec = REGIME_SPECS[name]
-    gets_mc = spec["mc"] != "nomc"
-    own, _ng = make_targets(name)
-
-    if spec["canwork"] == "canwork":
-        transition_func = _make_transition_canwork(gets_mc, own)
-    else:
-        transition_func = _make_transition_forcedout(gets_mc, own)
-
     states = build_states(spec, grids)
 
     egm_solver = dcegm_solver if dcegm_solver is not None else nbegm_solver
-    solver_kwargs: dict = {} if egm_solver is None else {"solver": egm_solver}
     state_solver = (
         "brute_force"
         if egm_solver is None
         else ("nbegm" if nbegm_solver is not None else "dcegm")
     )
-    # Under NBEGM the M1 slice fixes `buy_private` (a second discrete action the
-    # branch compiler does not yet solve) to a single level. `labor_supply` is fixed
-    # too by default, leaving only continuous consumption; with
-    # `nbegm_live_labor_supply` it stays a live action and the branch compiler solves
-    # each labor level against the cliffed budget.
-    fix_for_nbegm = nbegm_solver is not None
-    fix_labor = fix_for_nbegm and not grids.grid_config.nbegm_live_labor_supply
     functions = _build_functions(
-        spec, fix_buy_private=fix_for_nbegm, fix_labor_supply=fix_labor
+        spec, subtract_bill=grids.grid_config.subtract_hcc_bill
     )
-    constraints: dict = {}
-    if fix_for_nbegm:
+    # The EGM solvers reject constraints that read the continuous state, which
+    # the private-cover constraint does through `premium_default`.
+    constraints = build_constraints(spec) if egm_solver is None else {}
+    if nbegm_solver is not None:
         # NBEGM solves only this regime, so its solver-contract functions are
         # regime-level here rather than broadcast model-wide. The broadcast
         # borrowing constraint stays: the EGM solve enforces the limit through
@@ -175,20 +182,15 @@ def build_regime(
         # consumption by an argmax over the consumption grid and needs the
         # explicit feasibility mask.
         functions = {**functions, **build_nbegm_functions()}
-    return Regime(
-        transition=build_granular_regime_transition(
-            transition_func=transition_func, target_ids=own.values()
-        ),
-        active=make_active_func(spec),
+    return build_alive_regime(
+        egm_solver=egm_solver,
         states=states,
-        state_transitions=build_state_transitions(spec, solver=state_solver),
-        actions=build_actions(
+        state_transitions=build_state_transitions(
             spec,
-            grids,
-            drop_buy_private=fix_for_nbegm,
-            drop_labor_supply=fix_labor,
+            solver=state_solver,
+            subtract_bill=grids.grid_config.subtract_hcc_bill,
         ),
+        actions=build_actions(spec, grids),
         functions=functions,
         constraints=constraints,
-        **solver_kwargs,
     )

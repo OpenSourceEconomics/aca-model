@@ -5,6 +5,7 @@ build_common_functions. No policy logic, no HIS-specific conditionals.
 """
 
 import functools
+import itertools
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -13,20 +14,37 @@ from typing import Any, Literal, TypedDict
 import jax.numpy as jnp
 import numpy as np
 from lcm import (
+    AdditiveShockTransition,
+    ByAge,
     DiscreteGrid,
+    GridBreakpoint,
+    InitialNodes,
     IrregSpacedGrid,
     LinSpacedGrid,
-    MarkovTransition,
     NormalIIDProcess,
     Phased,
-    PiecewiseGridSegment,
     PiecewiseLinSpacedGrid,
     Regime,
     RouwenhorstAR1Process,
+    StochasticTransition,
     categorical,
     fixed_transition,
 )
-from lcm.typing import BoolND, FloatND, IntND, RegimeName, ScalarInt, UserParams
+from lcm.consumption_savings_regime import (
+    ConsumptionSavingsRegime,
+    LiquidMargin,
+    post_decision_lower_bound,
+)
+from lcm.solvers import OneMarginSolver
+from lcm.typing import (
+    BoolND,
+    FloatND,
+    IntND,
+    Period,
+    RegimeName,
+    ScalarInt,
+    UserParams,
+)
 
 from aca_model.agent import (
     assets_and_income,
@@ -38,11 +56,39 @@ from aca_model.agent.health import Health, HealthWithDisability
 from aca_model.agent.labor_market import LaborSupply, LaggedLaborSupply, SpousalIncome
 from aca_model.baseline import health_insurance
 from aca_model.baseline.health_insurance import BuyPrivate
-from aca_model.config import MODEL_CONFIG, GridConfig
+from aca_model.config import MODEL_AGES, MODEL_CONFIG, GridConfig
 from aca_model.environment import pensions, social_security, taxes
 from aca_model.environment.social_security import ClaimedSS
 
 SolverName = Literal["brute_force", "dcegm", "nbegm"]
+
+# The liquid Euler margin every EGM-solved ACA regime shares. `resources` is
+# post-transfer cash-on-hand (`max(cash_on_hand, floor)`) and `savings` is the
+# post-decision assets node; both are supplied by the savings-form rewiring in
+# `build_dcegm_functions` / `build_nbegm_functions`, so the margin is
+# declarable only on a regime that carries them.
+ACA_LIQUID_MARGIN = LiquidMargin(
+    state="assets",
+    action="consumption_dollars",
+    resources="resources",
+    post_decision_state="savings",
+)
+
+
+def build_alive_regime(
+    *, egm_solver: OneMarginSolver | None, **regime_kwargs: Any
+) -> Regime:
+    """Build one alive regime, declaring the liquid margin when EGM solves it.
+
+    A brute-force regime has no `resources` or `savings` node to name, so it
+    stays a plain `Regime`. An EGM-solved regime owns the four margin names
+    and hands them to the solver, which takes numerical configuration only.
+    """
+    if egm_solver is None:
+        return Regime(**regime_kwargs)
+    return ConsumptionSavingsRegime(
+        solver=egm_solver, liquid=ACA_LIQUID_MARGIN, **regime_kwargs
+    )
 
 
 @categorical(ordered=False)
@@ -194,7 +240,7 @@ config = MODEL_CONFIG
 
 @dataclass(frozen=True)
 class Grids:
-    assets: LinSpacedGrid
+    assets: IrregSpacedGrid
     aime: PiecewiseLinSpacedGrid
     pension_wealth: LinSpacedGrid
     consumption_dollars: IrregSpacedGrid
@@ -203,10 +249,7 @@ class Grids:
     hcc_transitory: Any
     pref_type: DiscreteGrid
     grid_config: GridConfig
-    """The originating `GridConfig`. Exposed on `Grids` so `build_states`
-    can read per-axis `batch_size` settings for the discrete states it
-    constructs inline (health, spousal_income, lagged_labor_supply,
-    claimed_ss) without changing the `build_states`/`build_regime` API."""
+    """Grid sizes and numerical settings used to construct each solver."""
 
 
 # AIME piecewise grid: number of points per segment between the PIA
@@ -224,6 +267,17 @@ _AIME_PIECE_N_POINTS: tuple[int, int, int, int] = (10, 11, 11, 6)
 # is never an interpolation axis, so neither the bounds nor the point count
 # affect solve cost or the simulated values.
 _PENSION_WEALTH_GRID = LinSpacedGrid(start=0.0, stop=2_000_000.0, n_points=2)
+
+
+# Asset grid: `_ASSETS_SINH_SCALE * sinh(u)` with `u` evenly spaced on each side
+# of zero. The spacing is about `_ASSETS_SINH_SCALE * du` near zero, where the
+# consumption floor and the SSI asset tests bite, and geometric (ratio `e^du`) for
+# large holdings. The top node is the largest initial asset holding in the data.
+_ASSETS_TOP = 12_000_000.0
+_ASSETS_SINH_SCALE = 10_000.0
+# Share of nodes below zero; the negative branch only has to reach the borrowing
+# limit.
+_ASSETS_NEGATIVE_SHARE = 5 / 24
 
 
 # AR(1) persistence of the Rouwenhorst shocks. Calibrated once; not
@@ -245,15 +299,10 @@ def build_grids(
     """Build continuous-state/action grids from a `GridConfig`.
 
     The AIME grid is `PiecewiseLinSpacedGrid` breakpointed at the PIA
-    bends from `fixed_params["pia_aime_grid"]` (total 32 points). The
-    assets grid's lower bound is `-max_annual_labor_income` computed
+    bends from `fixed_params["pia_aime_grid"]`. The assets grid
+    (`build_assets_grid`) runs from `-max_annual_labor_income`, computed
     from `wage_params` (`log_ft_wage_mean`, `log_ft_wage_std`,
-    `adj_wage_hours_*`).
-
-    `wage_params` is passed separately rather than via `fixed_params`
-    because `log_ft_wage_mean` is a per-iteration param at estimation
-    time (reconstructed from `wage_bias_coeffs_*`), not a fixed one;
-    the grid floor must still be known at build time.
+    `adj_wage_hours_*`), to the largest initial asset holding.
 
     `consumption_dollars_points` fixes the consumption action grid at
     construction (the DC-EGM kernel needs it then); `None` keeps the
@@ -270,7 +319,6 @@ def build_grids(
         rho=_WAGE_RHO,
         sigma=(1.0 - _WAGE_RHO**2) ** 0.5,
         mu=0.0,
-        batch_size=grid_config.n_wage_res_batch_size,
     )
     hcc_persistent = get_hcc_persistent_shock(grid_config=grid_config)
     hcc_transitory = NormalIIDProcess(
@@ -278,6 +326,7 @@ def build_grids(
         gauss_hermite=True,
         mu=0.0,
         sigma=1.0,
+        fold=grid_config.fold_hcc_transitory,
     )
 
     assets_start = -_compute_max_annual_labor_income(
@@ -285,13 +334,10 @@ def build_grids(
     )
 
     return Grids(
-        assets=LinSpacedGrid(
-            start=assets_start,
-            stop=500_000.0,
-            n_points=grid_config.n_assets_gridpoints,
-            batch_size=grid_config.n_assets_batch_size,
+        assets=build_assets_grid(
+            floor=assets_start, n_points=grid_config.n_assets_gridpoints
         ),
-        aime=_build_aime_grid(grid_config=grid_config, fixed_params=fixed_params),
+        aime=_build_aime_grid(fixed_params=fixed_params),
         pension_wealth=_PENSION_WEALTH_GRID,
         consumption_dollars=(
             IrregSpacedGrid(n_points=grid_config.n_consumption_dollars_gridpoints)
@@ -304,6 +350,35 @@ def build_grids(
         pref_type=pref_type_grid,
         grid_config=grid_config,
     )
+
+
+def build_assets_grid(*, floor: float, n_points: int) -> IrregSpacedGrid:
+    """Return the sinh-spaced asset grid from `floor` to `_ASSETS_TOP`.
+
+    `round(n_points * _ASSETS_NEGATIVE_SHARE)` nodes (at least one) lie below
+    zero, starting at `floor`; the rest run from exactly zero to `_ASSETS_TOP`.
+    On each side the nodes are `_ASSETS_SINH_SCALE * sinh(u)` with `u` evenly
+    spaced, so the grid is fine near zero and geometric for large holdings.
+
+    Args:
+        floor: Borrowing limit, the bottom node. Must be negative.
+        n_points: Total number of nodes.
+
+    Returns:
+        The asset grid.
+
+    """
+    n_negative = max(1, round(n_points * _ASSETS_NEGATIVE_SHARE))
+    scale = _ASSETS_SINH_SCALE
+    negative = scale * np.sinh(
+        np.linspace(np.arcsinh(floor / scale), 0.0, n_negative + 1)[:-1]
+    )
+    positive = scale * np.sinh(
+        np.linspace(0.0, np.arcsinh(_ASSETS_TOP / scale), n_points - n_negative)
+    )
+    negative[0] = floor
+    positive[-1] = _ASSETS_TOP
+    return IrregSpacedGrid(points=np.concatenate([negative, positive]).tolist())
 
 
 def get_hcc_persistent_shock(*, grid_config: GridConfig) -> RouwenhorstAR1Process:
@@ -327,9 +402,7 @@ def get_hcc_persistent_grid_points(*, grid_config: GridConfig) -> FloatND:
     return get_hcc_persistent_shock(grid_config=grid_config).to_jax()
 
 
-def _build_aime_grid(
-    *, grid_config: GridConfig, fixed_params: UserParams
-) -> PiecewiseLinSpacedGrid:
+def _build_aime_grid(*, fixed_params: UserParams) -> PiecewiseLinSpacedGrid:
     """Return the AIME grid.
 
     The grid is piecewise-linspaced with breakpoints at the PIA bends
@@ -340,22 +413,15 @@ def _build_aime_grid(
     total is fixed by the PIA structure (`sum(_AIME_PIECE_N_POINTS)`).
     """
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
-    segments = (
-        PiecewiseGridSegment(
-            interval=f"[{kinks[0]}, {kinks[1]})", n_points=_AIME_PIECE_N_POINTS[0]
-        ),
-        PiecewiseGridSegment(
-            interval=f"[{kinks[1]}, {kinks[2]})", n_points=_AIME_PIECE_N_POINTS[1]
-        ),
-        PiecewiseGridSegment(
-            interval=f"[{kinks[2]}, {kinks[3]})", n_points=_AIME_PIECE_N_POINTS[2]
-        ),
-        PiecewiseGridSegment(
-            interval=f"[{kinks[3]}, {kinks[4]}]", n_points=_AIME_PIECE_N_POINTS[3]
-        ),
-    )
     return PiecewiseLinSpacedGrid(
-        segments=segments, batch_size=grid_config.n_aime_batch_size
+        start=kinks[0],
+        stop=kinks[4],
+        breakpoints=(
+            GridBreakpoint(value=kinks[1]),
+            GridBreakpoint(value=kinks[2]),
+            GridBreakpoint(value=kinks[3]),
+        ),
+        points_per_segment=_AIME_PIECE_N_POINTS,
     )
 
 
@@ -394,35 +460,149 @@ def _compute_max_annual_labor_income(
     )
 
 
-_ACTIVE_PREDICATES: dict[tuple[str, str, str], Callable[..., Any]] = {
-    ("nomc", "inelig", "canwork"): lambda age: age < config.ss_early_age,
-    ("dimc", "inelig", "canwork"): lambda age: age < config.ss_early_age,
-    ("nomc", "choose", "canwork"): lambda age: (
-        (age >= config.ss_early_age) & (age < config.medicare_age)
+# Structural stage data, shared by scheduled support and the numerical router.
+# Each stage covers the half-open age interval `[start, stop)`.
+_AGE_STAGES = (
+    (
+        (config.start_age, config.ss_early_age),
+        ("nomc_inelig", "dimc_inelig"),
     ),
-    ("dimc", "choose", "canwork"): lambda age: (
-        (age >= config.ss_early_age) & (age < config.medicare_age)
+    (
+        (config.ss_early_age, config.medicare_age),
+        ("nomc_choose", "dimc_choose"),
     ),
-    ("oamc", "choose", "canwork"): lambda age: (
-        (age >= config.medicare_age) & (age < config.ss_forced_age)
+    (
+        (config.medicare_age, config.ss_forced_age),
+        ("forced_choose",) * 2,
     ),
-    ("oamc", "forced", "canwork"): lambda age: (
-        (age >= config.ss_forced_age) & (age < config.work_forced_out_age)
+    (
+        (config.ss_forced_age, config.work_forced_out_age),
+        ("forced_forced",) * 2,
     ),
-    ("oamc", "forced", "forcedout"): lambda age: (
-        (age >= config.work_forced_out_age) & (age < config.end_age - 1)
+    (
+        (config.work_forced_out_age, MODEL_AGES[-1]),
+        ("forcedout",) * 2,
     ),
+)
+# The living regimes a subject may start in: pre-claiming, pre-Medicare.
+ENTRY_REGIMES = (
+    "retiree_nomc_inelig_canwork",
+    "tied_nomc_inelig_canwork",
+    "nongroup_nomc_inelig_canwork",
+    "retiree_dimc_inelig_canwork",
+    "nongroup_dimc_inelig_canwork",
+)
+
+# Admissible starting (age, regime) pairs, shared by every model variant: the
+# baseline estimation-sample ages. Later ages, and `dead` at any age, are reached only
+# through transitions.
+INITIAL_NODES = InitialNodes(
+    by_age={
+        age: ENTRY_REGIMES
+        for age in MODEL_AGES
+        if config.start_age <= age <= config.last_start_age
+    }
+)
+
+_STAGE_KEY = {
+    ("nomc", "inelig", "canwork"): "nomc_inelig",
+    ("dimc", "inelig", "canwork"): "dimc_inelig",
+    ("nomc", "choose", "canwork"): "nomc_choose",
+    ("dimc", "choose", "canwork"): "dimc_choose",
+    ("oamc", "choose", "canwork"): "forced_choose",
+    ("oamc", "forced", "canwork"): "forced_forced",
+    ("oamc", "forced", "forcedout"): "forcedout",
 }
+# Dynamic JAX period lookup and construction-time schedule use the same clock.
+_NEXT_AGES = np.asarray([float(a) for a in MODEL_AGES[1:]])
 
 
-def make_active_func(spec: RegimeSpec) -> Callable[..., Any]:
-    """Return the age predicate for a regime spec."""
-    key = (spec["mc"], spec["ss"], spec["canwork"])
-    predicate = _ACTIVE_PREDICATES.get(key)
-    if predicate is None:
-        msg = f"Unknown regime spec: {spec}"
-        raise ValueError(msg)
-    return predicate
+def transition_ages(spec: RegimeSpec) -> tuple[int, ...]:
+    """Exact source coordinates at which the template declares its law."""
+    key = _STAGE_KEY.get((spec["mc"], spec["ss"], spec["canwork"]))
+    for (start, stop), branches in _AGE_STAGES:
+        if key in branches:
+            return tuple(age for age in MODEL_AGES if start <= age < stop)
+    raise ValueError(f"Unknown regime spec: {spec}")
+
+
+def next_model_age(period: Period) -> FloatND:
+    """Advance by one grid position, never by an assumed number of years.
+
+    Only covered nonterminal source periods call this function; no clipping
+    or extrapolation of invalid period indices is part of the contract.
+    This does not by itself recalibrate ACA to a different period length.
+    """
+    return jnp.asarray(_NEXT_AGES)[period]
+
+
+def _target_pair(next_age: int, group: dict[str, int]) -> tuple[int, int]:
+    if next_age == MODEL_AGES[-1]:
+        dead = int(RegimeId.dead)
+        return dead, dead
+    for (start, stop), branches in _AGE_STAGES:
+        if start <= next_age < stop:
+            return group[branches[0]], group[branches[1]]
+    raise ValueError(f"Next age {next_age} is outside the declared stages")
+
+
+def build_regime_edges(
+    *,
+    spec: RegimeSpec,
+    target_groups: tuple[dict[str, int], ...],
+) -> dict[RegimeName, tuple[int, ...]]:
+    """Map each destination to the exact source ages that can reach it."""
+    # Both Medicare branches are reachable from every living regime: before 65 a
+    # non-worker who becomes disabled moves onto disability Medicare.
+    id_to_name = {
+        int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
+    }
+    grouped: dict[RegimeName, list[int]] = {}
+    next_age_by_age = dict(itertools.pairwise(MODEL_AGES))
+    for age in transition_ages(spec):
+        next_age = next_age_by_age[age]
+        pairs = tuple(_target_pair(next_age, group) for group in target_groups)
+        supported_ids = {target for pair in pairs for target in pair}
+        target_ids = tuple(sorted(supported_ids | {int(RegimeId.dead)}))
+        for target_id in target_ids:
+            grouped.setdefault(id_to_name[target_id], []).append(age)
+    return {target: tuple(source_ages) for target, source_ages in grouped.items()}
+
+
+def build_model_edges() -> dict[RegimeName, dict[RegimeName, tuple[int, ...]]]:
+    """Declare the policy-invariant topology of the living ACA regimes."""
+    return {
+        name: build_regime_edges(spec=spec, target_groups=make_targets(name))
+        for name, spec in REGIME_SPECS.items()
+    }
+
+
+def build_regime_transition(
+    *,
+    spec: RegimeSpec,
+    transition_func: Callable[..., FloatND],
+    target_groups: tuple[dict[str, int], ...],
+) -> ByAge:
+    """Name each destination's probability cell at the source ages that reach it.
+
+    One scalar probability cell per destination is shared by every source age;
+    the ages with the same destinations form one case.
+    """
+    edges = build_regime_edges(spec=spec, target_groups=target_groups)
+    cells = build_granular_regime_transition(
+        transition_func=transition_func,
+        target_ids=(int(getattr(RegimeId, target)) for target in edges),
+    )
+    ages_by_targets: dict[tuple[RegimeName, ...], list[int]] = {}
+    for age in transition_ages(spec):
+        targets = tuple(target for target, ages in edges.items() if age in ages)
+        ages_by_targets.setdefault(targets, []).append(age)
+    return ByAge(
+        cases={
+            tuple(ages): {target: cells[target] for target in targets}
+            for targets, ages in ages_by_targets.items()
+        }
+    )
 
 
 def build_states(spec: RegimeSpec, grids: Grids) -> dict:
@@ -432,49 +612,40 @@ def build_states(spec: RegimeSpec, grids: Grids) -> dict:
     living regime are broadcast from the model level (`build_model_states`).
     """
     can_work = spec["canwork"] == "canwork"
-    gc = grids.grid_config
 
     states: dict = {}
     states["health"] = DiscreteGrid(
         Health if spec["mc"] == "oamc" else HealthWithDisability,
-        batch_size=gc.n_health_batch_size,
     )
     if can_work:
         states["log_ft_wage_res"] = grids.wage_res
     if can_work and spec["his"] != "tied":
         states["lagged_labor_supply"] = DiscreteGrid(
             LaggedLaborSupply,
-            batch_size=gc.n_lagged_labor_supply_batch_size,
         )
     if spec["ss"] == "choose":
         states["claimed_ss"] = DiscreteGrid(
             ClaimedSS,
-            batch_size=gc.n_claimed_ss_batch_size,
         )
     return states
 
 
-def build_actions(
-    spec: RegimeSpec,
-    grids: Grids,
-    *,
-    drop_buy_private: bool = False,
-    drop_labor_supply: bool = False,
-) -> dict:
+def build_actions(spec: RegimeSpec, grids: Grids) -> dict:
     """Build the action dict for a non-dead regime.
 
-    The `drop_*` flags fix a discrete action to a single level for the NBEGM
-    M1 vertical slice (its case-piece envelope handles at most one discrete
-    action). The dropped action's former consumers are rebound to the fixed
-    level at the regime builder, so removing it here is the action side of the
-    dags remove-and-fix.
+    Every choice the regime's structure affords is a live action: whether to
+    claim Social Security where claiming is neither impossible nor already
+    forced, how many hours to work where work is still available, and whether
+    to buy non-group coverage before Medicare. Which solver runs the regime
+    does not enter — a solver that cannot carry a choice refuses the regime
+    rather than being handed a narrower one.
     """
     actions: dict = {}
     if spec["ss"] == "choose":
         actions["claim_ss"] = DiscreteGrid(ClaimedSS)
-    if spec["canwork"] == "canwork" and not drop_labor_supply:
+    if spec["canwork"] == "canwork":
         actions["labor_supply"] = DiscreteGrid(LaborSupply)
-    if spec["his"] == "nongroup" and spec["mc"] == "nomc" and not drop_buy_private:
+    if spec["his"] == "nongroup" and spec["mc"] == "nomc":
         actions["buy_private"] = DiscreteGrid(BuyPrivate)
     actions["consumption_dollars"] = grids.consumption_dollars
     return actions
@@ -487,24 +658,61 @@ def build_regime_probs(target: IntND, survival: FloatND) -> FloatND:
     return probs.at[target].add(survival)
 
 
+def build_regime_probs_with_di_medicare(
+    *,
+    target_dimc: IntND,
+    target_nomc: IntND,
+    prob_dimc: FloatND,
+    survival: FloatND,
+) -> FloatND:
+    """Build the regime probability vector with the disability-Medicare split.
+
+    Survivors land in `target_dimc` with probability `prob_dimc` and in
+    `target_nomc` otherwise. From age 65 on both targets are the same `oamc`
+    regime, so the split is immaterial there.
+    """
+    probs = jnp.zeros(19)
+    probs = probs.at[RegimeId.dead].set(1.0 - survival)
+    probs = probs.at[target_dimc].add(survival * prob_dimc)
+    return probs.at[target_nomc].add(survival * (1.0 - prob_dimc))
+
+
+def prob_di_medicare_next(
+    labor_supply: IntND,
+    prob_disabled: FloatND,
+) -> FloatND:
+    """Probability of holding disability Medicare next period.
+
+    Before 65, Medicare covers households that are disabled and did not work
+    in the previous period: the household must not work this period and be
+    disabled next period, which happens with probability `prob_disabled`
+    (`prob_disabled_next[period, health]`, 0 from 65 on, where the split does
+    not matter; see `build_regime_probs_with_di_medicare`).
+
+    Callers index `prob_disabled_next` in their own body: pylcm reads the
+    indexing expression from the consuming function's source to lay out the
+    `(age, health)` Series.
+    """
+    return jnp.where(labor_supply == LaborSupply.do_not_work, prob_disabled, 0.0)
+
+
 def build_granular_regime_transition(
     *,
     transition_func: Callable[..., FloatND],
     target_ids: Iterable[int],
-) -> dict[RegimeName, MarkovTransition]:
-    """Declare the regime's reachable targets via per-target probability cells.
+) -> dict[RegimeName, StochasticTransition]:
+    """Build the regime's per-target probability cells.
 
     Each cell evaluates the regime's probability vector and selects its
-    target's entry — identical arithmetic to the coarse vector form, with the
-    key set making every other regime structurally unreachable.
+    target's entry. `build_regime_transition` schedules the cells by source age.
     """
     id_to_name = {
         int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
     }
     declared = sorted({*(int(i) for i in target_ids), int(RegimeId.dead)})
     return {
-        id_to_name[target_id]: MarkovTransition(
-            _prob_of_target(transition_func=transition_func, target_id=target_id)
+        id_to_name[target_id]: StochasticTransition(
+            func=_prob_of_target(transition_func=transition_func, target_id=target_id)
         )
         for target_id in declared
     }
@@ -525,14 +733,21 @@ def _prob_of_target(
 # Broadcast functions the bequest DAG reads: the pref-type-indexed scalars
 # resolve their per-cell value from the broadcast `pref_type` state.
 _DEAD_KEEPS = frozenset(
-    {"consumption_weight", "coefficient_rra", "utility_scale_factor"}
+    {
+        "consumption_weight",
+        "coefficient_rra",
+        "discount_factor",
+        "utility_scale_factor",
+    }
 )
 
 
 def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
     """Build the terminal dead regime.
 
-    Everything `dead` carries arrives via the model-level broadcast:
+    `dead` owns two functions, the bequest `utility` and the per-type bequest
+    weight `scaled_bequest_weight`; everything else arrives via the
+    model-level broadcast:
 
     - states: `assets` and `pref_type` survive DAG pruning (the bequest
       utility reads them); the remaining broadcast states are pruned.
@@ -540,9 +755,8 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
       other broadcast function is masked with `None` so its unresolvable
       inputs (e.g. `pension_benefit`) don't surface as params in the dead
       template.
-    - constraints: the borrowing constraint is masked — `dead` has no
-      consumption action. (Under DC-EGM no constraint is broadcast, so
-      there is nothing to mask.)
+    - constraints: every broadcast constraint is masked because `dead` has no
+      consumption action.
     - `pension_wealth` is masked explicitly: a carried state is rejected in
       terminal regimes before pruning could drop it.
     """
@@ -551,13 +765,15 @@ def build_dead_regime(*, solver: SolverName = "brute_force") -> Regime:
         for name in build_model_functions(solver=solver)
         if name not in _DEAD_KEEPS
     }
-    constraint_masks = dict.fromkeys(build_model_constraints())
+    constraint_masks = dict.fromkeys(build_model_constraints(solver=solver))
     return Regime(
-        transition=None,
-        functions={"utility": preferences.bequest, **function_masks},
+        functions={
+            "utility": preferences.bequest,
+            "scaled_bequest_weight": preferences.scaled_bequest_weight,
+            **function_masks,
+        },
         constraints=constraint_masks,
         states={"pension_wealth": None},
-        active=lambda _age: True,
     )
 
 
@@ -588,9 +804,11 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
 
     Contains exactly the functions that are identical across all 18 living
     regimes AND are never swapped by the ACA policy overlay. Spec-dependent
-    selections (`good_health`, `leisure`, …) and overlay-swapped names
-    (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`) stay regime-level
-    in `build_common_functions`. The `dead` regime masks every entry the
+    selections (`good_health`, `leisure`, `oop_costs`, …) and overlay-swapped
+    names (`is_medicaid_eligible`, `cash_on_hand`, `primary_oop`,
+    `after_tax_income`) stay regime-level in `build_common_functions`: pylcm
+    refuses a name defined at both levels, so a regime can only swap a
+    regime-level entry. The `dead` regime masks every entry the
     bequest DAG does not read (see `build_dead_regime`). Under DC-EGM the
     solver-contract functions join the broadcast set.
     """
@@ -603,9 +821,8 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
         # `marginal_continuation`.
         functions |= build_dcegm_functions()
     functions["total_health_costs"] = health_insurance.total_costs
-    functions["oop_costs"] = health_insurance.oop_with_medicaid
     functions["capital_income"] = assets_and_income.capital_income
-    # spousal_income_amounts is a lookup table param, not a DAG function
+    functions["spousal_income_amount"] = labor_market.spousal_income_amount
     functions["is_married"] = labor_market.is_married
     functions["equivalence_scale"] = preferences.equivalence_scale
     functions["utility_scale_factor"] = preferences.utility_scale_factor
@@ -624,7 +841,6 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     # Taxes
     functions["taxable_ss_benefit"] = taxes.taxable_ss_benefit
     functions["gross_income"] = taxes.gross_income
-    functions["after_tax_income"] = taxes.after_tax_income
     # Every living regime carries pension wealth and the solve-phase pension
     # assets adjustment, both of which scale by the marginal income tax rate.
     functions["marginal_tax_rate"] = taxes.marginal_rate
@@ -667,16 +883,30 @@ def build_nbegm_functions() -> dict:
     }
 
 
-def build_model_constraints() -> dict:
+def build_model_constraints(*, solver: SolverName) -> dict:
     """Build the model-level constraints broadcast into every regime.
 
-    `dead` masks the borrowing constraint — it has no consumption action.
-    The constraint is broadcast under every solver: an EGM solve (DC-EGM or
-    NBEGM) enforces the borrowing limit through the savings grid's lower
-    bound, but forward simulation re-decides consumption by an argmax over
-    the consumption grid and needs the explicit feasibility mask.
+    `dead` masks every constraint because it has no consumption action.
+
+    Grid search evaluates the action-level predicates directly: the borrowing
+    constraint and the household's own consumption floor. An EGM-family
+    solve proves the equivalent post-decision lower bound from its savings
+    grid, while forward simulation receives the solver's intrinsic budget
+    mask over the consumption grid; it does not carry the own-floor bound.
     """
-    return {"borrowing_constraint": assets_and_income.borrowing_constraint}
+    borrowing_constraint = (
+        assets_and_income.borrowing_constraint
+        if solver == "brute_force"
+        else post_decision_lower_bound(margin=ACA_LIQUID_MARGIN, lower=0.0)
+    )
+    constraints = {
+        "borrowing_constraint": borrowing_constraint,
+    }
+    if solver == "brute_force":
+        constraints["consumption_floor_constraint"] = (
+            assets_and_income.consumption_above_floor
+        )
+    return constraints
 
 
 def build_model_states(grids: Grids) -> dict:
@@ -684,10 +914,9 @@ def build_model_states(grids: Grids) -> dict:
 
     These are the states every living regime carries with an identical grid.
     pylcm prunes them per regime by DAG reachability, so `dead` keeps only
-    `assets` and `pref_type` (the bequest DAG). `spousal_income` carries the
-    `distributed` flag — sharding is legal only on model-level states.
+    `assets` and `pref_type` (the bequest DAG). Placement is configured
+    separately through the model execution policy.
     """
-    gc = grids.grid_config
     return {
         "assets": grids.assets,
         "aime": grids.aime,
@@ -699,8 +928,6 @@ def build_model_states(grids: Grids) -> dict:
         "hcc_transitory": grids.hcc_transitory,
         "spousal_income": DiscreteGrid(
             SpousalIncome,
-            batch_size=gc.n_spousal_income_batch_size,
-            distributed=gc.spousal_income_distributed,
         ),
         "pref_type": grids.pref_type,
     }
@@ -716,14 +943,14 @@ def build_model_state_transitions() -> dict:
     """
     return {
         "pref_type": fixed_transition("pref_type"),
-        "spousal_income": MarkovTransition(labor_market.next_spousal_income),
+        "spousal_income": StochasticTransition(func=labor_market.next_spousal_income),
         # Carried state: evolved only in simulate (in solve, `pension_wealth`
         # is re-imputed from AIME each period and has no transition).
         "pension_wealth": pensions.wealth_next_before_adjustment,
     }
 
 
-def build_common_functions(spec: RegimeSpec) -> dict:
+def build_common_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> dict:
     """Build the regime-level functions dict for a non-dead regime.
 
     Contains the spec-dependent selections and the overlay-swapped names;
@@ -739,7 +966,16 @@ def build_common_functions(spec: RegimeSpec) -> dict:
     )
     has_buy_private = spec["his"] == "nongroup" and spec["mc"] == "nomc"
     functions["primary_oop"] = (
-        health_insurance.primary_oop if has_buy_private else health_insurance.oop_costs
+        health_insurance.primary_oop
+        if has_buy_private
+        else health_insurance.insured_oop
+    )
+    # Medicaid pays on top of the primary cover, except in the non-group
+    # regimes before Medicare, where it replaces private or no cover.
+    functions["oop_costs"] = (
+        health_insurance.oop_with_medicaid_replacing_private
+        if has_buy_private
+        else health_insurance.oop_with_medicaid
     )
 
     if can_work:
@@ -768,6 +1004,13 @@ def build_common_functions(spec: RegimeSpec) -> dict:
 
     # Swapped per policy variant by the ACA overlay, hence regime-level
     functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
+    functions["after_tax_income"] = taxes.after_tax_income
+    if subtract_bill:
+        functions["assets_before_bill"] = assets_and_income.assets_before_bill
+        functions["negative_oop_costs"] = health_insurance.negative_oop_costs
+        functions["assets_before_bill_when_dead"] = (
+            assets_and_income.assets_before_bill_when_dead
+        )
     functions["premium_default"] = assets_and_income.premium_default
     functions["cash_on_hand"] = assets_and_income.cash_on_hand
 
@@ -819,6 +1062,10 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
       `pension_assets_adjustment`, which reconciles the accrual-evolved
       pension with next period's AIME imputation; in simulate the adjustment
       is zero because the true wealth is carried directly.
+    - in `ss=choose` regimes, `carried_pia` is the PIA the next-period AIME
+      encodes: in solve the claim-adjusted PIA corrected so that SS plus
+      imputed pension benefits keep their adjusted total
+      (`pensions.total_to_pia`); in simulate the claim-adjusted PIA itself.
     """
     can_work = spec["canwork"] == "canwork"
 
@@ -836,10 +1083,21 @@ def build_pension_functions(spec: RegimeSpec) -> dict:
         if can_work
         else health_insurance.target_his_forcedout
     )
-    functions["pia_unadjusted_next_period"] = social_security.pia_unadjusted_next_period
+    functions["pia_unadjusted_next_period"] = (
+        social_security.pia_unadjusted_next_period_forced
+        if spec["ss"] == "forced"
+        else social_security.pia_unadjusted_next_period
+    )
+    functions["full_benefit_next_period"] = pensions.full_benefit_next_period
     functions["imputed_pension_wealth_next_period"] = (
         pensions.imputed_pension_wealth_next_period
     )
+    if spec["ss"] == "choose":
+        functions["pia_adjusted_next_period"] = social_security.pia_adjusted_next_period
+        functions["carried_pia"] = Phased(
+            solve=pensions.total_to_pia,
+            simulate=social_security.carried_pia_simulate,
+        )
     functions["pension_assets_adjustment"] = Phased(
         solve=pensions.assets_adjustment,
         simulate=_zero_pension_assets_adjustment,
@@ -912,38 +1170,17 @@ def select_target_for_age(
     mc_next: bool | BoolND,
     tgts: dict[str, int],
 ) -> IntND:
-    """Select target regime ID based on next-period age bracket."""
-    ss_choose = jnp.where(
-        jnp.array(mc_next),
-        tgts["dimc_choose"],
-        tgts["nomc_choose"],
-    )
-    ss_inelig = jnp.where(
-        jnp.array(mc_next),
-        tgts["dimc_inelig"],
-        tgts["nomc_inelig"],
-    )
-    return jnp.where(
-        next_age >= config.end_age - 1,
-        RegimeId.dead,
-        jnp.where(
-            next_age >= config.work_forced_out_age,
-            tgts["forcedout"],
-            jnp.where(
-                next_age >= config.ss_forced_age,
-                tgts["forced_forced"],
-                jnp.where(
-                    next_age >= config.medicare_age,
-                    tgts["forced_choose"],
-                    jnp.where(next_age >= config.ss_early_age, ss_choose, ss_inelig),
-                ),
-            ),
-        ),
-    )
+    """Select with the same stage table that supplies the schedule's support."""
+    result = jnp.asarray(RegimeId.dead)
+    for (start, stop), branches in reversed(_AGE_STAGES):
+        target = jnp.where(jnp.array(mc_next), tgts[branches[1]], tgts[branches[0]])
+        inside = (next_age >= start) & (next_age < stop)
+        result = jnp.where(inside, target, result)
+    return result
 
 
 def build_state_transitions(
-    spec: RegimeSpec, *, solver: SolverName = "brute_force"
+    spec: RegimeSpec, *, solver: SolverName = "brute_force", subtract_bill: bool = False
 ) -> dict:
     """Build the regime-level state transitions dict for a non-dead regime.
 
@@ -954,7 +1191,9 @@ def build_state_transitions(
     post-decision (savings) form.
     """
     transitions: dict = {}
-    transitions["assets"] = _build_per_target_regime_assets(spec, solver=solver)
+    transitions["assets"] = _build_per_target_regime_assets(
+        spec, solver=solver, subtract_bill=subtract_bill
+    )
     transitions["health"] = _build_per_target_regime_health(spec)
     claimed_ss_transition = _build_per_target_regime_claimed_ss(spec)
     if claimed_ss_transition:
@@ -971,20 +1210,19 @@ def _select_aime_law(spec: RegimeSpec) -> Callable[..., FloatND]:
 
     The claim-age actuarial bake applies only where the agent chooses when to
     claim (`ss=choose`), so only those regimes carry the `claim_ss`/`claimed_ss`
-    inputs. `ss=inelig` (cannot claim) and `ss=forced` (claims by rule) use the
-    plain-accrual variant: no claim adjustment, no claim inputs. A forced
-    claimant who claimed early carries the reduction in from the choose regime;
-    plain accrual preserves it.
+    inputs. `ss=inelig` (cannot claim) uses plain accrual with no claim inputs;
+    in `ss=forced` (claims by rule) AIME stays as carried in, with any early
+    reduction or delayed credit from the choose regime.
 
     - post-65 (`oamc`), `choose` → `next_aime` (claim-adjusted)
-    - post-65 (`oamc`), `forced` → `next_aime_plain`
+    - post-65 (`oamc`), `forced` → `next_aime_forced` (AIME frozen)
     - pre-65 (`nomc`/`dimc`), `choose` → `next_aime_disabled` (claim-adjusted)
     - pre-65 (`nomc`/`dimc`), `inelig` → `next_aime_disabled_plain`
     """
     is_choose = spec["ss"] == "choose"
     if spec["mc"] == "oamc":
         return (
-            social_security.next_aime if is_choose else social_security.next_aime_plain
+            social_security.next_aime if is_choose else social_security.next_aime_forced
         )
     return (
         social_security.next_aime_disabled
@@ -993,8 +1231,24 @@ def _select_aime_law(spec: RegimeSpec) -> Callable[..., FloatND]:
     )
 
 
+# Every input of the out-of-pocket bill that varies across a source's states and
+# actions, with its support. The bill reads nothing else besides next period's
+# medical-cost draws, the period and parameters.
+_BILL_CONDITIONERS: Mapping[str, tuple[int | bool, ...]] = MappingProxyType(
+    {
+        "is_married": (0, 1),
+        "good_health": (0, 1),
+        "is_medicaid_eligible": (False, True),
+        "buy_private": (int(BuyPrivate.no), int(BuyPrivate.yes)),
+        # Under the ACA policy: the four FPL kinks of the cost-sharing schedule
+        # give brackets 0-4, and 5 is the neutral bracket.
+        "cost_sharing_bracket": tuple(range(6)),
+    }
+)
+
+
 def _build_per_target_regime_assets(
-    spec: RegimeSpec, *, solver: SolverName = "brute_force"
+    spec: RegimeSpec, *, solver: SolverName = "brute_force", subtract_bill: bool = False
 ) -> dict[RegimeName, Callable[..., FloatND]]:
     """Build per-target assets transitions.
 
@@ -1003,11 +1257,30 @@ def _build_per_target_regime_assets(
     pull in the `next_aime`-dependent imputation chain — `dead` has no
     `aime` state and pylcm cannot resolve `next_aime` there. Non-dead
     targets use the full `next_assets` with the pension correction.
-    Under DC-EGM both laws take their post-decision (savings) form.
+    Under DC-EGM both laws take their post-decision (savings) form. With
+    `subtract_bill`, each law is declared as its resources before the bill
+    (`assets_before_bill`, `assets_before_bill_when_dead`) plus the shock
+    `negative_oop_costs`, conditioned on every source-side input of the bill.
     """
+    if subtract_bill and solver != "brute_force":
+        msg = f"subtract_hcc_bill needs the brute-force asset law, not {solver!r}."
+        raise ValueError(msg)
+    living_law: Callable[..., FloatND]
+    dead_law: Callable[..., FloatND]
     if solver in ("dcegm", "nbegm"):
         living_law = assets_and_income.next_assets_from_savings
         dead_law = assets_and_income.next_assets_when_dead_from_savings
+    elif subtract_bill:
+        living_law = AdditiveShockTransition(
+            base="assets_before_bill",
+            shock="negative_oop_costs",
+            conditioners=_BILL_CONDITIONERS,
+        )
+        dead_law = AdditiveShockTransition(
+            base="assets_before_bill_when_dead",
+            shock="negative_oop_costs",
+            conditioners=_BILL_CONDITIONERS,
+        )
     else:
         living_law = assets_and_income.next_assets
         dead_law = assets_and_income.next_assets_when_dead
@@ -1033,16 +1306,21 @@ def _build_per_target_regime_assets(
 
 def _build_per_target_regime_health(
     spec: RegimeSpec,
-) -> dict[RegimeName, MarkovTransition]:
+) -> dict[RegimeName, StochasticTransition]:
     """Build per-target health transitions.
 
     Pre-65 regimes use HealthWithDisability (3-state), post-65 use Health (2-state).
-    Cross-grid transitions (3->2) happen at the age-65 boundary.
+    Cross-grid transitions (3->2) happen at the age-65 boundary. Between pre-65
+    regimes the Medicare outcome reveals next-period disability for
+    non-workers, so each target carries the health law conditional on it:
+
+    - `dimc` target: disabled (`next_health_into_dimc`);
+    - `nomc` target: not disabled if not working (`next_health_into_nomc`).
     """
     target_regimes = precompute_target_regimes(spec)
     id_to_name = {int(getattr(RegimeId, name)): name for name in REGIME_SPECS}
 
-    result: dict[RegimeName, MarkovTransition] = {}
+    result: dict[RegimeName, StochasticTransition] = {}
     seen_ids: set[int] = set()
 
     for target_id in target_regimes.values():
@@ -1052,13 +1330,19 @@ def _build_per_target_regime_health(
         target_name = id_to_name.get(target_id)
         if target_name is None:
             continue
-        target_spec = REGIME_SPECS[target_name]
-        target_is_post65 = target_spec["mc"] == "oamc"
-
-        if spec["mc"] != "oamc" and target_is_post65:
-            result[target_name] = MarkovTransition(health.next_health_cross)
+        target_mc = REGIME_SPECS[target_name]["mc"]
+        if spec["mc"] == "oamc":
+            result[target_name] = StochasticTransition(func=health.next_health)
+        elif target_mc == "oamc":
+            result[target_name] = StochasticTransition(func=health.next_health_cross)
+        elif target_mc == "dimc":
+            result[target_name] = StochasticTransition(
+                func=health.next_health_into_dimc
+            )
         else:
-            result[target_name] = MarkovTransition(health.next_health)
+            result[target_name] = StochasticTransition(
+                func=health.next_health_into_nomc
+            )
 
     return result
 

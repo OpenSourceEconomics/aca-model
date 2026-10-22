@@ -121,3 +121,18 @@ def next_spousal_income(
 ) -> FloatND:
     """Stochastic spousal income transition."""
     return spousal_income_trans_probs[period, spousal_income]
+
+
+def spousal_income_amount(
+    spousal_income: DiscreteState,
+    good_health: IntND,
+    period: Period,
+    spousal_income_amounts: FloatND,
+) -> FloatND:
+    """Return the household's spousal income this period.
+
+    `spousal_income_amounts` is indexed by period, the respondent's own health
+    (good or not) and the `SpousalIncome` state; only a working spouse
+    (`married_has_inc`) brings income.
+    """
+    return spousal_income_amounts[period, good_health, spousal_income]

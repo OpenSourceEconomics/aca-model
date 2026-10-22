@@ -5,7 +5,7 @@ full retirement age, and unreduced after.
 """
 
 import jax.numpy as jnp
-from helpers.social_security import compute_pia_table  # ty: ignore[unresolved-import]
+from helpers.social_security import compute_pia_table
 
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.environment import social_security

@@ -63,9 +63,8 @@ def cash_on_hand(
     part (`premium_default`) is never paid, so the effective premium is
     `hic_premium - premium_default`.
 
-    OOP health costs are NOT deducted here — they are deducted from
-    next-period assets instead, matching the timing where HCC shocks are
-    integrated over (agent does not condition consumption on OOP).
+    Out-of-pocket health costs are not deducted here: they are realised after
+    the period's choices and come off end-of-period assets (`next_assets`).
     """
     effective_premium = hic_premium - premium_default
     return assets + after_tax_income + ssi_benefit - effective_premium
@@ -96,8 +95,10 @@ def next_assets(
 ) -> ContinuousState:
     """Compute beginning-of-next-period assets for non-terminal targets.
 
-    OOP health costs are deducted here (not from cash_on_hand) so that the
-    consumption choice does not condition on the HCC shock realization.
+    `oop_costs` is the bill for this period's medical-cost shocks, which are
+    drawn after the period's choices; the continuation integrates over them.
+    End-of-period assets can therefore fall below the borrowing limit that
+    binds consumption (medical debt).
     """
     return (
         cash_on_hand
@@ -106,6 +107,31 @@ def next_assets(
         - consumption_dollars
         - oop_costs
     )
+
+
+def assets_before_bill(
+    cash_on_hand: FloatND,
+    transfers: FloatND,
+    pension_assets_adjustment: FloatND,
+    consumption_dollars: ContinuousAction,
+) -> FloatND:
+    """Compute next-period assets for non-terminal targets before the medical bill.
+
+    `next_assets` is this minus `oop_costs`.
+    """
+    return cash_on_hand + transfers + pension_assets_adjustment - consumption_dollars
+
+
+def assets_before_bill_when_dead(
+    cash_on_hand: FloatND,
+    transfers: FloatND,
+    consumption_dollars: ContinuousAction,
+) -> FloatND:
+    """Compute assets for the dead/terminal target before the medical bill.
+
+    `next_assets_when_dead` is this minus `oop_costs`.
+    """
+    return cash_on_hand + transfers - consumption_dollars
 
 
 def next_assets_when_dead(
@@ -211,3 +237,17 @@ def borrowing_constraint(
     The `max` form returns `floor` exactly.
     """
     return consumption_dollars <= jnp.maximum(cash_on_hand, consumption_dollars_floor)
+
+
+def consumption_above_floor(
+    consumption_dollars: ContinuousAction,
+    consumption_dollars_floor: FloatND,
+) -> BoolND:
+    """Consumption cannot fall below the household's own $-floor.
+
+    The consumption grid starts at the single floor; a married household's
+    floor is higher, and consuming below it would let the household save part
+    of a floor-topping transfer. With cash on hand below the floor, this and
+    the borrowing constraint together pin consumption at the floor.
+    """
+    return consumption_dollars >= consumption_dollars_floor

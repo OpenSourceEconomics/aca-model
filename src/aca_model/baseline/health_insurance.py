@@ -12,6 +12,7 @@ What remains:
 - SSI benefit computation
 """
 
+import jax
 import jax.numpy as jnp
 import lcm
 from lcm import categorical
@@ -49,8 +50,7 @@ class HealthInsuranceState:
 def countable_income(
     labor_income: FloatND,
     capital_income: FloatND,
-    spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     ss_benefit: FloatND,
     pension_benefit: FloatND,
     ssi_ignored_overall: ScalarFloat,
@@ -64,7 +64,7 @@ def countable_income(
     return (
         earned
         + capital_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + ss_benefit
         + pension_benefit
         - ssi_ignored_overall
@@ -131,8 +131,7 @@ def is_disabled_never() -> BoolND:
 def aca_magi(
     labor_income: FloatND,
     capital_income: FloatND,
-    spousal_income: DiscreteState,
-    spousal_income_amounts: FloatND,
+    spousal_income_amount: FloatND,
     ss_benefit: FloatND,
     pension_benefit: FloatND,
 ) -> FloatND:
@@ -145,7 +144,7 @@ def aca_magi(
     return (
         labor_income
         + capital_income
-        + spousal_income_amounts[spousal_income]
+        + spousal_income_amount
         + ss_benefit
         + pension_benefit
     )
@@ -183,45 +182,94 @@ def ssi_benefit(
 
 
 def premium(
-    age: Age,
-    good_health: IntND,
-    is_married: IntND,
-    labor_supply: DiscreteAction,
     buy_private: DiscreteAction,
-    premium_intercept: ScalarFloat,
-    premium_age: ScalarFloat,
-    premium_age_sq: ScalarFloat,
-    premium_age_cub: ScalarFloat,
-    premium_predicted_hcc: ScalarFloat,
-    premium_good_health: ScalarFloat,
-    premium_married: ScalarFloat,
-    premium_works: ScalarFloat,
-    premium_married_works: ScalarFloat,
-    premium_minimum: ScalarFloat,
+    is_married: IntND,
     predicted_hcc_insurer: FloatND,
+    private_premium_intercept: FloatND,
+    premium_predicted_hcc: ScalarFloat,
+    premium_markup: ScalarFloat,
+    premium_minimum: FloatND,
 ) -> FloatND:
-    """Compute health insurance premium for canwork regimes.
+    """Compute the private non-group premium.
 
-    Premium coefficients are regime-specific (different for each HIC type).
-    Return 0 when uninsured (`buy_private=no`).
+    `max(minimum[married], p0 + b (1 + markup) E[insurer cost])` when buying
+    private cover, 0 when uninsured (`buy_private=no`). The insurer cannot
+    price health or marital status beyond the predicted cost and the
+    married minimum.
     """
-    works = labor_supply != LaborSupply.do_not_work
     raw = (
-        premium_intercept
-        + premium_age * age
-        + premium_age_sq * age**2
-        + premium_age_cub * age**3
-        + premium_predicted_hcc * predicted_hcc_insurer
-        + premium_good_health * good_health
-        + premium_married * is_married
-        + premium_works * works
-        + premium_married_works * is_married * works
+        private_premium_intercept
+        + premium_predicted_hcc * (1.0 + premium_markup) * predicted_hcc_insurer
     )
     return jnp.where(
         buy_private == BuyPrivate.yes,
-        jnp.maximum(premium_minimum, raw),
+        jnp.maximum(premium_minimum[is_married], raw),
         0.0,
     )
+
+
+# Bracket and step count of the intercept bisection. The bracket matches the
+# reference implementation; 100 halvings shrink it below float64 resolution.
+_INTERCEPT_BRACKET = (-50_000.0, 10_000.0)
+_N_INTERCEPT_BISECTIONS = 100
+
+
+def private_premium_intercept(
+    premium_predicted_hcc: ScalarFloat,
+    premium_markup: ScalarFloat,
+    premium_minimum: FloatND,
+    premium_sample_insurer_cost: FloatND,
+    premium_sample_is_married: IntND,
+) -> FloatND:
+    """Solve the private premium intercept from the insurer's zero-profit condition.
+
+    On the sample of private buyers under 65 in the data, the intercept `p0`
+    makes premium revenue equal expected payouts plus the markup:
+
+    ```
+    mean_i max(minimum[married_i], p0 + b (1 + markup) cost_i)
+        = (1 + markup) mean_i cost_i
+    ```
+
+    The left side is continuous and non-decreasing in `p0`; bisection on
+    `[-50000, 10000]` finds the root. Without a sign change on the bracket
+    the result is NaN, so an unpriceable slope `b` fails loudly downstream.
+    """
+    slope = premium_predicted_hcc * (1.0 + premium_markup)
+    minimum = premium_minimum[premium_sample_is_married]
+    target = (1.0 + premium_markup) * jnp.mean(premium_sample_insurer_cost)
+
+    def excess_revenue(intercept: FloatND) -> FloatND:
+        premiums = jnp.maximum(minimum, intercept + slope * premium_sample_insurer_cost)
+        return jnp.mean(premiums) - target
+
+    def halve(
+        _: jax.Array, bracket: tuple[FloatND, FloatND]
+    ) -> tuple[FloatND, FloatND]:
+        low, high = bracket
+        mid = 0.5 * (low + high)
+        too_high = excess_revenue(mid) > 0.0
+        return jnp.where(too_high, low, mid), jnp.where(too_high, mid, high)
+
+    low0 = jnp.asarray(_INTERCEPT_BRACKET[0])
+    high0 = jnp.asarray(_INTERCEPT_BRACKET[1])
+    low, high = jax.lax.fori_loop(0, _N_INTERCEPT_BISECTIONS, halve, (low0, high0))
+    bracketed = (excess_revenue(low0) <= 0.0) & (excess_revenue(high0) >= 0.0)
+    return jnp.where(bracketed, 0.5 * (low + high), jnp.nan)
+
+
+def private_cover_paid_in_full(
+    buy_private: DiscreteAction,
+    premium_default: FloatND,
+) -> BoolND:
+    """Private cover is a feasible choice only when its premium is paid in full.
+
+    A household whose resources above the consumption floor fall short of the
+    premium cannot buy private cover: the government does not finance private
+    insurance through floor transfers, and an unpaid premium buys no private
+    cover. Not buying is always feasible.
+    """
+    return (buy_private == BuyPrivate.no) | (premium_default <= 0.0)
 
 
 def premium_insured(
@@ -309,20 +357,49 @@ def oop_costs(
     return jnp.minimum(oop, oop_max)
 
 
-def primary_oop(
+def negative_oop_costs(oop_costs: FloatND) -> FloatND:
+    """Return the out-of-pocket bill as the shock added to assets."""
+    return -oop_costs
+
+
+def insured_oop(
     total_health_costs: FloatND,
-    buy_private: DiscreteAction,
+    is_married: IntND,
     deductible: ScalarFloat,
     coinsurance_rate: ScalarFloat,
     oop_max: ScalarFloat,
 ) -> FloatND:
-    """Compute primary OOP costs.
+    """Compute OOP costs under the regime's plan.
 
-    When uninsured (`buy_private=no`), OOP equals total health costs
-    (no coverage).
+    `deductible` and `oop_max` are the single household's; couples'
+    deductible and OOP maximum are twice as large.
     """
-    insured_oop = oop_costs(total_health_costs, deductible, coinsurance_rate, oop_max)
-    return jnp.where(buy_private == BuyPrivate.yes, insured_oop, total_health_costs)
+    couple_scale = 1.0 + is_married
+    return oop_costs(
+        total_health_costs,
+        deductible * couple_scale,
+        coinsurance_rate,
+        oop_max * couple_scale,
+    )
+
+
+def primary_oop(
+    total_health_costs: FloatND,
+    buy_private: DiscreteAction,
+    is_married: IntND,
+    deductible: ScalarFloat,
+    coinsurance_rate: ScalarFloat,
+    oop_max: ScalarFloat,
+) -> FloatND:
+    """Compute primary OOP costs for regimes with the private-cover choice.
+
+    Private buyers pay `insured_oop`; when uninsured (`buy_private=no`), OOP
+    equals total health costs (no coverage).
+    """
+    insured = insured_oop(
+        total_health_costs, is_married, deductible, coinsurance_rate, oop_max
+    )
+    return jnp.where(buy_private == BuyPrivate.yes, insured, total_health_costs)
 
 
 def is_medicaid_eligible(is_ssi_eligible: BoolND) -> BoolND:
@@ -333,13 +410,14 @@ def is_medicaid_eligible(is_ssi_eligible: BoolND) -> BoolND:
 def target_his(
     his: IntND,
     labor_supply: DiscreteAction,
-    is_medicaid_eligible: BoolND,
+    is_ssi_eligible: BoolND,
 ) -> IntND:
     """Return the HIS class of the surviving target regime.
 
     Mirrors the cross-HIS branches inside `_make_transition_canwork` (retiree,
     tied, nongroup): tied agents who stop working become nongroup, and
-    Medicaid-eligible agents are overridden to nongroup. Used by
+    categorically (SSI-) Medicaid-eligible agents are overridden to nongroup.
+    The ACA Medicaid expansion leaves employer coverage untouched. Used by
     `imputed_pension_wealth_next_period` to look up next-period imputation
     coefficients at the target's HIS.
     """
@@ -347,7 +425,7 @@ def target_his(
         labor_supply == LaborSupply.do_not_work
     )
     return jnp.where(
-        tied_to_ng | is_medicaid_eligible,
+        tied_to_ng | is_ssi_eligible,
         HealthInsuranceState.nongroup,
         his,
     ).astype(jnp.int32)
@@ -355,18 +433,18 @@ def target_his(
 
 def target_his_forcedout(
     his: IntND,
-    is_medicaid_eligible: BoolND,
+    is_ssi_eligible: BoolND,
 ) -> IntND:
     """Return the HIS class of the surviving target regime in forced-out regimes.
 
     Forced-out regimes have no labor-supply choice, and tied agents have
     already moved to nongroup before the forced-out age, so the only HIS
-    override is Medicaid eligibility → nongroup. Used by
+    override is categorical (SSI) Medicaid eligibility → nongroup. Used by
     `imputed_pension_wealth_next_period` to look up next-period imputation
     coefficients at the target's HIS.
     """
     return jnp.where(
-        is_medicaid_eligible,
+        is_ssi_eligible,
         HealthInsuranceState.nongroup,
         his,
     ).astype(jnp.int32)
@@ -393,18 +471,65 @@ def oop_with_medicaid(
     return jnp.where(is_medicaid_eligible, medicaid_oop, primary_oop)
 
 
+def oop_with_medicaid_replacing_private(
+    total_health_costs: FloatND,
+    primary_oop: FloatND,
+    is_medicaid_eligible: BoolND,
+    deductible_medicaid: ScalarFloat,
+    coinsurance_rate_medicaid: ScalarFloat,
+    oop_max_medicaid: ScalarFloat,
+) -> FloatND:
+    """Compute OOP costs in the non-group regimes before Medicare.
+
+    A Medicaid-eligible household is covered by Medicaid alone: Medicaid is
+    the payer of last resort and does not cover private premia, so it can
+    neither hold private cover nor stay uninsured. Its OOP is Medicaid's
+    cost-sharing on total costs, whatever its `buy_private` choice. Other
+    households pay the primary (private or uninsured) OOP.
+    """
+    medicaid_oop = oop_costs(
+        total_health_costs=total_health_costs,
+        deductible=deductible_medicaid,
+        coinsurance_rate=coinsurance_rate_medicaid,
+        oop_max=oop_max_medicaid,
+    )
+    return jnp.where(is_medicaid_eligible, medicaid_oop, primary_oop)
+
+
+def medicaid_adjusted_premium(
+    plan_premium: FloatND,
+    is_medicaid_eligible: BoolND,
+) -> FloatND:
+    """Compute the premium a non-group household pays.
+
+    A Medicaid-eligible household pays no premium: before Medicare its only
+    cover is Medicaid, whose premium is zero; with Medicare, Medicaid pays
+    the Medicare premium.
+    """
+    return jnp.where(is_medicaid_eligible, 0.0, plan_premium)
+
+
 def hcc_insurer_predicted(
+    period: Period,
+    is_married: IntND,
+    good_health: IntND,
     hcc_persistent: ContinuousState,
     predicted_hcc_insurer_table: FloatND,
     hcc_persistent_grid: FloatND,
 ) -> FloatND:
-    """Interpolate pre-computed expected insurer cost for the current HCC state.
+    """Interpolate the private insurer's expected cost for the household.
 
-    The table contains E[total_costs - oop_costs | hcc_persistent] at each
-    persistent grid point. Linear interpolation handles off-grid values
-    during simulation (where draw_shock returns continuous AR1 values).
+    `hcc_persistent` is last period's persistent shock, so the table holds
+    this period's E[total_costs - oop_costs | age, married, good health,
+    lagged persistent node] on `[period, is_married, good_health, node]`. Linear
+    interpolation handles off-grid values during simulation (where
+    draw_shock returns continuous AR1 values).
     """
-    return jnp.interp(hcc_persistent, hcc_persistent_grid, predicted_hcc_insurer_table)
+    return jnp.interp(
+        hcc_persistent,
+        hcc_persistent_grid,
+        predicted_hcc_insurer_table[period, is_married, good_health],
+    )
 
 
 def compute_hcc_insurer_table(
@@ -421,8 +546,9 @@ def compute_hcc_insurer_table(
 ) -> FloatND:
     """Compute predicted insurer costs table for all persistent grid points.
 
-    For each source persistent state i, integrate over (target persistent j,
-    transitory k) weighted by transition probs and quadrature weights.
+    For each lagged persistent state i, integrate over this period's
+    (persistent j, transitory k) weighted by transition probs and quadrature
+    weights.
     """
     std_trans = jnp.sqrt(1.0 - std_xsect_persistent**2)
     # total_costs[j, k] for all (persistent, transitory) combinations
@@ -453,11 +579,17 @@ def total_costs(
     good_health: IntND,
     log_mean: FloatND,
     log_std: FloatND,
-    hcc_persistent: ContinuousState,
-    hcc_transitory: ContinuousState,
+    next_hcc_persistent: ContinuousState,
+    next_hcc_transitory: ContinuousState,
     std_xsect_persistent: ScalarFloat,
 ) -> FloatND:
-    """Compute total health care costs from log-normal model.
+    """Compute this period's total health care costs from the log-normal model.
+
+    Costs are realised after the period's choices. The persistent and
+    transitory shocks that drive them are the draws the transition makes,
+    `next_hcc_persistent` and `next_hcc_transitory`: the next period carries
+    them as its lagged shocks. Age, marital status and health are this
+    period's.
 
     ``log_mean`` and ``log_std`` are ``pd.Series`` with ``(age, is_married,
     good_health)`` MultiIndex, resolved by pylcm via ``derived_categoricals``.
@@ -466,5 +598,5 @@ def total_costs(
     return jnp.exp(
         log_mean[period, is_married, good_health]
         + log_std[period, is_married, good_health]
-        * (hcc_persistent * std_xsect_persistent + hcc_transitory * std_trans)
+        * (next_hcc_persistent * std_xsect_persistent + next_hcc_transitory * std_trans)
     )

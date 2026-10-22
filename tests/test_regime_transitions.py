@@ -26,7 +26,12 @@ from aca_model.config import MODEL_CONFIG
 
 N_REGIMES = 19
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
-SURVIVAL = jnp.ones(N_PERIODS) * 0.99
+SURVIVAL = jnp.ones((N_PERIODS, 3)) * 0.99
+# P(disabled next period | disabled, bad, good health).
+PROB_DISABLED = jnp.broadcast_to(
+    jnp.array([0.98, 0.05, 0.002]),
+    (N_PERIODS, 3),
+)
 
 
 def _target_from_probs(probs: jnp.ndarray) -> int:
@@ -42,13 +47,15 @@ def _target_from_probs(probs: jnp.ndarray) -> int:
 def test_tied_stop_working_becomes_nongroup() -> None:
     """Tied agent who stops working loses employer coverage → nongroup."""
     own, ng = make_targets("tied_nomc_inelig_canwork")
-    transition = tied_canwork(gets_medicare=False, own=own, ng=ng)
+    transition = tied_canwork(own=own, ng=ng)
 
     probs = transition(
         age=jnp.int32(55),
         period=jnp.int32(4),
+        health=jnp.int32(2),
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.do_not_work),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -59,13 +66,15 @@ def test_tied_stop_working_becomes_nongroup() -> None:
 def test_tied_keeps_working_stays_tied() -> None:
     """Tied agent who keeps working retains employer coverage."""
     own, ng = make_targets("tied_nomc_inelig_canwork")
-    transition = tied_canwork(gets_medicare=False, own=own, ng=ng)
+    transition = tied_canwork(own=own, ng=ng)
 
     probs = transition(
         age=jnp.int32(55),
         period=jnp.int32(4),
+        health=jnp.int32(2),
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -78,13 +87,15 @@ def test_tied_keeps_working_stays_tied() -> None:
 def test_retiree_medicaid_override_to_nongroup() -> None:
     """Medicaid-eligible retiree is overridden to nongroup."""
     own, ng = make_targets("retiree_nomc_inelig_canwork")
-    transition = retiree_canwork(gets_medicare=False, own=own, ng=ng)
+    transition = retiree_canwork(own=own, ng=ng)
 
     probs = transition(
         age=jnp.int32(55),
         period=jnp.int32(4),
+        health=jnp.int32(2),
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(True),
+        is_ssi_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -94,13 +105,15 @@ def test_retiree_medicaid_override_to_nongroup() -> None:
 def test_retiree_not_medicaid_stays_retiree() -> None:
     """Non-Medicaid retiree stays retiree."""
     own, ng = make_targets("retiree_nomc_inelig_canwork")
-    transition = retiree_canwork(gets_medicare=False, own=own, ng=ng)
+    transition = retiree_canwork(own=own, ng=ng)
 
     probs = transition(
         age=jnp.int32(55),
         period=jnp.int32(4),
+        health=jnp.int32(2),
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -115,7 +128,8 @@ def test_retiree_forcedout_medicaid_override() -> None:
     probs = transition(
         age=jnp.int32(80),
         period=jnp.int32(29),
-        is_medicaid_eligible=jnp.array(True),
+        health=jnp.int32(2),
+        is_ssi_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -148,14 +162,16 @@ def test_retiree_age_bracket_transitions(
     # Use nomc+inelig as starting point — the transition function resolves
     # the target based on next_age, not current spec.
     own, ng = make_targets("retiree_nomc_inelig_canwork")
-    transition = retiree_canwork(gets_medicare=False, own=own, ng=ng)
+    transition = retiree_canwork(own=own, ng=ng)
 
     period = jnp.int32(age - MODEL_CONFIG.start_age)
     probs = transition(
         age=jnp.asarray(age),
         period=period,
+        health=jnp.int32(2),
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -168,11 +184,13 @@ def test_retiree_age_bracket_transitions(
 def test_nongroup_canwork_valid_probs() -> None:
     """Nongroup canwork produces valid probability vector."""
     own, _ng = make_targets("nongroup_nomc_inelig_canwork")
-    transition = nongroup_canwork(gets_medicare=False, own=own)
+    transition = nongroup_canwork(own=own)
 
     probs = transition(
         age=jnp.int32(55),
         period=jnp.int32(4),
+        health=jnp.int32(2),
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
         survival_probs=SURVIVAL,
     )
@@ -188,6 +206,7 @@ def test_nongroup_forcedout_valid_probs() -> None:
     probs = transition(
         age=jnp.int32(80),
         period=jnp.int32(29),
+        health=jnp.int32(2),
         survival_probs=SURVIVAL,
     )
     assert jnp.isclose(jnp.sum(probs), 1.0, atol=1e-6)
@@ -200,13 +219,15 @@ def test_nongroup_forcedout_valid_probs() -> None:
 def test_tied_medicaid_override_to_nongroup() -> None:
     """Tied + Medicaid-eligible → nongroup (SSI override)."""
     own, ng = make_targets("tied_nomc_inelig_canwork")
-    transition = tied_canwork(gets_medicare=False, own=own, ng=ng)
+    transition = tied_canwork(own=own, ng=ng)
 
     probs = transition(
         age=jnp.int32(55),
         period=jnp.int32(4),
+        health=jnp.int32(2),
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(True),
+        is_ssi_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -216,14 +237,16 @@ def test_tied_medicaid_override_to_nongroup() -> None:
 def test_tied_at_medicare_age_with_medicaid() -> None:
     """Tied at age 64→65 (Medicare onset) + Medicaid → nongroup+oamc."""
     own, ng = make_targets("tied_nomc_choose_canwork")
-    transition = tied_canwork(gets_medicare=False, own=own, ng=ng)
+    transition = tied_canwork(own=own, ng=ng)
 
     period = jnp.int32(64 - MODEL_CONFIG.start_age)
     probs = transition(
         age=jnp.int32(64),
         period=period,
+        health=jnp.int32(2),
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(True),
+        is_ssi_eligible=jnp.array(True),
         survival_probs=SURVIVAL,
     )
     target = _target_from_probs(probs)
@@ -234,14 +257,16 @@ def test_tied_at_medicare_age_with_medicaid() -> None:
 def test_survival_prob_determines_death_weight() -> None:
     """Dead regime gets (1 - survival) probability weight."""
     own, ng = make_targets("retiree_nomc_inelig_canwork")
-    transition = retiree_canwork(gets_medicare=False, own=own, ng=ng)
+    transition = retiree_canwork(own=own, ng=ng)
 
-    survival = jnp.ones(N_PERIODS) * 0.85
+    survival = jnp.ones((N_PERIODS, 3)) * 0.85
     probs = transition(
         age=jnp.int32(55),
         period=jnp.int32(4),
+        health=jnp.int32(2),
+        prob_disabled_next=PROB_DISABLED,
         labor_supply=jnp.array(LaborSupply.h2000),
-        is_medicaid_eligible=jnp.array(False),
+        is_ssi_eligible=jnp.array(False),
         survival_probs=survival,
     )
     assert jnp.isclose(probs[RegimeId.dead], 0.15, atol=1e-6)
