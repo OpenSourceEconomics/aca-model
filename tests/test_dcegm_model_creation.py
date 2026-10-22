@@ -33,9 +33,12 @@ from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
-# The EGM solvers take the savings-form asset law, so the medical bill stays inside
-# `next_assets` rather than being declared as an additive shock.
-_EGM_GRID_CONFIG = dataclasses.replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
+# pylcm folds a shock state only under grid search, and the EGM solvers take the
+# savings-form asset law, so the transitory medical-cost shock stays a state and
+# the bill stays inside `next_assets`.
+_EGM_GRID_CONFIG = dataclasses.replace(
+    BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
+)
 
 
 def _build_regimes(solver: SolverName) -> dict[str, Regime]:
