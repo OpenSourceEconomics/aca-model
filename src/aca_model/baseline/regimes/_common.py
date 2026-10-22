@@ -845,12 +845,10 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     # assets adjustment, both of which scale by the marginal income tax rate.
     functions["marginal_tax_rate"] = taxes.marginal_rate
 
-    # HIC premium
-    functions["predicted_hcc_insurer"] = health_insurance.hcc_insurer_predicted
-
     # Transfers
     functions["consumption_dollars_floor"] = assets_and_income.consumption_dollars_floor
-    functions["transfers"] = assets_and_income.transfers
+    if solver == "brute_force":
+        functions["transfers"] = assets_and_income.transfers
     functions["consumption_equiv"] = preferences.consumption_equiv
 
     return functions
@@ -999,10 +997,8 @@ def build_common_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> 
         if spec["mc"] == "oamc"
         else health_insurance.is_disabled_from_health
     )
-    # MAGI for the ACA Medicaid expansion track; pruned in the baseline DAG.
-    functions["aca_magi"] = health_insurance.aca_magi
-
     # Swapped per policy variant by the ACA overlay, hence regime-level
+    functions["predicted_hcc_insurer"] = health_insurance.hcc_insurer_predicted
     functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
     functions["after_tax_income"] = taxes.after_tax_income
     if subtract_bill:
