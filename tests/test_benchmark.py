@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from _lcm.simulation.additional_targets import _collect_all_available_targets
 from lcm import (
     DiscreteGrid,
     GridBreakpoint,
@@ -110,6 +111,17 @@ def test_benchmark_panel_exposes_hic_premium_and_wage_targets() -> None:
     defined_wage = df.loc[df["wage"].notna(), "wage"].to_numpy()
     assert len(defined_wage) > 0
     assert (defined_wage > 0).all()
+
+
+def test_benchmark_model_offers_uncompensated_care_targets() -> None:
+    """Transfers, the floor and total health costs can be added to the panel.
+
+    Uncompensated care is the part of `transfers` above
+    `consumption_dollars_floor`, relative to `total_health_costs`.
+    """
+    model = create_benchmark_model(pref_type_grid=DiscreteGrid(BenchmarkPrefType))
+    available = _collect_all_available_targets(model._regimes)  # noqa: SLF001
+    assert {"transfers", "consumption_dollars_floor", "total_health_costs"} <= available
 
 
 @pytest.mark.long_running
