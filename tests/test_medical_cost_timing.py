@@ -28,14 +28,29 @@ _SHOCKS = ("hcc_persistent", "hcc_transitory")
 # Period 0's choices look one year ahead, so ages 51-53 (two living periods and
 # the age at which everybody is dead) carry the whole timing question.
 _FINAL_AGE = 53
+# The twins differ in one lagged shock at its grid ends, so only the two shock
+# grids keep the benchmark resolution and the transitory shock stays a state.
+# Every other grid is at the smallest size the model accepts, except that
+# consumption keeps an interior point above the two floors and below the cap,
+# so the consumption comparison still allows a choice that cash would move:
+# - assets: borrowing limit, zero and the top holding;
+# - AIME: two points per PIA segment;
+# - wage residual: two points.
+_GRID_CONFIG = replace(
+    BENCHMARK_GRID_CONFIG,
+    fold_hcc_transitory=False,
+    subtract_hcc_bill=False,
+    n_assets_gridpoints=3,
+    aime_points_per_segment=(2, 2, 2, 2),
+    n_consumption_dollars_gridpoints=4,
+    n_wage_res_gridpoints=2,
+)
 
 
 @pytest.fixture(scope="module")
 def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
     """Period-0 rows of twins that differ in one lagged shock, at its grid ends."""
-    grid_config = replace(
-        BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
-    )
+    grid_config = _GRID_CONFIG
     model = create_benchmark_model(
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         grid_config=grid_config,

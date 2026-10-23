@@ -252,13 +252,6 @@ class Grids:
     """Grid sizes and numerical settings used to construct each solver."""
 
 
-# AIME piecewise grid: number of points per segment between the PIA
-# bend points (0 → kink_0 → kink_1 → kink_2 → extension). The fourth
-# segment covers the sparse delayed-retirement-credit region above the
-# taxable max, so it carries fewer points than the dense lower segments.
-_AIME_PIECE_N_POINTS: tuple[int, int, int, int] = (10, 11, 11, 6)
-
-
 # `pension_wealth` is a carried state (`Phased(solve=..., simulate=Grid)`):
 # imputed via a derived function in solve (never a solve grid axis) and
 # carried per subject in simulate. The grid is simulate-side metadata only —
@@ -337,7 +330,10 @@ def build_grids(
         assets=build_assets_grid(
             floor=assets_start, n_points=grid_config.n_assets_gridpoints
         ),
-        aime=_build_aime_grid(fixed_params=fixed_params),
+        aime=_build_aime_grid(
+            fixed_params=fixed_params,
+            points_per_segment=grid_config.aime_points_per_segment,
+        ),
         pension_wealth=_PENSION_WEALTH_GRID,
         consumption_dollars=(
             IrregSpacedGrid(n_points=grid_config.n_consumption_dollars_gridpoints)
@@ -402,15 +398,16 @@ def get_hcc_persistent_grid_points(*, grid_config: GridConfig) -> FloatND:
     return get_hcc_persistent_shock(grid_config=grid_config).to_jax()
 
 
-def _build_aime_grid(*, fixed_params: UserParams) -> PiecewiseLinSpacedGrid:
+def _build_aime_grid(
+    *, fixed_params: UserParams, points_per_segment: tuple[int, int, int, int]
+) -> PiecewiseLinSpacedGrid:
     """Return the AIME grid.
 
     The grid is piecewise-linspaced with breakpoints at the PIA bends
-    in `fixed_params["pia_aime_grid"]` and `_AIME_PIECE_N_POINTS` in
+    in `fixed_params["pia_aime_grid"]` and `points_per_segment` in
     each segment. The fifth bend point is the delayed-retirement-credit
     extension above the taxable max, so the grid carries four segments.
-    `n_aime_gridpoints` from `grid_config` is ignored on this path; the
-    total is fixed by the PIA structure (`sum(_AIME_PIECE_N_POINTS)`).
+    `n_aime_gridpoints` from `grid_config` is ignored on this path.
     """
     kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
     return PiecewiseLinSpacedGrid(
@@ -421,7 +418,7 @@ def _build_aime_grid(*, fixed_params: UserParams) -> PiecewiseLinSpacedGrid:
             GridBreakpoint(value=kinks[2]),
             GridBreakpoint(value=kinks[3]),
         ),
-        points_per_segment=_AIME_PIECE_N_POINTS,
+        points_per_segment=points_per_segment,
     )
 
 

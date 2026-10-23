@@ -30,6 +30,11 @@ class GridConfig:
 
     n_assets_gridpoints: int = 24
     n_aime_gridpoints: int = 12
+    # AIME piecewise grid: number of points per segment between the PIA bend
+    # points (0 → kink_0 → kink_1 → kink_2 → extension), at least 2 each. The
+    # fourth segment covers the sparse delayed-retirement-credit region above
+    # the taxable max, so it carries fewer points than the dense lower segments.
+    aime_points_per_segment: tuple[int, int, int, int] = (10, 11, 11, 6)
     n_consumption_dollars_gridpoints: int = 70
     n_wage_res_gridpoints: int = 5
     n_hcc_persistent_gridpoints: int = 3
