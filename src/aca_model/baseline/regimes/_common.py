@@ -526,6 +526,24 @@ def transition_ages(spec: RegimeSpec) -> tuple[int, ...]:
     raise ValueError(f"Unknown regime spec: {spec}")
 
 
+def build_restart_initial_nodes(*, ages: Iterable[int]) -> InitialNodes:
+    """Admit every living regime active at each of `ages` as a start.
+
+    A simulation restarted from the states another simulation reached at some
+    age starts in whichever living regime that simulation had arrived at.
+    """
+    return InitialNodes(
+        by_age={
+            age: tuple(
+                name
+                for name, spec in REGIME_SPECS.items()
+                if age in transition_ages(spec)
+            )
+            for age in ages
+        }
+    )
+
+
 def next_model_age(period: Period) -> FloatND:
     """Advance by one grid position, never by an assumed number of years.
 
