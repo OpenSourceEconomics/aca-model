@@ -1,14 +1,10 @@
 """Tests for baseline model creation and regime structure."""
 
 import inspect
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 import pytest
-from helpers.model import (
-    make_aca_model,
-    make_baseline_model,
-)
-from lcm import DiscreteGrid, Phased
+from lcm import DiscreteGrid, Model, Phased
 
 from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
@@ -54,25 +50,25 @@ def build_regime(name: str):
     return _build_regime(name, _GRIDS)
 
 
-def test_model_creates_successfully() -> None:
-    model = make_baseline_model()
+def test_model_creates_successfully(baseline_model: Model) -> None:
+    model = baseline_model
     assert len(model.user_regimes) == 19
     assert model.n_periods == 46
 
 
-def test_model_age_range() -> None:
-    model = make_baseline_model()
+def test_model_age_range(baseline_model: Model) -> None:
+    model = baseline_model
     assert model.ages.values[0] == 51.0
     assert model.ages.values[-1] == 96.0
 
 
-def test_dead_regime_is_terminal() -> None:
-    model = make_baseline_model()
+def test_dead_regime_is_terminal(baseline_model: Model) -> None:
+    model = baseline_model
     assert model.graph.laws["dead"].terminal
 
 
-def test_non_terminal_regimes_not_terminal() -> None:
-    model = make_baseline_model()
+def test_non_terminal_regimes_not_terminal(baseline_model: Model) -> None:
+    model = baseline_model
     for name in REGIME_SPECS:
         assert not model.graph.laws[name].terminal
 
@@ -226,7 +222,9 @@ def test_regime_specs_keys_match_regime_id() -> None:
         assert hasattr(RegimeId, name), f"RegimeId missing field for {name}"
 
 
-def test_all_non_terminal_regimes_carry_pension_wealth_as_carried_state() -> None:
+def test_all_non_terminal_regimes_carry_pension_wealth_as_carried_state(
+    baseline_model: Model,
+) -> None:
     """`pension_wealth` is a carried state broadcast into every living regime.
 
     Imputed from AIME during solve (never a solve grid axis) yet seeded and
@@ -241,7 +239,7 @@ def test_all_non_terminal_regimes_carry_pension_wealth_as_carried_state() -> Non
         build_model_state_transitions()["pension_wealth"]
         is pensions.wealth_next_before_adjustment
     )
-    model = make_baseline_model()
+    model = baseline_model
     for name in REGIME_SPECS:
         assert isinstance(model.user_regimes[name].states["pension_wealth"], Phased), (
             name
@@ -288,8 +286,10 @@ def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
         assert "hcc_transitory" not in regime.state_transitions
 
 
-def test_aca_model_creates_successfully() -> None:
-    model = make_aca_model(policy=PolicyVariant.ACA)
+def test_aca_model_creates_successfully(
+    aca_model_for: Callable[[PolicyVariant], Model],
+) -> None:
+    model = aca_model_for(PolicyVariant.ACA)
     assert len(model.user_regimes) == 19
     assert model.n_periods == 46
 
@@ -362,9 +362,11 @@ def test_aca_other_regimes_have_no_aca_policy_keys() -> None:
 
 
 @pytest.mark.parametrize("policy", list(PolicyVariant))
-def test_all_policy_variants_create(policy: PolicyVariant) -> None:
+def test_all_policy_variants_create(
+    policy: PolicyVariant, aca_model_for: Callable[[PolicyVariant], Model]
+) -> None:
     """All policy variants create valid models."""
-    model = make_aca_model(policy=policy)
+    model = aca_model_for(policy)
     assert len(model.user_regimes) == 19
 
 
@@ -402,35 +404,35 @@ def test_aca_only_medicaid_expansion() -> None:
     assert "cost_sharing_scale" not in nongroup.functions
 
 
-def test_baseline_model_creates() -> None:
+def test_baseline_model_creates(baseline_model: Model) -> None:
     """Baseline model creates successfully without PolicyVariant."""
-    model = make_baseline_model()
+    model = baseline_model
     assert len(model.user_regimes) == 19
 
 
-def test_dead_regime_prunes_unused_broadcast_states() -> None:
+def test_dead_regime_prunes_unused_broadcast_states(baseline_model: Model) -> None:
     """States every living regime shares are declared once at the model level;
     `dead` keeps what the bequest DAG reads (`assets`, `pref_type`).
     `pension_wealth` is masked (carried states are illegal in terminal
     regimes); the other unused broadcast states are pruned by reachability."""
-    model = make_baseline_model()
+    model = baseline_model
     assert model.pruned_variables["dead"] == frozenset(
         {"aime", "spousal_income", "hcc_persistent", "hcc_transitory"}
     )
 
 
-def test_dead_regime_keeps_only_the_bequest_states() -> None:
+def test_dead_regime_keeps_only_the_bequest_states(baseline_model: Model) -> None:
     """`dead` carries only assets and preference type for valuing bequests."""
-    model = make_baseline_model()
+    model = baseline_model
     assert set(model.user_regimes["dead"].states) == {
         "assets",
         "pref_type",
     }
 
 
-def test_living_regimes_keep_every_broadcast_state() -> None:
+def test_living_regimes_keep_every_broadcast_state(baseline_model: Model) -> None:
     """Every model-level state is read by each living regime's DAG, so
     pruning removes nothing outside `dead`."""
-    model = make_baseline_model()
+    model = baseline_model
     for name in REGIME_SPECS:
         assert model.pruned_variables[name] == frozenset()
