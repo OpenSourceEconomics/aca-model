@@ -13,7 +13,7 @@ Usage:
 from collections.abc import Mapping
 from typing import Any
 
-from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, Model
+from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, InitialNodes, Model
 from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import (
@@ -37,6 +37,7 @@ def create_model(
     solver: SolverName = "brute_force",
     consumption_dollars_points: tuple[float, ...] | None = None,
     execution_config: ExecutionConfig | None = None,
+    initial_nodes: InitialNodes = INITIAL_NODES,
 ) -> Model:
     """Create the baseline structural retirement model.
 
@@ -73,6 +74,9 @@ def create_model(
         execution_config: Explicit hardware-local policy forwarded unchanged.
             None uses the smallest selected accelerator allocator limit as the
             device-memory budget; CPU construction remains unbudgeted.
+        initial_nodes: Admissible starting `(age, regime)` pairs. The default
+            admits the estimation sample's entry ages and regimes; pass
+            `build_restart_initial_nodes` to restart simulations mid-life.
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
@@ -102,7 +106,7 @@ def create_model(
 
     return Model(
         regimes=regimes,
-        initial_nodes=INITIAL_NODES,
+        initial_nodes=initial_nodes,
         ages=ages,
         regime_id_class=RegimeId,
         description="Baseline structural retirement model (pre-ACA)",
