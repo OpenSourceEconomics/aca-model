@@ -35,9 +35,9 @@ from aca_model.agent.health import GoodHealth
 from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
-from aca_model.baseline.model import create_model
+from aca_model.baseline.model import create_model, select_params_for_model
 from aca_model.baseline.regimes import ENTRY_REGIMES
-from aca_model.config import BENCHMARK_GRID_CONFIG, MODEL_CONFIG, GridConfig
+from aca_model.config import BENCHMARK_GRID_CONFIG, MODEL_AGES, MODEL_CONFIG, GridConfig
 from aca_model.consumption_dollars_grid import (
     compute_consumption_dollars_points,
     inject_consumption_dollars_points,
@@ -116,7 +116,8 @@ def get_benchmark_params(
     into `params` for each regime that declares `consumption_dollars` as
     an `IrregSpacedGrid` with runtime-supplied points. Pass `model=None`
     to skip injection (e.g. when constructing the model with
-    `fixed_params`).
+    `fixed_params`). A model with a shorter horizon than the snapshot's
+    receives only the `params` its template reads.
 
     The regime-transition law arguments (`survival_probs`,
     `prob_disabled_next`) are returned under `fixed_params["edges"][source]`,
@@ -135,6 +136,8 @@ def get_benchmark_params(
             max_consumption_dollars=max_consumption_dollars,
         )
         params = inject_consumption_floor_schedule(params=params, model=model)
+        if model.n_periods < len(MODEL_AGES):
+            params = select_params_for_model(params=params, model=model)
     return fixed_params, wage_params, params
 
 

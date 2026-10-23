@@ -13,6 +13,9 @@ Usage:
 from collections.abc import Mapping
 from typing import Any
 
+from _lcm.params.processing import find_param_candidates
+from _lcm.utils.namespace import flatten_regime_namespace
+from dags.tree import unflatten_from_qnames
 from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, InitialNodes, Model
 from lcm.typing import UserParams
 
@@ -112,24 +115,75 @@ def create_model(
         solver=solver,
     )
 
-    return Model(
-        regimes=regimes,
-        initial_nodes=(
-            build_entry_initial_nodes(ages=ages)
-            if initial_nodes is None
-            else initial_nodes
-        ),
-        ages=AgeGrid(exact_values=ages),
-        regime_id_class=RegimeId,
-        description="Baseline structural retirement model (pre-ACA)",
+    return build_model_for_horizon(
         fixed_params=fixed_params,
-        derived_categoricals=derived_categoricals,
-        execution_config=(
-            execution_config_for_devices()
-            if execution_config is None
-            else execution_config
-        ),
-        **model_slots,
+        final_age=final_age,
+        model_kwargs={
+            "regimes": regimes,
+            "initial_nodes": (
+                build_entry_initial_nodes(ages=ages)
+                if initial_nodes is None
+                else initial_nodes
+            ),
+            "ages": AgeGrid(exact_values=ages),
+            "regime_id_class": RegimeId,
+            "description": "Baseline structural retirement model (pre-ACA)",
+            "derived_categoricals": derived_categoricals,
+            "execution_config": (
+                execution_config_for_devices()
+                if execution_config is None
+                else execution_config
+            ),
+            **model_slots,
+        },
+    )
+
+
+def build_model_for_horizon(
+    *,
+    fixed_params: UserParams,
+    final_age: int,
+    model_kwargs: Mapping[str, Any],
+) -> Model:
+    """Build the pylcm Model, passing it only the fixed params its horizon reads.
+
+    The full horizon reaches every regime and reads every fixed param. A shorter
+    horizon reaches only the regimes whose stages start before `final_age`, so
+    the params of the other regimes, and model-level params only they read, are
+    dropped. A first build without fixed params supplies the template that
+    decides which params are read.
+
+    Args:
+        fixed_params: Fixed params for the full horizon.
+        final_age: First age at which everybody is dead.
+        model_kwargs: Every other keyword argument of `lcm.Model`.
+
+    Returns:
+        The pylcm Model.
+
+    """
+    if final_age < MODEL_CONFIG.end_age:
+        fixed_params = select_params_for_model(
+            params=fixed_params, model=Model(**model_kwargs)
+        )
+    return Model(fixed_params=fixed_params, **model_kwargs)
+
+
+def select_params_for_model(*, params: UserParams, model: Model) -> UserParams:
+    """Keep the entries of `params` that fill a slot of `model`'s params template.
+
+    Each entry may sit at any level pylcm resolves: the exact slot, a regime, an
+    edge source, or the model level.
+    """
+    params_flat = flatten_regime_namespace(params)
+    template_flat = flatten_regime_namespace(model.get_params_template())
+    used = {
+        candidate
+        for qname in template_flat
+        for candidate in find_param_candidates(qname=qname, params_flat=params_flat)
+    }
+    return unflatten_from_qnames(
+        {qname: value for qname, value in params_flat.items() if qname in used}
     )
 
 

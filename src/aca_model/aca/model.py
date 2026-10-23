@@ -12,7 +12,10 @@ from lcm.typing import UserParams
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
-from aca_model.baseline.model import _fail_if_dcegm_without_consumption_points
+from aca_model.baseline.model import (
+    _fail_if_dcegm_without_consumption_points,
+    build_model_for_horizon,
+)
 from aca_model.baseline.regimes import (
     RegimeId,
     SolverName,
@@ -100,22 +103,25 @@ def create_model(
         solver=solver,
     )
 
-    return Model(
-        regimes=regimes,
-        initial_nodes=(
-            build_entry_initial_nodes(ages=ages)
-            if initial_nodes is None
-            else initial_nodes
-        ),
-        ages=AgeGrid(exact_values=ages),
-        regime_id_class=RegimeId,
-        description=f"Structural retirement model ({policy.name})",
+    return build_model_for_horizon(
         fixed_params=fixed_params,
-        derived_categoricals=derived_categoricals,
-        execution_config=(
-            execution_config_for_devices()
-            if execution_config is None
-            else execution_config
-        ),
-        **model_slots,
+        final_age=final_age,
+        model_kwargs={
+            "regimes": regimes,
+            "initial_nodes": (
+                build_entry_initial_nodes(ages=ages)
+                if initial_nodes is None
+                else initial_nodes
+            ),
+            "ages": AgeGrid(exact_values=ages),
+            "regime_id_class": RegimeId,
+            "description": f"Structural retirement model ({policy.name})",
+            "derived_categoricals": derived_categoricals,
+            "execution_config": (
+                execution_config_for_devices()
+                if execution_config is None
+                else execution_config
+            ),
+            **model_slots,
+        },
     )
