@@ -24,8 +24,8 @@ _FOLDED = replace(
 
 
 @pytest.fixture(scope="module")
-def folded_model() -> Model:
-    return make_baseline_model(grid_config=_FOLDED)
+def folded_model(folded_baseline_model: Model) -> Model:
+    return folded_baseline_model
 
 
 def test_living_regimes_carry_no_lagged_transitory_shock(folded_model: Model) -> None:

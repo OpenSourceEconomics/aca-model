@@ -30,6 +30,11 @@ class GridConfig:
 
     n_assets_gridpoints: int = 24
     n_aime_gridpoints: int = 12
+    # AIME piecewise grid: number of points per segment between the PIA bend
+    # points (0 → kink_0 → kink_1 → kink_2 → extension), at least 2 each. The
+    # fourth segment covers the sparse delayed-retirement-credit region above
+    # the taxable max, so it carries fewer points than the dense lower segments.
+    aime_points_per_segment: tuple[int, int, int, int] = (10, 11, 11, 6)
     n_consumption_dollars_gridpoints: int = 70
     n_wage_res_gridpoints: int = 5
     n_hcc_persistent_gridpoints: int = 3
@@ -59,11 +64,37 @@ class GridConfig:
 
 
 MODEL_CONFIG = ModelConfig()
+
+
+def model_ages(*, final_age: int) -> tuple[int, ...]:
+    """Return the model's ages, from `start_age` through `final_age`.
+
+    `final_age` is the first age at which everybody is dead, so the model has
+    `final_age - start_age` nonterminal periods. The age-indexed data cover
+    `start_age` through `MODEL_CONFIG.end_age`; a shorter horizon reads a prefix
+    of them.
+
+    Raises:
+        ValueError: If `final_age` leaves no nonterminal period or lies beyond
+            `MODEL_CONFIG.end_age`.
+
+    """
+    _fail_if_invalid_final_age(final_age)
+    return tuple(range(MODEL_CONFIG.start_age, final_age + 1))
+
+
+def _fail_if_invalid_final_age(final_age: int) -> None:
+    if not MODEL_CONFIG.start_age < final_age <= MODEL_CONFIG.end_age:
+        msg = (
+            f"final_age must lie in ({MODEL_CONFIG.start_age}, "
+            f"{MODEL_CONFIG.end_age}], got {final_age}."
+        )
+        raise ValueError(msg)
+
+
 # ACA is calibrated annually. Keep the exact clock on the host until Model build;
 # importing a task or regime builder must not initialize a JAX device allocator.
-MODEL_AGES: tuple[int, ...] = tuple(
-    range(MODEL_CONFIG.start_age, MODEL_CONFIG.end_age + 1)
-)
+MODEL_AGES: tuple[int, ...] = model_ages(final_age=MODEL_CONFIG.end_age)
 GRID_CONFIG = GridConfig()
 
 BENCHMARK_GRID_CONFIG = GridConfig(

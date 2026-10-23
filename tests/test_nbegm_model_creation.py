@@ -40,6 +40,9 @@ from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
 
+# NB-EGM is not a production solver; its wiring checks build the full model.
+pytestmark = pytest.mark.long_running
+
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
 # pylcm folds a shock state only under grid search, and the EGM solvers take the

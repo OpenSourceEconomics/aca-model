@@ -29,7 +29,7 @@ from aca_model.benchmark import (
     get_benchmark_consumption_dollars_points,
     get_benchmark_params,
 )
-from aca_model.config import BENCHMARK_GRID_CONFIG
+from aca_model.config import BENCHMARK_GRID_CONFIG, MODEL_AGES
 
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
@@ -103,6 +103,7 @@ def test_dcegm_model_slots_broadcast_contract_functions_and_constraint() -> None
         fixed_params=_FIXED_PARAMS,
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        ages=MODEL_AGES,
         solver="dcegm",
     )
     assert "borrowing_constraint" in slots["constraints"]

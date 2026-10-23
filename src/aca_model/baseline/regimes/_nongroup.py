@@ -41,6 +41,8 @@ from aca_model.baseline.regimes._common import (
 
 def _make_transition_canwork(
     own: dict[str, int],
+    *,
+    ages: tuple[int, ...],
 ) -> Callable[..., FloatND]:
     """Create transition for canwork nongroup regimes.
 
@@ -58,8 +60,12 @@ def _make_transition_canwork(
     ) -> FloatND:
         del age  # Keep the legacy signature; period owns the clock lookup.
         return build_regime_probs_with_di_medicare(
-            target_dimc=select_target_for_age(next_model_age(period), True, own),
-            target_nomc=select_target_for_age(next_model_age(period), False, own),
+            target_dimc=select_target_for_age(
+                next_model_age(period, ages=ages), True, own, final_age=ages[-1]
+            ),
+            target_nomc=select_target_for_age(
+                next_model_age(period, ages=ages), False, own, final_age=ages[-1]
+            ),
             prob_dimc=prob_di_medicare_next(
                 labor_supply, prob_disabled_next[period, health]
             ),
@@ -72,6 +78,8 @@ def _make_transition_canwork(
 def _make_transition_forcedout(
     gets_medicare: bool,
     own: dict[str, int],
+    *,
+    ages: tuple[int, ...],
 ) -> Callable[..., FloatND]:
     """Create transition for forcedout nongroup regimes.
 
@@ -86,7 +94,9 @@ def _make_transition_forcedout(
         survival_probs: FloatND,
     ) -> FloatND:
         del age  # Keep the legacy signature; period owns the clock lookup.
-        target = select_target_for_age(next_model_age(period), gets_medicare, own)
+        target = select_target_for_age(
+            next_model_age(period, ages=ages), gets_medicare, own, final_age=ages[-1]
+        )
         return build_regime_probs(target, survival_probs[period, health])
 
     return transition
@@ -137,17 +147,21 @@ def build_constraints(spec: RegimeSpec) -> dict:
     return {}
 
 
-def build_law(name: str) -> ByAge:
-    """Build the nongroup regime's per-target transition probabilities by source age."""
+def build_law(name: str, *, ages: tuple[int, ...]) -> ByAge:
+    """Build the nongroup regime's per-target transition probabilities by source age.
+
+    `ages` is the model's age grid; the final age is the first at which everybody
+    is dead.
+    """
     spec = REGIME_SPECS[name]
     gets_mc = spec["mc"] != "nomc"
     own, _ng = make_targets(name)
     if spec["canwork"] == "canwork":
-        transition_func = _make_transition_canwork(own)
+        transition_func = _make_transition_canwork(own, ages=ages)
     else:
-        transition_func = _make_transition_forcedout(gets_mc, own)
+        transition_func = _make_transition_forcedout(gets_mc, own, ages=ages)
     return build_regime_transition(
-        spec=spec, transition_func=transition_func, target_groups=(own,)
+        spec=spec, transition_func=transition_func, target_groups=(own,), ages=ages
     )
 
 

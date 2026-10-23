@@ -14,12 +14,12 @@ from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
 from aca_model.baseline.model import _fail_if_dcegm_without_consumption_points
 from aca_model.baseline.regimes import (
-    INITIAL_NODES,
     RegimeId,
     SolverName,
+    build_entry_initial_nodes,
     build_model_slots,
 )
-from aca_model.config import MODEL_AGES, GridConfig
+from aca_model.config import MODEL_CONFIG, GridConfig, model_ages
 from aca_model.execution import execution_config_for_devices
 
 
@@ -34,7 +34,8 @@ def create_model(
     solver: SolverName = "brute_force",
     consumption_dollars_points: tuple[float, ...] | None = None,
     execution_config: ExecutionConfig | None = None,
-    initial_nodes: InitialNodes = INITIAL_NODES,
+    initial_nodes: InitialNodes | None = None,
+    final_age: int = MODEL_CONFIG.end_age,
 ) -> Model:
     """Create an ACA policy variant model.
 
@@ -62,15 +63,21 @@ def create_model(
         execution_config: Explicit hardware-local policy forwarded unchanged.
             None uses the smallest selected accelerator allocator limit as the
             device-memory budget; CPU construction remains unbudgeted.
-        initial_nodes: Admissible starting `(age, regime)` pairs. The default
-            admits the estimation sample's entry ages and regimes; pass
-            `build_restart_initial_nodes` to restart simulations mid-life.
+        initial_nodes: Admissible starting `(age, regime)` pairs. None admits
+            the estimation sample's entry ages and regimes that lie before
+            `final_age`; pass `build_restart_initial_nodes` to restart
+            simulations mid-life.
+        final_age: First age at which everybody is dead; the model spans
+            `MODEL_CONFIG.start_age` through `final_age`. The default is the
+            full horizon. A shorter horizon reads a prefix of the age-indexed
+            data, and `fixed_params` must hold only what it reads (see
+            `select_horizon_params`).
 
     Returns:
         pylcm Model.
 
     """
-    ages = AgeGrid(exact_values=MODEL_AGES)
+    ages = model_ages(final_age=final_age)
     _fail_if_dcegm_without_consumption_points(
         solver=solver, consumption_dollars_points=consumption_dollars_points
     )
@@ -90,13 +97,18 @@ def create_model(
         fixed_params=fixed_params,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
+        ages=ages,
         solver=solver,
     )
 
     return Model(
         regimes=regimes,
-        initial_nodes=initial_nodes,
-        ages=ages,
+        initial_nodes=(
+            build_entry_initial_nodes(ages=ages)
+            if initial_nodes is None
+            else initial_nodes
+        ),
+        ages=AgeGrid(exact_values=ages),
         regime_id_class=RegimeId,
         description=f"Structural retirement model ({policy.name})",
         fixed_params=fixed_params,

@@ -5,17 +5,9 @@ from dataclasses import replace
 
 import lcm
 import numpy as np
-import pytest
-from lcm import DiscreteGrid
 
-from aca_model.agent.preferences import BenchmarkPrefType
-from aca_model.benchmark import create_benchmark_model, get_benchmark_initial_conditions
+from aca_model.benchmark import get_benchmark_initial_conditions
 from aca_model.config import BENCHMARK_GRID_CONFIG
-
-
-@pytest.fixture(scope="module")
-def benchmark_model() -> lcm.Model:
-    return create_benchmark_model(pref_type_grid=DiscreteGrid(BenchmarkPrefType))
 
 
 def test_benchmark_folds_the_transitory_medical_bill(
@@ -40,14 +32,13 @@ def test_benchmark_folds_the_transitory_medical_bill(
 
 
 def test_unfolded_control_has_identical_shared_initial_conditions(
-    benchmark_model: lcm.Model,
+    benchmark_model: lcm.Model, baseline_model: lcm.Model
 ) -> None:
+    """The unfolded control is the benchmark built on unfolded grids."""
     control_grid = replace(
         BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
     )
-    control = create_benchmark_model(
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType), grid_config=control_grid
-    )
+    control = baseline_model
     assert all(
         "hcc_transitory" in control.state_names(regime_name=name)
         for name in control.user_regimes

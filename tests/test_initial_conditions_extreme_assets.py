@@ -9,12 +9,10 @@ how negative starting assets are. The model's constraints — and pylcm's
 
 import jax.numpy as jnp
 from _lcm.simulation.initial_conditions import validate_initial_conditions
-from lcm import DiscreteGrid
+from lcm import Model
 
 from aca_model.agent.assets_and_income import borrowing_constraint
-from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.benchmark import (
-    create_benchmark_model,
     get_benchmark_initial_conditions,
     get_benchmark_params,
 )
@@ -92,7 +90,9 @@ def test_borrowing_constraint_admits_floor_at_million_dollar_negative_cash() -> 
     assert admitted
 
 
-def test_extreme_negative_assets_subject_passes_validation() -> None:
+def test_extreme_negative_assets_subject_passes_validation(
+    benchmark_model: Model,
+) -> None:
     """A subject placed at `assets = -1_000_000` clears initial-conditions validation.
 
     A large-but-reasonable negative value (very bad draws for both HCC shocks)
@@ -100,9 +100,7 @@ def test_extreme_negative_assets_subject_passes_validation() -> None:
     transfer system absorbs them, with `c = c_floor` always feasible.
     """
     n_subjects = 1
-    model = create_benchmark_model(
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-    )
+    model = benchmark_model
     _, _, params = get_benchmark_params(model=model)
 
     initial_conditions = get_benchmark_initial_conditions(

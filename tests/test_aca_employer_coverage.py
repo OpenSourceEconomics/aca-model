@@ -21,7 +21,7 @@ from aca_model.baseline.regimes._retiree import (
     _make_transition_canwork as retiree_canwork,
 )
 from aca_model.baseline.regimes._tied import _make_transition_canwork as tied_canwork
-from aca_model.config import MODEL_CONFIG
+from aca_model.config import MODEL_AGES, MODEL_CONFIG
 
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
 SURVIVAL = jnp.ones((N_PERIODS, 3)) * 0.99
@@ -81,7 +81,7 @@ def test_expansion_only_medicaid_keeps_employer_coverage(
 ) -> None:
     """An employer-covered household eligible only via the expansion keeps it."""
     own, ng = make_targets(regime_name)
-    transition = make_transition(own=own, ng=ng)
+    transition = make_transition(own=own, ng=ng, ages=MODEL_AGES)
     result = _compose_with_aca_eligibility(
         "next_regime",
         transition,
