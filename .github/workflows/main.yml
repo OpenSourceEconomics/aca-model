@@ -39,4 +39,4 @@ jobs:
       - name: Install aca-model with test deps
         run: pip install -e . pytest pytest-xdist pdbp
       - name: Run pytest
-        run: pytest -n 4 --durations=40 tests
+        run: pytest -n 4 --dist loadscope --durations=40 tests
