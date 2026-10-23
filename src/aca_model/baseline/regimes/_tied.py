@@ -47,6 +47,8 @@ from aca_model.baseline.regimes._common import (
 def _make_transition_canwork(
     own: dict[str, int],
     ng: dict[str, int],
+    *,
+    ages: tuple[int, ...],
 ) -> Callable[..., FloatND]:
     """Create transition for canwork tied regimes.
 
@@ -66,12 +68,14 @@ def _make_transition_canwork(
         prob_disabled_next: FloatND,
     ) -> FloatND:
         del age  # Keep the legacy signature; period owns the clock lookup.
-        next_age = next_model_age(period)
+        next_age = next_model_age(period, ages=ages)
         to_nongroup = (labor_supply == LaborSupply.do_not_work) | is_ssi_eligible
 
         def target(mc_next: bool) -> IntND:
-            own_target = select_target_for_age(next_age, mc_next, own)
-            ng_target = select_target_for_age(next_age, mc_next, ng)
+            own_target = select_target_for_age(
+                next_age, mc_next, own, final_age=ages[-1]
+            )
+            ng_target = select_target_for_age(next_age, mc_next, ng, final_age=ages[-1])
             return jnp.where(to_nongroup, ng_target, own_target)
 
         return build_regime_probs_with_di_medicare(
@@ -101,13 +105,17 @@ def _build_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> dict:
     return functions
 
 
-def build_law(name: str) -> ByAge:
-    """Build the tied regime's per-target transition probabilities by source age."""
+def build_law(name: str, *, ages: tuple[int, ...]) -> ByAge:
+    """Build the tied regime's per-target transition probabilities by source age.
+
+    `ages` is the model's age grid; the final age is the first at which everybody
+    is dead.
+    """
     spec = REGIME_SPECS[name]
     own, ng = make_targets(name)
-    transition_func = _make_transition_canwork(own, ng)
+    transition_func = _make_transition_canwork(own, ng, ages=ages)
     return build_regime_transition(
-        spec=spec, transition_func=transition_func, target_groups=(own, ng)
+        spec=spec, transition_func=transition_func, target_groups=(own, ng), ages=ages
     )
 
 

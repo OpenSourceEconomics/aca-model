@@ -28,7 +28,7 @@ from aca_model.baseline.regimes._retiree import (
     _make_transition_forcedout as retiree_forcedout,
 )
 from aca_model.baseline.regimes._tied import _make_transition_canwork as tied_canwork
-from aca_model.config import MODEL_AGES, MODEL_CONFIG
+from aca_model.config import MODEL_AGES, MODEL_CONFIG, model_ages
 
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
 # Survival by (period, health): distinct per health state.
@@ -39,7 +39,7 @@ PROB_DISABLED = jnp.zeros((N_PERIODS, 3))
 
 def _tied(health: int) -> jnp.ndarray:
     own, ng = make_targets("tied_nomc_inelig_canwork")
-    return tied_canwork(own=own, ng=ng)(
+    return tied_canwork(own=own, ng=ng, ages=MODEL_AGES)(
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(health),
@@ -52,7 +52,7 @@ def _tied(health: int) -> jnp.ndarray:
 
 def _retiree(health: int) -> jnp.ndarray:
     own, ng = make_targets("retiree_nomc_inelig_canwork")
-    return retiree_canwork(own=own, ng=ng)(
+    return retiree_canwork(own=own, ng=ng, ages=MODEL_AGES)(
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(health),
@@ -65,7 +65,7 @@ def _retiree(health: int) -> jnp.ndarray:
 
 def _retiree_forcedout(health: int) -> jnp.ndarray:
     own, ng = make_targets("retiree_oamc_forced_forcedout")
-    return retiree_forcedout(gets_medicare=True, own=own, ng=ng)(
+    return retiree_forcedout(gets_medicare=True, own=own, ng=ng, ages=MODEL_AGES)(
         age=jnp.int32(80),
         period=jnp.int32(29),
         health=jnp.int32(health),
@@ -76,7 +76,7 @@ def _retiree_forcedout(health: int) -> jnp.ndarray:
 
 def _nongroup(health: int) -> jnp.ndarray:
     own, _ng = make_targets("nongroup_nomc_inelig_canwork")
-    return nongroup_canwork(own=own)(
+    return nongroup_canwork(own=own, ages=MODEL_AGES)(
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(health),
@@ -88,7 +88,7 @@ def _nongroup(health: int) -> jnp.ndarray:
 
 def _nongroup_forcedout(health: int) -> jnp.ndarray:
     own, _ng = make_targets("nongroup_oamc_forced_forcedout")
-    return nongroup_forcedout(gets_medicare=True, own=own)(
+    return nongroup_forcedout(gets_medicare=True, own=own, ages=MODEL_AGES)(
         age=jnp.int32(80),
         period=jnp.int32(29),
         health=jnp.int32(health),
@@ -129,6 +129,31 @@ def test_everybody_is_dead_at_96() -> None:
 def test_forcedout_regimes_are_active_at_95(regime: str) -> None:
     """The work-forced-out regimes are active through the last alive age, 95."""
     assert transition_ages(REGIME_SPECS[regime])[-1] == 95
+
+
+def test_everybody_is_dead_at_a_shorter_final_age() -> None:
+    """A survivor of age 52 in a model ending at 53 moves to `dead`."""
+    own, _ng = make_targets("retiree_nomc_inelig_canwork")
+    target = select_target_for_age(53, True, own, final_age=53)
+    assert int(target) == int(RegimeId.dead)
+
+
+def test_entry_regime_has_no_transition_at_a_shorter_final_age() -> None:
+    """With ages 51-53 the entry regimes transition at 51 and 52 only."""
+    spec = REGIME_SPECS["retiree_nomc_inelig_canwork"]
+    assert transition_ages(spec, ages=model_ages(final_age=53)) == (51, 52)
+
+
+def test_model_ages_end_at_final_age() -> None:
+    """A final age of 53 gives the ages 51, 52 and 53."""
+    assert model_ages(final_age=53) == (51, 52, 53)
+
+
+@pytest.mark.parametrize("final_age", [51, 97])
+def test_model_ages_rejects_final_age_outside_the_data(final_age: int) -> None:
+    """The final age must leave a living period and lie within the data."""
+    with pytest.raises(ValueError, match=f"got {final_age}"):
+        model_ages(final_age=final_age)
 
 
 def test_model_ages_run_from_51_through_96() -> None:

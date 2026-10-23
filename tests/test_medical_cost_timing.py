@@ -25,6 +25,9 @@ from aca_model.benchmark import (
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
 _SHOCKS = ("hcc_persistent", "hcc_transitory")
+# Period 0's choices look one year ahead, so ages 51-53 (two living periods and
+# the age at which everybody is dead) carry the whole timing question.
+_FINAL_AGE = 53
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +37,9 @@ def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
         BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
     )
     model = create_benchmark_model(
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType), grid_config=grid_config
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        grid_config=grid_config,
+        final_age=_FINAL_AGE,
     )
     _, _, params = get_benchmark_params(model=model)
     base = get_benchmark_initial_conditions(

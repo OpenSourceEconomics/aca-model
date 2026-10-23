@@ -59,11 +59,37 @@ class GridConfig:
 
 
 MODEL_CONFIG = ModelConfig()
+
+
+def model_ages(*, final_age: int) -> tuple[int, ...]:
+    """Return the model's ages, from `start_age` through `final_age`.
+
+    `final_age` is the first age at which everybody is dead, so the model has
+    `final_age - start_age` nonterminal periods. The age-indexed data cover
+    `start_age` through `MODEL_CONFIG.end_age`; a shorter horizon reads a prefix
+    of them.
+
+    Raises:
+        ValueError: If `final_age` leaves no nonterminal period or lies beyond
+            `MODEL_CONFIG.end_age`.
+
+    """
+    _fail_if_invalid_final_age(final_age)
+    return tuple(range(MODEL_CONFIG.start_age, final_age + 1))
+
+
+def _fail_if_invalid_final_age(final_age: int) -> None:
+    if not MODEL_CONFIG.start_age < final_age <= MODEL_CONFIG.end_age:
+        msg = (
+            f"final_age must lie in ({MODEL_CONFIG.start_age}, "
+            f"{MODEL_CONFIG.end_age}], got {final_age}."
+        )
+        raise ValueError(msg)
+
+
 # ACA is calibrated annually. Keep the exact clock on the host until Model build;
 # importing a task or regime builder must not initialize a JAX device allocator.
-MODEL_AGES: tuple[int, ...] = tuple(
-    range(MODEL_CONFIG.start_age, MODEL_CONFIG.end_age + 1)
-)
+MODEL_AGES: tuple[int, ...] = model_ages(final_age=MODEL_CONFIG.end_age)
 GRID_CONFIG = GridConfig()
 
 BENCHMARK_GRID_CONFIG = GridConfig(

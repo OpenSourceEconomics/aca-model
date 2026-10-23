@@ -46,6 +46,8 @@ from aca_model.baseline.regimes._common import (
 def _make_transition_canwork(
     own: dict[str, int],
     ng: dict[str, int],
+    *,
+    ages: tuple[int, ...],
 ) -> Callable[..., FloatND]:
     """Create transition for canwork retiree regimes.
 
@@ -65,11 +67,13 @@ def _make_transition_canwork(
         prob_disabled_next: FloatND,
     ) -> FloatND:
         del age  # Keep the legacy signature; period owns the clock lookup.
-        next_age = next_model_age(period)
+        next_age = next_model_age(period, ages=ages)
 
         def target(mc_next: bool) -> IntND:
-            own_target = select_target_for_age(next_age, mc_next, own)
-            ng_target = select_target_for_age(next_age, mc_next, ng)
+            own_target = select_target_for_age(
+                next_age, mc_next, own, final_age=ages[-1]
+            )
+            ng_target = select_target_for_age(next_age, mc_next, ng, final_age=ages[-1])
             return jnp.where(is_ssi_eligible, ng_target, own_target)
 
         return build_regime_probs_with_di_medicare(
@@ -88,6 +92,8 @@ def _make_transition_forcedout(
     gets_medicare: bool,
     own: dict[str, int],
     ng: dict[str, int],
+    *,
+    ages: tuple[int, ...],
 ) -> Callable[..., FloatND]:
     """Create transition for forcedout retiree regimes.
 
@@ -104,9 +110,9 @@ def _make_transition_forcedout(
     ) -> FloatND:
         del age  # Keep the legacy signature; period owns the clock lookup.
         sp = survival_probs[period, health]
-        next_age = next_model_age(period)
-        target = select_target_for_age(next_age, gets_medicare, own)
-        ng_ssi = select_target_for_age(next_age, gets_medicare, ng)
+        next_age = next_model_age(period, ages=ages)
+        target = select_target_for_age(next_age, gets_medicare, own, final_age=ages[-1])
+        ng_ssi = select_target_for_age(next_age, gets_medicare, ng, final_age=ages[-1])
         target = jnp.where(is_ssi_eligible, ng_ssi, target)
         return build_regime_probs(target, sp)
 
@@ -133,17 +139,21 @@ def _build_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> dict:
     return functions
 
 
-def build_law(name: str) -> ByAge:
-    """Build the retiree regime's per-target transition probabilities by source age."""
+def build_law(name: str, *, ages: tuple[int, ...]) -> ByAge:
+    """Build the retiree regime's per-target transition probabilities by source age.
+
+    `ages` is the model's age grid; the final age is the first at which everybody
+    is dead.
+    """
     spec = REGIME_SPECS[name]
     gets_mc = spec["mc"] != "nomc"
     own, ng = make_targets(name)
     if spec["canwork"] == "canwork":
-        transition_func = _make_transition_canwork(own, ng)
+        transition_func = _make_transition_canwork(own, ng, ages=ages)
     else:
-        transition_func = _make_transition_forcedout(gets_mc, own, ng)
+        transition_func = _make_transition_forcedout(gets_mc, own, ng, ages=ages)
     return build_regime_transition(
-        spec=spec, transition_func=transition_func, target_groups=(own, ng)
+        spec=spec, transition_func=transition_func, target_groups=(own, ng), ages=ages
     )
 
 

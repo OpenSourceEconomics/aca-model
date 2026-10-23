@@ -460,30 +460,28 @@ def _compute_max_annual_labor_income(
     )
 
 
-# Structural stage data, shared by scheduled support and the numerical router.
-# Each stage covers the half-open age interval `[start, stop)`.
-_AGE_STAGES = (
-    (
-        (config.start_age, config.ss_early_age),
-        ("nomc_inelig", "dimc_inelig"),
-    ),
-    (
-        (config.ss_early_age, config.medicare_age),
-        ("nomc_choose", "dimc_choose"),
-    ),
-    (
-        (config.medicare_age, config.ss_forced_age),
-        ("forced_choose",) * 2,
-    ),
-    (
-        (config.ss_forced_age, config.work_forced_out_age),
-        ("forced_forced",) * 2,
-    ),
-    (
-        (config.work_forced_out_age, MODEL_AGES[-1]),
-        ("forcedout",) * 2,
-    ),
-)
+def age_stages(
+    *, final_age: int
+) -> tuple[tuple[tuple[int, int], tuple[str, str]], ...]:
+    """Return the structural stages living through ages before `final_age`.
+
+    Shared by scheduled support and the numerical router. Each stage covers the
+    half-open age interval `[start, stop)`, cut off at `final_age`, the first
+    age at which everybody is dead. A stage that starts at or after `final_age`
+    covers no age.
+    """
+    stages = (
+        ((config.start_age, config.ss_early_age), ("nomc_inelig", "dimc_inelig")),
+        ((config.ss_early_age, config.medicare_age), ("nomc_choose", "dimc_choose")),
+        ((config.medicare_age, config.ss_forced_age), ("forced_choose",) * 2),
+        ((config.ss_forced_age, config.work_forced_out_age), ("forced_forced",) * 2),
+        ((config.work_forced_out_age, config.end_age), ("forcedout",) * 2),
+    )
+    return tuple(
+        ((start, min(stop, final_age)), branches) for (start, stop), branches in stages
+    )
+
+
 # The living regimes a subject may start in: pre-claiming, pre-Medicare.
 ENTRY_REGIMES = (
     "retiree_nomc_inelig_canwork",
@@ -493,16 +491,22 @@ ENTRY_REGIMES = (
     "nongroup_dimc_inelig_canwork",
 )
 
-# Admissible starting (age, regime) pairs, shared by every model variant: the
-# baseline estimation-sample ages. Later ages, and `dead` at any age, are reached only
-# through transitions.
-INITIAL_NODES = InitialNodes(
-    by_age={
-        age: ENTRY_REGIMES
-        for age in MODEL_AGES
-        if config.start_age <= age <= config.last_start_age
-    }
-)
+
+def build_entry_initial_nodes(*, ages: tuple[int, ...]) -> InitialNodes:
+    """Admit the entry regimes at the baseline estimation-sample ages.
+
+    Shared by every model variant. Later ages, and `dead` at any age, are reached
+    only through transitions. Start ages stop before the final age, at which
+    everybody is dead.
+    """
+    return InitialNodes(
+        by_age={
+            age: ENTRY_REGIMES
+            for age in ages[:-1]
+            if config.start_age <= age <= config.last_start_age
+        }
+    )
+
 
 _STAGE_KEY = {
     ("nomc", "inelig", "canwork"): "nomc_inelig",
@@ -513,16 +517,19 @@ _STAGE_KEY = {
     ("oamc", "forced", "canwork"): "forced_forced",
     ("oamc", "forced", "forcedout"): "forcedout",
 }
-# Dynamic JAX period lookup and construction-time schedule use the same clock.
-_NEXT_AGES = np.asarray([float(a) for a in MODEL_AGES[1:]])
 
 
-def transition_ages(spec: RegimeSpec) -> tuple[int, ...]:
-    """Exact source coordinates at which the template declares its law."""
+def transition_ages(
+    spec: RegimeSpec, *, ages: tuple[int, ...] = MODEL_AGES
+) -> tuple[int, ...]:
+    """Exact source coordinates at which the template declares its law.
+
+    Empty when the regime's stage starts at or after the final age of `ages`.
+    """
     key = _STAGE_KEY.get((spec["mc"], spec["ss"], spec["canwork"]))
-    for (start, stop), branches in _AGE_STAGES:
+    for (start, stop), branches in age_stages(final_age=ages[-1]):
         if key in branches:
-            return tuple(age for age in MODEL_AGES if start <= age < stop)
+            return tuple(age for age in ages if start <= age < stop)
     raise ValueError(f"Unknown regime spec: {spec}")
 
 
@@ -544,21 +551,24 @@ def build_restart_initial_nodes(*, ages: Iterable[int]) -> InitialNodes:
     )
 
 
-def next_model_age(period: Period) -> FloatND:
-    """Advance by one grid position, never by an assumed number of years.
+def next_model_age(period: Period, *, ages: tuple[int, ...]) -> FloatND:
+    """Advance by one position on `ages`, never by an assumed number of years.
 
-    Only covered nonterminal source periods call this function; no clipping
-    or extrapolation of invalid period indices is part of the contract.
+    Dynamic JAX period lookup and the construction-time schedule use the same
+    clock. Only covered nonterminal source periods call this function; no
+    clipping or extrapolation of invalid period indices is part of the contract.
     This does not by itself recalibrate ACA to a different period length.
     """
-    return jnp.asarray(_NEXT_AGES)[period]
+    return jnp.asarray(np.asarray([float(age) for age in ages[1:]]))[period]
 
 
-def _target_pair(next_age: int, group: dict[str, int]) -> tuple[int, int]:
-    if next_age == MODEL_AGES[-1]:
+def _target_pair(
+    next_age: int, group: dict[str, int], *, final_age: int
+) -> tuple[int, int]:
+    if next_age == final_age:
         dead = int(RegimeId.dead)
         return dead, dead
-    for (start, stop), branches in _AGE_STAGES:
+    for (start, stop), branches in age_stages(final_age=final_age):
         if start <= next_age < stop:
             return group[branches[0]], group[branches[1]]
     raise ValueError(f"Next age {next_age} is outside the declared stages")
@@ -568,6 +578,7 @@ def build_regime_edges(
     *,
     spec: RegimeSpec,
     target_groups: tuple[dict[str, int], ...],
+    ages: tuple[int, ...],
 ) -> dict[RegimeName, tuple[int, ...]]:
     """Map each destination to the exact source ages that can reach it."""
     # Both Medicare branches are reachable from every living regime: before 65 a
@@ -576,10 +587,12 @@ def build_regime_edges(
         int(getattr(RegimeId, name)): name for name in (*REGIME_SPECS, "dead")
     }
     grouped: dict[RegimeName, list[int]] = {}
-    next_age_by_age = dict(itertools.pairwise(MODEL_AGES))
-    for age in transition_ages(spec):
+    next_age_by_age = dict(itertools.pairwise(ages))
+    for age in transition_ages(spec, ages=ages):
         next_age = next_age_by_age[age]
-        pairs = tuple(_target_pair(next_age, group) for group in target_groups)
+        pairs = tuple(
+            _target_pair(next_age, group, final_age=ages[-1]) for group in target_groups
+        )
         supported_ids = {target for pair in pairs for target in pair}
         target_ids = tuple(sorted(supported_ids | {int(RegimeId.dead)}))
         for target_id in target_ids:
@@ -587,10 +600,12 @@ def build_regime_edges(
     return {target: tuple(source_ages) for target, source_ages in grouped.items()}
 
 
-def build_model_edges() -> dict[RegimeName, dict[RegimeName, tuple[int, ...]]]:
+def build_model_edges(
+    *, ages: tuple[int, ...] = MODEL_AGES
+) -> dict[RegimeName, dict[RegimeName, tuple[int, ...]]]:
     """Declare the policy-invariant topology of the living ACA regimes."""
     return {
-        name: build_regime_edges(spec=spec, target_groups=make_targets(name))
+        name: build_regime_edges(spec=spec, target_groups=make_targets(name), ages=ages)
         for name, spec in REGIME_SPECS.items()
     }
 
@@ -600,21 +615,28 @@ def build_regime_transition(
     spec: RegimeSpec,
     transition_func: Callable[..., FloatND],
     target_groups: tuple[dict[str, int], ...],
+    ages: tuple[int, ...],
 ) -> ByAge:
     """Name each destination's probability cell at the source ages that reach it.
 
     One scalar probability cell per destination is shared by every source age;
-    the ages with the same destinations form one case.
+    the ages with the same destinations form one case. A regime whose stage
+    starts at or after the final age of `ages` is unreachable; its schedule
+    holds only the `dead` cell as a default that no period reads.
     """
-    edges = build_regime_edges(spec=spec, target_groups=target_groups)
+    edges = build_regime_edges(spec=spec, target_groups=target_groups, ages=ages)
     cells = build_granular_regime_transition(
         transition_func=transition_func,
         target_ids=(int(getattr(RegimeId, target)) for target in edges),
     )
     ages_by_targets: dict[tuple[RegimeName, ...], list[int]] = {}
-    for age in transition_ages(spec):
-        targets = tuple(target for target, ages in edges.items() if age in ages)
+    for age in transition_ages(spec, ages=ages):
+        targets = tuple(
+            target for target, source_ages in edges.items() if age in source_ages
+        )
         ages_by_targets.setdefault(targets, []).append(age)
+    if not ages_by_targets:
+        return ByAge(cases={}, default=cells)
     return ByAge(
         cases={
             tuple(ages): {target: cells[target] for target in targets}
@@ -1183,10 +1205,15 @@ def select_target_for_age(
     next_age: int | IntND | FloatND,
     mc_next: bool | BoolND,
     tgts: dict[str, int],
+    *,
+    final_age: int = config.end_age,
 ) -> IntND:
-    """Select with the same stage table that supplies the schedule's support."""
+    """Select with the same stage table that supplies the schedule's support.
+
+    A `next_age` at or after `final_age` selects `dead`.
+    """
     result = jnp.asarray(RegimeId.dead)
-    for (start, stop), branches in reversed(_AGE_STAGES):
+    for (start, stop), branches in reversed(age_stages(final_age=final_age)):
         target = jnp.where(jnp.array(mc_next), tgts[branches[1]], tgts[branches[0]])
         inside = (next_age >= start) & (next_age < stop)
         result = jnp.where(inside, target, result)

@@ -22,12 +22,12 @@ from aca_model.baseline.regimes import _retiree as retiree
 from aca_model.baseline.regimes import _tied as tied
 from aca_model.baseline.regimes._common import (
     ENTRY_REGIMES,
-    INITIAL_NODES,
     REGIME_SPECS,
     Grids,
     RegimeId,
     SolverName,
     build_dead_regime,
+    build_entry_initial_nodes,
     build_grids,
     build_model_constraints,
     build_model_functions,
@@ -41,10 +41,10 @@ from aca_model.config import GridConfig
 
 __all__ = [
     "ENTRY_REGIMES",
-    "INITIAL_NODES",
     "REGIME_SPECS",
     "RegimeId",
     "build_all_regimes",
+    "build_entry_initial_nodes",
     "build_model_slots",
     "build_regime",
     "build_restart_initial_nodes",
@@ -134,6 +134,7 @@ def build_model_slots(
     fixed_params: UserParams,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
+    ages: tuple[int, ...],
     solver: SolverName = "brute_force",
 ) -> dict[str, Any]:
     """Build the shared model topology and broadcast regime slots.
@@ -144,6 +145,7 @@ def build_model_slots(
     overlay swaps only regime-level functions, so the broadcast slots are
     policy-invariant. Under DC-EGM the solver-contract functions join the
     broadcast set; the borrowing constraint is declared under every solver.
+    `ages` is the model's age grid, which the edges' age schedules cover.
     """
     grids = build_grids(
         grid_config=grid_config,
@@ -152,7 +154,7 @@ def build_model_slots(
         pref_type_grid=pref_type_grid,
     )
     return {
-        "edges": build_edges(),
+        "edges": build_edges(ages=ages),
         "functions": build_model_functions(solver=solver),
         "constraints": build_model_constraints(solver=solver),
         "states": build_model_states(grids),
@@ -160,13 +162,13 @@ def build_model_slots(
     }
 
 
-def build_edges() -> dict[str, Transition]:
+def build_edges(*, ages: tuple[int, ...]) -> dict[str, Transition]:
     """Declare each living regime's outgoing edges by their law.
 
     The law's age schedule names each destination at the source ages that reach
     it. `dead` has no outgoing edges and is therefore terminal.
     """
     return {
-        name: Transition(law=_HIS_LAWS[spec["his"]](name))
+        name: Transition(law=_HIS_LAWS[spec["his"]](name, ages=ages))
         for name, spec in REGIME_SPECS.items()
     }

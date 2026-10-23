@@ -37,6 +37,6 @@ jobs:
           pip install "pylcm @
           git+https://github.com/OpenSourceEconomics/pylcm.git@7e99a19badafe20e29a517f69d9ec155bba8e0a0"
       - name: Install aca-model with test deps
-        run: pip install -e . pytest pdbp
+        run: pip install -e . pytest pytest-xdist pdbp
       - name: Run pytest
-        run: pytest tests
+        run: pytest -n 4 --durations=20 tests

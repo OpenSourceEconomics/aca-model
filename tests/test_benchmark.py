@@ -48,6 +48,14 @@ def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
     assert consumption.n_points == 5
 
 
+def test_benchmark_model_with_final_age_53_has_three_periods() -> None:
+    """Ages 51, 52 and 53 make three periods; everybody is dead at 53."""
+    model = create_benchmark_model(
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType), final_age=53
+    )
+    assert model.n_periods == 3
+
+
 @pytest.mark.long_running
 def test_benchmark_model_simulates_end_to_end() -> None:
     n_subjects = 20
