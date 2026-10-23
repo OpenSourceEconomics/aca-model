@@ -29,13 +29,10 @@ import cloudpickle
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
-from lcm import DiscreteGrid, ExecutionConfig, InitialNodes, Model
+from lcm import DiscreteGrid, Model
 
-from aca_model.agent.health import GoodHealth
-from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
-from aca_model.baseline.health_insurance import HealthInsuranceState
-from aca_model.baseline.model import create_model
+from aca_model.baseline.model import build_model_spec, create_model
 from aca_model.baseline.regimes import ENTRY_REGIMES, select_horizon_params
 from aca_model.config import (
     BENCHMARK_GRID_CONFIG,
@@ -55,14 +52,6 @@ _PARAMS_FILE = (
 
 _N_BENCHMARK_PREF_TYPES = len(DiscreteGrid(BenchmarkPrefType).categories)
 
-_DERIVED_CATEGORICALS = {
-    "good_health": DiscreteGrid(GoodHealth),
-    "is_married": DiscreteGrid(IsMarried),
-    "his": DiscreteGrid(HealthInsuranceState),
-    "target_his": DiscreteGrid(HealthInsuranceState),
-    "pref_type": DiscreteGrid(BenchmarkPrefType),
-}
-
 # The five entry regimes (inelig + canwork). All have
 # HealthWithDisability (3-state); four have lagged_labor_supply (tied
 # does not — it's implied by the regime).
@@ -72,9 +61,8 @@ def create_benchmark_model(
     *,
     pref_type_grid: DiscreteGrid,
     grid_config: GridConfig = BENCHMARK_GRID_CONFIG,
-    execution_config: ExecutionConfig | None = None,
-    initial_nodes: InitialNodes | None = None,
     final_age: int = MODEL_CONFIG.end_age,
+    **model_options: Any,
 ) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 
@@ -84,27 +72,23 @@ def create_benchmark_model(
     Args:
         pref_type_grid: Pref-type grid; pass `DiscreteGrid(BenchmarkPrefType)`.
         grid_config: Economic resolution and medical-shock folding declarations.
-        execution_config: Explicit hardware-local policy forwarded unchanged.
-            None uses the smallest selected accelerator allocator limit as the
-            device-memory budget; CPU construction remains unbudgeted.
-        initial_nodes: Admissible starting `(age, regime)` pairs, forwarded
-            to `create_model`.
         final_age: First age at which everybody is dead, forwarded to
-            `create_model` and `get_benchmark_params`. The default is the full
-            horizon; the frozen age-indexed parameters cover it, and a shorter
-            horizon reads a prefix of them.
+            `build_model_spec` and `get_benchmark_params`. The default is the
+            full horizon; the frozen age-indexed parameters cover it, and a
+            shorter horizon reads a prefix of them.
+        **model_options: Generic `lcm.Model` options forwarded to
+            `create_model`, e.g. `execution_config` or an `initial_nodes`
+            override.
     """
     fixed_params, wage_params, _ = get_benchmark_params(model=None, final_age=final_age)
-    return create_model(
+    spec = build_model_spec(
         grid_config=grid_config,
-        fixed_params=fixed_params,
+        pia_aime_grid=fixed_params["pia_aime_grid"],
         wage_params=wage_params,
-        derived_categoricals=_DERIVED_CATEGORICALS,
         pref_type_grid=pref_type_grid,
-        execution_config=execution_config,
-        initial_nodes=initial_nodes,
         final_age=final_age,
     )
+    return create_model(spec=spec, fixed_params=fixed_params, **model_options)
 
 
 def get_benchmark_params(

@@ -13,9 +13,9 @@ dedicated submodule. Shared definitions and builders live in _common.
 from collections.abc import Mapping
 from typing import Any
 
+from jax.typing import ArrayLike
 from lcm import DiscreteGrid, Regime, Transition
 from lcm.solvers import DCEGM, NBEGM
-from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import _nongroup as nongroup
 from aca_model.baseline.regimes import _retiree as retiree
@@ -94,7 +94,7 @@ def build_regime(
 def build_all_regimes(
     *,
     grid_config: GridConfig,
-    fixed_params: UserParams,
+    pia_aime_grid: ArrayLike,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
@@ -102,7 +102,7 @@ def build_all_regimes(
 ) -> dict[str, Regime]:
     """Build all 19 baseline regimes (18 non-terminal + dead).
 
-    `fixed_params` carries the PIA bends for the AIME piecewise grid;
+    `pia_aime_grid` holds the PIA bends for the AIME piecewise grid;
     `wage_params` sizes the assets-floor to `-max_annual_labor_income`;
     `pref_type_grid` selects the pref-type cardinality (production
     `DiscreteGrid(PrefType)` or the benchmark's 2-type variant);
@@ -113,7 +113,7 @@ def build_all_regimes(
     """
     grids = build_grids(
         grid_config=grid_config,
-        fixed_params=fixed_params,
+        pia_aime_grid=pia_aime_grid,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
         consumption_dollars_points=consumption_dollars_points,
@@ -135,7 +135,7 @@ def build_all_regimes(
 def build_model_slots(
     *,
     grid_config: GridConfig,
-    fixed_params: UserParams,
+    pia_aime_grid: ArrayLike,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
     ages: tuple[int, ...],
@@ -145,15 +145,14 @@ def build_model_slots(
 
     Returns keyword arguments for `lcm.Model(...)`: the edges, functions,
     constraint, states, and laws of motion shared by all living regimes.
-    Both the baseline and the ACA `create_model` consume this — the ACA
-    overlay swaps only regime-level functions, so the broadcast slots are
-    policy-invariant. Under DC-EGM the solver-contract functions join the
+    The ACA overlay swaps only regime-level functions, so the broadcast slots
+    are policy-invariant. Under DC-EGM the solver-contract functions join the
     broadcast set; the borrowing constraint is declared under every solver.
     `ages` is the model's age grid, which the edges' age schedules cover.
     """
     grids = build_grids(
         grid_config=grid_config,
-        fixed_params=fixed_params,
+        pia_aime_grid=pia_aime_grid,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
     )
