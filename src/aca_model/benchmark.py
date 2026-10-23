@@ -29,14 +29,14 @@ import cloudpickle
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
-from lcm import DiscreteGrid, ExecutionConfig, Model
+from lcm import DiscreteGrid, ExecutionConfig, InitialNodes, Model
 
 from aca_model.agent.health import GoodHealth
 from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
 from aca_model.baseline.model import create_model
-from aca_model.baseline.regimes import ENTRY_REGIMES
+from aca_model.baseline.regimes import ENTRY_REGIMES, INITIAL_NODES
 from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
 from aca_model.consumption_dollars_grid import (
     compute_consumption_dollars_points,
@@ -68,6 +68,7 @@ def create_benchmark_model(
     pref_type_grid: DiscreteGrid,
     grid_config: GridConfig = BENCHMARK_GRID_CONFIG,
     execution_config: ExecutionConfig | None = None,
+    initial_nodes: InitialNodes = INITIAL_NODES,
 ) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 
@@ -80,6 +81,8 @@ def create_benchmark_model(
         execution_config: Explicit hardware-local policy forwarded unchanged.
             None uses the smallest selected accelerator allocator limit as the
             device-memory budget; CPU construction remains unbudgeted.
+        initial_nodes: Admissible starting `(age, regime)` pairs, forwarded
+            to `create_model`.
     """
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return create_model(
@@ -89,6 +92,7 @@ def create_benchmark_model(
         derived_categoricals=_DERIVED_CATEGORICALS,
         pref_type_grid=pref_type_grid,
         execution_config=execution_config,
+        initial_nodes=initial_nodes,
     )
 
 

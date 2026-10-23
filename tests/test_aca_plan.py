@@ -83,6 +83,21 @@ def test_aca_non_group_premium_is_community_rated(
     assert _aca_premium(policy, spousal_income) == pytest.approx(expected)
 
 
+@pytest.mark.parametrize("policy", list(PolicyVariant))
+def test_aca_non_group_risk_prediction_is_registered_only_without_reform(
+    policy: PolicyVariant,
+) -> None:
+    """The community-rated premium does not register a risk prediction node."""
+    functions = {**build_model_functions(), **_build_functions(REGIME_SPECS[REGIME])}
+    apply_aca_overrides(functions, REGIME_SPECS[REGIME], policy)
+    expected = (
+        health_insurance.hcc_insurer_predicted
+        if policy == PolicyVariant.ACA_ONLY_MEDICAID_EXPANSION
+        else None
+    )
+    assert functions.get("predicted_hcc_insurer") is expected
+
+
 RISK_RATED_PREMIUM_PARAMS = frozenset(
     {
         "premium_markup",

@@ -33,6 +33,7 @@ from aca_model.baseline.regimes._common import (
     build_model_functions,
     build_model_state_transitions,
     build_model_states,
+    build_restart_initial_nodes,
 )
 from aca_model.baseline.regimes._dcegm import build_dcegm_solver
 from aca_model.baseline.regimes._nbegm import build_nbegm_solver
@@ -46,6 +47,7 @@ __all__ = [
     "build_all_regimes",
     "build_model_slots",
     "build_regime",
+    "build_restart_initial_nodes",
     "nongroup",
     "retiree",
     "tied",

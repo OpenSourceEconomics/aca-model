@@ -342,7 +342,7 @@ def build_grids(
         consumption_dollars=(
             IrregSpacedGrid(n_points=grid_config.n_consumption_dollars_gridpoints)
             if consumption_dollars_points is None
-            else IrregSpacedGrid(points=consumption_dollars_points)
+            else IrregSpacedGrid(points=np.asarray(consumption_dollars_points))
         ),
         wage_res=wage_res,
         hcc_persistent=hcc_persistent,
@@ -378,7 +378,7 @@ def build_assets_grid(*, floor: float, n_points: int) -> IrregSpacedGrid:
     )
     negative[0] = floor
     positive[-1] = _ASSETS_TOP
-    return IrregSpacedGrid(points=np.concatenate([negative, positive]).tolist())
+    return IrregSpacedGrid(points=np.concatenate([negative, positive]))
 
 
 def get_hcc_persistent_shock(*, grid_config: GridConfig) -> RouwenhorstAR1Process:
@@ -524,6 +524,24 @@ def transition_ages(spec: RegimeSpec) -> tuple[int, ...]:
         if key in branches:
             return tuple(age for age in MODEL_AGES if start <= age < stop)
     raise ValueError(f"Unknown regime spec: {spec}")
+
+
+def build_restart_initial_nodes(*, ages: Iterable[int]) -> InitialNodes:
+    """Admit every living regime active at each of `ages` as a start.
+
+    A simulation restarted from the states another simulation reached at some
+    age starts in whichever living regime that simulation had arrived at.
+    """
+    return InitialNodes(
+        by_age={
+            age: tuple(
+                name
+                for name, spec in REGIME_SPECS.items()
+                if age in transition_ages(spec)
+            )
+            for age in ages
+        }
+    )
 
 
 def next_model_age(period: Period) -> FloatND:
@@ -845,12 +863,10 @@ def build_model_functions(*, solver: SolverName = "brute_force") -> dict:
     # assets adjustment, both of which scale by the marginal income tax rate.
     functions["marginal_tax_rate"] = taxes.marginal_rate
 
-    # HIC premium
-    functions["predicted_hcc_insurer"] = health_insurance.hcc_insurer_predicted
-
     # Transfers
     functions["consumption_dollars_floor"] = assets_and_income.consumption_dollars_floor
-    functions["transfers"] = assets_and_income.transfers
+    if solver == "brute_force":
+        functions["transfers"] = assets_and_income.transfers
     functions["consumption_equiv"] = preferences.consumption_equiv
 
     return functions
@@ -999,10 +1015,8 @@ def build_common_functions(spec: RegimeSpec, *, subtract_bill: bool = False) -> 
         if spec["mc"] == "oamc"
         else health_insurance.is_disabled_from_health
     )
-    # MAGI for the ACA Medicaid expansion track; pruned in the baseline DAG.
-    functions["aca_magi"] = health_insurance.aca_magi
-
     # Swapped per policy variant by the ACA overlay, hence regime-level
+    functions["predicted_hcc_insurer"] = health_insurance.hcc_insurer_predicted
     functions["is_medicaid_eligible"] = health_insurance.is_medicaid_eligible
     functions["after_tax_income"] = taxes.after_tax_income
     if subtract_bill:
