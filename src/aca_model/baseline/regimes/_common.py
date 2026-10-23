@@ -13,6 +13,7 @@ from typing import Any, Literal, TypedDict
 
 import jax.numpy as jnp
 import numpy as np
+from jax.typing import ArrayLike
 from lcm import (
     AdditiveShockTransition,
     ByAge,
@@ -43,7 +44,6 @@ from lcm.typing import (
     Period,
     RegimeName,
     ScalarInt,
-    UserParams,
 )
 
 from aca_model.agent import (
@@ -284,7 +284,7 @@ _WAGE_RHO = 0.977
 def build_grids(
     *,
     grid_config: GridConfig,
-    fixed_params: UserParams,
+    pia_aime_grid: ArrayLike,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
     consumption_dollars_points: tuple[float, ...] | None = None,
@@ -292,7 +292,7 @@ def build_grids(
     """Build continuous-state/action grids from a `GridConfig`.
 
     The AIME grid is `PiecewiseLinSpacedGrid` breakpointed at the PIA
-    bends from `fixed_params["pia_aime_grid"]`. The assets grid
+    bends in `pia_aime_grid`. The assets grid
     (`build_assets_grid`) runs from `-max_annual_labor_income`, computed
     from `wage_params` (`log_ft_wage_mean`, `log_ft_wage_std`,
     `adj_wage_hours_*`), to the largest initial asset holding.
@@ -331,7 +331,7 @@ def build_grids(
             floor=assets_start, n_points=grid_config.n_assets_gridpoints
         ),
         aime=_build_aime_grid(
-            fixed_params=fixed_params,
+            pia_aime_grid=pia_aime_grid,
             points_per_segment=grid_config.aime_points_per_segment,
         ),
         pension_wealth=_PENSION_WEALTH_GRID,
@@ -399,17 +399,17 @@ def get_hcc_persistent_grid_points(*, grid_config: GridConfig) -> FloatND:
 
 
 def _build_aime_grid(
-    *, fixed_params: UserParams, points_per_segment: tuple[int, int, int, int]
+    *, pia_aime_grid: ArrayLike, points_per_segment: tuple[int, int, int, int]
 ) -> PiecewiseLinSpacedGrid:
     """Return the AIME grid.
 
     The grid is piecewise-linspaced with breakpoints at the PIA bends
-    in `fixed_params["pia_aime_grid"]` and `points_per_segment` in
+    in `pia_aime_grid` and `points_per_segment` in
     each segment. The fifth bend point is the delayed-retirement-credit
     extension above the taxable max, so the grid carries four segments.
     `n_aime_gridpoints` from `grid_config` is ignored on this path.
     """
-    kinks = [float(k) for k in np.asarray(fixed_params["pia_aime_grid"])]
+    kinks = [float(k) for k in np.asarray(pia_aime_grid)]
     return PiecewiseLinSpacedGrid(
         start=kinks[0],
         stop=kinks[4],

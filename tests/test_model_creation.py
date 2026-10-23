@@ -32,7 +32,7 @@ def build_aca_regimes(policy: PolicyVariant) -> dict:
     return _build_aca_regimes(
         policy=policy,
         grid_config=BENCHMARK_GRID_CONFIG,
-        fixed_params=_FIXED_PARAMS,
+        pia_aime_grid=_FIXED_PARAMS["pia_aime_grid"],
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
@@ -40,7 +40,7 @@ def build_aca_regimes(policy: PolicyVariant) -> dict:
 
 _GRIDS = build_grids(
     grid_config=BENCHMARK_GRID_CONFIG,
-    fixed_params=_FIXED_PARAMS,
+    pia_aime_grid=_FIXED_PARAMS["pia_aime_grid"],
     wage_params=_WAGE_PARAMS,
     pref_type_grid=DiscreteGrid(BenchmarkPrefType),
 )
