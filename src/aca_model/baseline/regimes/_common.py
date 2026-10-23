@@ -530,6 +530,45 @@ def transition_ages(
     raise ValueError(f"Unknown regime spec: {spec}")
 
 
+# Model-level params that only the regimes able to claim Social Security read.
+CLAIMING_PARAMS = frozenset(
+    {
+        "early_ret_adjustment",
+        "earnings_test_fraction",
+        "earnings_test_threshold",
+        "normal_retirement_age",
+    }
+)
+
+
+def reachable_regimes(*, ages: tuple[int, ...]) -> tuple[RegimeName, ...]:
+    """Return the living regimes a model over `ages` can reach.
+
+    A regime is reachable when its stage covers a source age before the final
+    age, the same rule that gives it transition ages and edges.
+    """
+    return tuple(
+        name for name, spec in REGIME_SPECS.items() if transition_ages(spec, ages=ages)
+    )
+
+
+def select_horizon_params[V](
+    *, params: Mapping[str, V], ages: tuple[int, ...]
+) -> dict[str, V]:
+    """Return the entries of `params` that a model over `ages` reads.
+
+    `params` is written for the full horizon. The regime-level entries of
+    regimes `reachable_regimes` excludes are left out, and so are
+    `CLAIMING_PARAMS` when no reachable regime can claim Social Security.
+    Every entry is kept for the full horizon.
+    """
+    reachable = reachable_regimes(ages=ages)
+    unreachable = set(REGIME_SPECS) - set(reachable)
+    if not any(REGIME_SPECS[name]["ss"] != "inelig" for name in reachable):
+        unreachable |= CLAIMING_PARAMS
+    return {key: value for key, value in params.items() if key not in unreachable}
+
+
 def build_restart_initial_nodes(*, ages: Iterable[int]) -> InitialNodes:
     """Admit every living regime active at each of `ages` as a start.
 

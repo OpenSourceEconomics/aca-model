@@ -34,6 +34,8 @@ from aca_model.baseline.regimes._common import (
     build_model_state_transitions,
     build_model_states,
     build_restart_initial_nodes,
+    reachable_regimes,
+    select_horizon_params,
 )
 from aca_model.baseline.regimes._dcegm import build_dcegm_solver
 from aca_model.baseline.regimes._nbegm import build_nbegm_solver
@@ -49,7 +51,9 @@ __all__ = [
     "build_regime",
     "build_restart_initial_nodes",
     "nongroup",
+    "reachable_regimes",
     "retiree",
+    "select_horizon_params",
     "tied",
 ]
 

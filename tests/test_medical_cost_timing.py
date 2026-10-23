@@ -56,7 +56,7 @@ def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
         grid_config=grid_config,
         final_age=_FINAL_AGE,
     )
-    _, _, params = get_benchmark_params(model=model)
+    _, _, params = get_benchmark_params(model=model, final_age=_FINAL_AGE)
     base = get_benchmark_initial_conditions(
         model=model, n_subjects=1, seed=0, grid_config=grid_config
     )

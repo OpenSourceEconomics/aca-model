@@ -35,9 +35,14 @@ from aca_model.agent.health import GoodHealth
 from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.health_insurance import HealthInsuranceState
-from aca_model.baseline.model import create_model, select_params_for_model
-from aca_model.baseline.regimes import ENTRY_REGIMES
-from aca_model.config import BENCHMARK_GRID_CONFIG, MODEL_AGES, MODEL_CONFIG, GridConfig
+from aca_model.baseline.model import create_model
+from aca_model.baseline.regimes import ENTRY_REGIMES, select_horizon_params
+from aca_model.config import (
+    BENCHMARK_GRID_CONFIG,
+    MODEL_CONFIG,
+    GridConfig,
+    model_ages,
+)
 from aca_model.consumption_dollars_grid import (
     compute_consumption_dollars_points,
     inject_consumption_dollars_points,
@@ -85,11 +90,11 @@ def create_benchmark_model(
         initial_nodes: Admissible starting `(age, regime)` pairs, forwarded
             to `create_model`.
         final_age: First age at which everybody is dead, forwarded to
-            `create_model`. The default is the full horizon; the frozen
-            age-indexed parameters cover it, and a shorter horizon reads a
-            prefix of them.
+            `create_model` and `get_benchmark_params`. The default is the full
+            horizon; the frozen age-indexed parameters cover it, and a shorter
+            horizon reads a prefix of them.
     """
-    fixed_params, wage_params, _ = get_benchmark_params(model=None)
+    fixed_params, wage_params, _ = get_benchmark_params(model=None, final_age=final_age)
     return create_model(
         grid_config=grid_config,
         fixed_params=fixed_params,
@@ -103,7 +108,7 @@ def create_benchmark_model(
 
 
 def get_benchmark_params(
-    *, model: Model | None
+    *, model: Model | None, final_age: int = MODEL_CONFIG.end_age
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Load the frozen `(fixed_params, wage_params, params)` snapshot.
 
@@ -116,8 +121,10 @@ def get_benchmark_params(
     into `params` for each regime that declares `consumption_dollars` as
     an `IrregSpacedGrid` with runtime-supplied points. Pass `model=None`
     to skip injection (e.g. when constructing the model with
-    `fixed_params`). A model with a shorter horizon than the snapshot's
-    receives only the `params` its template reads.
+    `fixed_params`).
+
+    `fixed_params` and `params` hold only what a model ending at `final_age`
+    reads (`select_horizon_params`); pass the same `final_age` as the model's.
 
     The regime-transition law arguments (`survival_probs`,
     `prob_disabled_next`) are returned under `fixed_params["edges"][source]`,
@@ -129,6 +136,8 @@ def get_benchmark_params(
     wage_params = data["wage_params"]
     params = data["params"]
     max_consumption_dollars = float(fixed_params.pop("max_consumption_dollars"))
+    ages = model_ages(final_age=final_age)
+    fixed_params = select_horizon_params(params=fixed_params, ages=ages)
     if model is not None:
         params = inject_consumption_dollars_points(
             params=params,
@@ -136,9 +145,7 @@ def get_benchmark_params(
             max_consumption_dollars=max_consumption_dollars,
         )
         params = inject_consumption_floor_schedule(params=params, model=model)
-        if model.n_periods < len(MODEL_AGES):
-            params = select_params_for_model(params=params, model=model)
-    return fixed_params, wage_params, params
+    return fixed_params, wage_params, select_horizon_params(params=params, ages=ages)
 
 
 def get_benchmark_consumption_dollars_points(*, n_points: int) -> tuple[float, ...]:

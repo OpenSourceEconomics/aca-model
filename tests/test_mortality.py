@@ -9,9 +9,12 @@ import pytest
 
 from aca_model.agent.labor_market import LaborSupply
 from aca_model.baseline.regimes._common import (
+    ENTRY_REGIMES,
     REGIME_SPECS,
     RegimeId,
     make_targets,
+    reachable_regimes,
+    select_horizon_params,
     select_target_for_age,
     transition_ages,
 )
@@ -142,6 +145,43 @@ def test_entry_regime_has_no_transition_at_a_shorter_final_age() -> None:
     """With ages 51-53 the entry regimes transition at 51 and 52 only."""
     spec = REGIME_SPECS["retiree_nomc_inelig_canwork"]
     assert transition_ages(spec, ages=model_ages(final_age=53)) == (51, 52)
+
+
+def test_only_entry_regimes_are_reachable_at_final_age_53() -> None:
+    """Ages 51-53 reach only the five pre-claiming, pre-Medicare regimes."""
+    assert set(reachable_regimes(ages=model_ages(final_age=53))) == set(ENTRY_REGIMES)
+
+
+@pytest.mark.parametrize(
+    ("final_age", "expected"),
+    [
+        (53, {"retiree_nomc_inelig_canwork", "medicare_age"}),
+        (
+            63,
+            {
+                "retiree_nomc_inelig_canwork",
+                "retiree_nomc_choose_canwork",
+                "medicare_age",
+                "normal_retirement_age",
+            },
+        ),
+    ],
+)
+def test_select_horizon_params_keeps_what_the_horizon_reaches(
+    final_age: int, expected: set[str]
+) -> None:
+    """Unreachable regimes' entries, and claiming params before 62, are left out."""
+    params = {
+        "retiree_nomc_inelig_canwork": 1,
+        "retiree_nomc_choose_canwork": 2,
+        "retiree_oamc_forced_forcedout": 3,
+        "medicare_age": 4,
+        "normal_retirement_age": 5,
+    }
+    selected = select_horizon_params(
+        params=params, ages=model_ages(final_age=final_age)
+    )
+    assert set(selected) == expected
 
 
 def test_model_ages_end_at_final_age() -> None:

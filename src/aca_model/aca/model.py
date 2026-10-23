@@ -12,10 +12,7 @@ from lcm.typing import UserParams
 
 from aca_model.aca import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes
-from aca_model.baseline.model import (
-    _fail_if_dcegm_without_consumption_points,
-    build_model_for_horizon,
-)
+from aca_model.baseline.model import _fail_if_dcegm_without_consumption_points
 from aca_model.baseline.regimes import (
     RegimeId,
     SolverName,
@@ -73,7 +70,8 @@ def create_model(
         final_age: First age at which everybody is dead; the model spans
             `MODEL_CONFIG.start_age` through `final_age`. The default is the
             full horizon. A shorter horizon reads a prefix of the age-indexed
-            data.
+            data, and `fixed_params` must hold only what it reads (see
+            `select_horizon_params`).
 
     Returns:
         pylcm Model.
@@ -103,25 +101,22 @@ def create_model(
         solver=solver,
     )
 
-    return build_model_for_horizon(
+    return Model(
+        regimes=regimes,
+        initial_nodes=(
+            build_entry_initial_nodes(ages=ages)
+            if initial_nodes is None
+            else initial_nodes
+        ),
+        ages=AgeGrid(exact_values=ages),
+        regime_id_class=RegimeId,
+        description=f"Structural retirement model ({policy.name})",
         fixed_params=fixed_params,
-        final_age=final_age,
-        model_kwargs={
-            "regimes": regimes,
-            "initial_nodes": (
-                build_entry_initial_nodes(ages=ages)
-                if initial_nodes is None
-                else initial_nodes
-            ),
-            "ages": AgeGrid(exact_values=ages),
-            "regime_id_class": RegimeId,
-            "description": f"Structural retirement model ({policy.name})",
-            "derived_categoricals": derived_categoricals,
-            "execution_config": (
-                execution_config_for_devices()
-                if execution_config is None
-                else execution_config
-            ),
-            **model_slots,
-        },
+        derived_categoricals=derived_categoricals,
+        execution_config=(
+            execution_config_for_devices()
+            if execution_config is None
+            else execution_config
+        ),
+        **model_slots,
     )
