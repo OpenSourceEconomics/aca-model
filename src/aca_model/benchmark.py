@@ -76,7 +76,7 @@ def create_benchmark_model(
 
     Args:
         pref_type_grid: Pref-type grid; pass `DiscreteGrid(BenchmarkPrefType)`.
-        grid_config: Economic resolution and medical-shock folding declarations.
+        grid_config: Economic resolution and numerical choices.
         execution_config: Explicit hardware-local policy forwarded unchanged.
             None uses the smallest selected accelerator allocator limit as the
             device-memory budget; CPU construction remains unbudgeted.
@@ -184,7 +184,7 @@ def get_benchmark_initial_conditions(
     aime_lo, aime_hi = float(aime_pts.min()), float(aime_pts.max())
     hcc_p_pts = np.asarray(grids["hcc_persistent"].to_jax())  # ty: ignore[unresolved-attribute]
     hcc_t_grid = grids.get("hcc_transitory")
-    # Preserve the random stream for shared states when the folded state is absent.
+    # Preserve the random stream for shared states; the transitory shock is no state.
     hcc_t_pts = (
         np.asarray(hcc_t_grid.to_jax())  # ty: ignore[unresolved-attribute]
         if hcc_t_grid is not None
