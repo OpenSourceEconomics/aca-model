@@ -13,11 +13,15 @@ from lcm import DiscreteGrid, Phased
 from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes import build_all_regimes as _build_aca_regimes
+from aca_model.agent import assets_and_income
 from aca_model.agent.preferences import BenchmarkPrefType
+from aca_model.baseline import health_insurance as baseline_hi
 from aca_model.baseline.regimes import REGIME_SPECS, RegimeId
 from aca_model.baseline.regimes import build_regime as _build_regime
 from aca_model.baseline.regimes._common import (
+    SolverName,
     build_grids,
+    build_model_functions,
     build_model_state_transitions,
     build_model_states,
 )
@@ -288,6 +292,36 @@ def test_aca_model_creates_successfully() -> None:
     model = make_aca_model(policy=PolicyVariant.ACA)
     assert len(model.user_regimes) == 19
     assert model.n_periods == 46
+
+
+@pytest.mark.parametrize("name", REGIME_SPECS)
+def test_baseline_regime_omits_expansion_magi(name: str) -> None:
+    """Baseline eligibility does not register the ACA expansion income node."""
+    assert "aca_magi" not in build_regime(name).functions
+
+
+@pytest.mark.parametrize("policy", list(PolicyVariant))
+def test_aca_regime_registers_magi_only_for_expansion(policy: PolicyVariant) -> None:
+    """The expansion eligibility consumer owns its MAGI income node."""
+    has_expansion = policy in (
+        PolicyVariant.ACA,
+        PolicyVariant.ACA_NO_MANDATE,
+        PolicyVariant.ACA_ONLY_MEDICAID_EXPANSION,
+    )
+    expected = baseline_hi.aca_magi if has_expansion else None
+    regimes = build_aca_regimes(policy)
+    assert {
+        name: regimes[name].functions.get("aca_magi") for name in REGIME_SPECS
+    } == dict.fromkeys(REGIME_SPECS, expected)
+
+
+@pytest.mark.parametrize("solver", ["brute_force", "dcegm", "nbegm"])
+def test_model_registers_transfers_only_for_brute_asset_laws(
+    solver: SolverName,
+) -> None:
+    """Savings-form asset laws already include transfers through resources."""
+    expected = assets_and_income.transfers if solver == "brute_force" else None
+    assert build_model_functions(solver=solver).get("transfers") is expected
 
 
 def test_aca_nongroup_inelig_has_real_functions() -> None:

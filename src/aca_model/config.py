@@ -34,14 +34,12 @@ class GridConfig:
     n_wage_res_gridpoints: int = 5
     n_hcc_persistent_gridpoints: int = 3
     n_hcc_transitory_gridpoints: int = 5
-    # Fold the transitory medical-cost shock out of the state space. Nothing a
-    # period computes reads last year's transitory shock, so with the fold it is
-    # drawn on the transition only and no value carries its axis.
-    fold_hcc_transitory: bool = False
     # Declare the asset law toward living targets as resources minus the
     # out-of-pocket bill, so the solve averages each target's value over the
     # transitory shock once per period instead of at every source point. Needs
-    # `fold_hcc_transitory` and the brute-force asset law.
+    # the brute-force asset law. The transitory shock is read only as its draw
+    # `next_hcc_transitory`, so pylcm integrates it out and no value carries its
+    # axis, with or without this option.
     subtract_hcc_bill: bool = False
     # The post-decision savings grid is cubically clustered toward the borrowing
     # constraint. Its node count controls resolution under DC-EGM and NB-EGM.
@@ -67,7 +65,6 @@ MODEL_AGES: tuple[int, ...] = tuple(
 GRID_CONFIG = GridConfig()
 
 BENCHMARK_GRID_CONFIG = GridConfig(
-    fold_hcc_transitory=True,
     subtract_hcc_bill=True,
     n_assets_gridpoints=3,
     n_aime_gridpoints=3,

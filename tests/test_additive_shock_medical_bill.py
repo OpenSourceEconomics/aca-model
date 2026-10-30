@@ -23,10 +23,8 @@ from aca_model.baseline.health_insurance import negative_oop_costs
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
-_FOLDED = replace(
-    BENCHMARK_GRID_CONFIG, fold_hcc_transitory=True, subtract_hcc_bill=False
-)
-_ADDITIVE = replace(_FOLDED, subtract_hcc_bill=True)
+_PLAIN_LAW = replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
+_ADDITIVE = replace(_PLAIN_LAW, subtract_hcc_bill=True)
 
 
 @pytest.fixture(scope="module")
@@ -58,12 +56,12 @@ def test_additive_shock_value_equals_the_plain_law_value(
     additive_model: lcm.Model,
 ) -> None:
     """The two routes sum the same terms in a different order."""
-    folded_model = make_baseline_model(grid_config=_FOLDED)
-    _, _, params = get_benchmark_params(model=folded_model)
-    folded_values = folded_model.solve(params=params, log_level="off").values
+    plain_model = make_baseline_model(grid_config=_PLAIN_LAW)
+    _, _, params = get_benchmark_params(model=plain_model)
+    plain_values = plain_model.solve(params=params, log_level="off").values
     additive_values = additive_model.solve(params=params, log_level="off").values
-    assert set(additive_values) == set(folded_values)
-    for period, regimes in folded_values.items():
+    assert set(additive_values) == set(plain_values)
+    for period, regimes in plain_values.items():
         assert set(additive_values[period]) == set(regimes)
         for name, values in regimes.items():
             np.testing.assert_array_equal(
