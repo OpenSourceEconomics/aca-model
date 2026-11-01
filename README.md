@@ -2,13 +2,12 @@
 
 Core lifecycle model for the ACA structural retirement project.
 
-The benchmark folds the IID transitory medical-cost shock and declares its asset
-transition as resources plus the negated medical bill. Production grid defaults remain
-unfolded. To measure the unfolded benchmark control, pass
-`grid_config=replace(BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False)`
-to `create_benchmark_model`. Pass the same grid configuration to
-`get_benchmark_initial_conditions`; both routes retain identical seeded draws for their
-shared initial states.
+The IID transitory medical-cost shock is read only as its draw `next_hcc_transitory`, so
+pylcm integrates it out and no regime carries it as a state. The benchmark declares the
+asset transition as resources plus the negated medical bill; to measure the plain asset
+law instead, pass `grid_config=replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)`
+to `create_benchmark_model`, and the same grid configuration to
+`get_benchmark_initial_conditions`.
 
 Model factories accept `execution_config=ExecutionConfig(...)`. An omitted policy uses
 the smallest JAX allocator `bytes_limit` among the selected accelerators as an explicit

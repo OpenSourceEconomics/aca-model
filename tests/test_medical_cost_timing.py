@@ -24,15 +24,13 @@ from aca_model.benchmark import (
 )
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
-_SHOCKS = ("hcc_persistent", "hcc_transitory")
+_SHOCKS = ("hcc_persistent",)
 
 
 @pytest.fixture(scope="module")
 def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
     """Period-0 rows of twins that differ in one lagged shock, at its grid ends."""
-    grid_config = replace(
-        BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
-    )
+    grid_config = replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
     model = create_benchmark_model(
         pref_type_grid=DiscreteGrid(BenchmarkPrefType), grid_config=grid_config
     )
@@ -59,22 +57,13 @@ def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
     }
 
 
-def test_value_does_not_depend_on_lagged_transitory_shock(
-    period_0_by_shock: dict[tuple[str, str], pd.Series],
-) -> None:
-    """Twins differing only in last year's transitory shock have equal value."""
-    low = period_0_by_shock["hcc_transitory", "low"]["value"]
-    high = period_0_by_shock["hcc_transitory", "high"]["value"]
-    assert low == high
-
-
-def test_consumption_does_not_depend_on_lagged_transitory_shock(
-    period_0_by_shock: dict[tuple[str, str], pd.Series],
-) -> None:
-    """Twins differing only in last year's transitory shock consume the same."""
-    low = period_0_by_shock["hcc_transitory", "low"]["consumption_dollars"]
-    high = period_0_by_shock["hcc_transitory", "high"]["consumption_dollars"]
-    assert low == high
+def test_no_regime_carries_a_lagged_transitory_shock() -> None:
+    """Last year's transitory shock is read by nothing, so it is no state."""
+    model = create_benchmark_model(pref_type_grid=DiscreteGrid(BenchmarkPrefType))
+    assert not any(
+        "hcc_transitory" in model.state_names(regime_name=name)
+        for name in model.user_regimes
+    )
 
 
 def test_value_falls_with_lagged_persistent_shock(

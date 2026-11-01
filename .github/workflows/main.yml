@@ -35,7 +35,7 @@ jobs:
         # install; keep it compatible with the model's graph declarations.
         run: >-
           pip install "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@7e99a19badafe20e29a517f69d9ec155bba8e0a0"
+          git+https://github.com/OpenSourceEconomics/pylcm.git@a1632503da2f44ad9ce386ff07dc28030f0eea9f"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
       - name: Run pytest
