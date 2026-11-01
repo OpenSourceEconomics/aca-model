@@ -34,12 +34,10 @@ _DERIVED_CATEGORICALS = {
     "pref_type": DiscreteGrid(BenchmarkPrefType),
 }
 
-_UNFOLDED_GRID_CONFIG = replace(
-    BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
-)
+_PLAIN_LAW_GRID_CONFIG = replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
 
 
-def make_baseline_model(*, grid_config: GridConfig = _UNFOLDED_GRID_CONFIG) -> Model:
+def make_baseline_model(*, grid_config: GridConfig = _PLAIN_LAW_GRID_CONFIG) -> Model:
     """Baseline model on `grid_config` with the benchmark snapshot params."""
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return _create_baseline_model(
@@ -72,7 +70,7 @@ def aca_fixed_params(*, fixed_params: dict, policy: PolicyVariant) -> dict:
 
 
 def make_aca_model(
-    *, policy: PolicyVariant, grid_config: GridConfig = _UNFOLDED_GRID_CONFIG
+    *, policy: PolicyVariant, grid_config: GridConfig = _PLAIN_LAW_GRID_CONFIG
 ) -> Model:
     """ACA model on `grid_config` with the benchmark snapshot params."""
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
