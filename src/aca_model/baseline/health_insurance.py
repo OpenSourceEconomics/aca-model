@@ -12,6 +12,8 @@ What remains:
 - SSI benefit computation
 """
 
+from typing import NamedTuple
+
 import jax
 import jax.numpy as jnp
 import lcm
@@ -235,26 +237,20 @@ def private_premium_intercept(
     `[-50000, 10000]` finds the root. Without a sign change on the bracket
     the result is NaN, so an unpriceable slope `b` fails loudly downstream.
     """
-    slope = premium_predicted_hcc * (1.0 + premium_markup)
-    minimum = premium_minimum[premium_sample_is_married]
-    target = (1.0 + premium_markup) * jnp.mean(premium_sample_insurer_cost)
-
-    def excess_revenue(intercept: FloatND) -> FloatND:
-        premiums = jnp.maximum(minimum, intercept + slope * premium_sample_insurer_cost)
-        return jnp.mean(premiums) - target
-
-    def halve(
-        _: jax.Array, bracket: tuple[FloatND, FloatND]
-    ) -> tuple[FloatND, FloatND]:
-        low, high = bracket
-        mid = 0.5 * (low + high)
-        too_high = excess_revenue(mid) > 0.0
-        return jnp.where(too_high, low, mid), jnp.where(too_high, mid, high)
-
+    sample = _PremiumSample(
+        slope=premium_predicted_hcc * (1.0 + premium_markup),
+        minimum=premium_minimum[premium_sample_is_married],
+        cost=premium_sample_insurer_cost,
+        target=(1.0 + premium_markup) * jnp.mean(premium_sample_insurer_cost),
+    )
     low0 = jnp.asarray(_INTERCEPT_BRACKET[0])
     high0 = jnp.asarray(_INTERCEPT_BRACKET[1])
-    low, high = jax.lax.fori_loop(0, _N_INTERCEPT_BISECTIONS, halve, (low0, high0))
-    bracketed = (excess_revenue(low0) <= 0.0) & (excess_revenue(high0) >= 0.0)
+    low, high, _ = jax.lax.fori_loop(
+        0, _N_INTERCEPT_BISECTIONS, _halve, (low0, high0, sample)
+    )
+    bracketed = (_excess_revenue(intercept=low0, sample=sample) <= 0.0) & (
+        _excess_revenue(intercept=high0, sample=sample) >= 0.0
+    )
     return jnp.where(bracketed, 0.5 * (low + high), jnp.nan)
 
 
@@ -600,3 +596,37 @@ def total_costs(
         + log_std[period, is_married, good_health]
         * (next_hcc_persistent * std_xsect_persistent + next_hcc_transitory * std_trans)
     )
+
+
+class _PremiumSample(NamedTuple):
+    """The bisection's operands, carried through the loop rather than closed over."""
+
+    slope: FloatND
+    """Premium slope on insurer cost, `b (1 + markup)`."""
+    minimum: FloatND
+    """Each sampled buyer's premium floor."""
+    cost: FloatND
+    """Each sampled buyer's expected insurer cost."""
+    target: FloatND
+    """Required mean revenue, `(1 + markup)` times mean insurer cost."""
+
+
+def _excess_revenue(*, intercept: FloatND, sample: _PremiumSample) -> FloatND:
+    """Mean premium revenue at `intercept` less the zero-profit target."""
+    premiums = jnp.maximum(sample.minimum, intercept + sample.slope * sample.cost)
+    return jnp.mean(premiums) - sample.target
+
+
+# keyword-only-exempt: library-callback=jax.lax.fori_loop
+def _halve(
+    _: jax.Array, carry: tuple[FloatND, FloatND, _PremiumSample]
+) -> tuple[FloatND, FloatND, _PremiumSample]:
+    """Halve the bracket towards the zero-profit intercept.
+
+    A module-level body with its operands in the carry lets every call reuse
+    one traced loop instead of tracing a fresh closure.
+    """
+    low, high, sample = carry
+    mid = 0.5 * (low + high)
+    too_high = _excess_revenue(intercept=mid, sample=sample) > 0.0
+    return jnp.where(too_high, low, mid), jnp.where(too_high, mid, high), sample

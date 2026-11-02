@@ -1,8 +1,10 @@
 """Private non-group premium: zero-profit intercept, pricing rule, and floor rule."""
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from jax._src import monitoring
 
 from aca_model.aca import health_insurance as aca_health_insurance
 from aca_model.baseline import health_insurance
@@ -234,3 +236,68 @@ def test_aca_primary_oop_doubles_couples_deductible_and_oop_max(
         oop_max=jnp.asarray(6500.0),
     )
     np.testing.assert_allclose(result, expected, atol=1e-6)
+
+
+def _closure_intercept(
+    *, coeff: float, minimum: jax.Array, cost: jax.Array, married: jax.Array
+) -> jax.Array:
+    """Bisect the zero-profit condition with closures over the call's arrays."""
+    slope = coeff * (1.0 + _MARKUP)
+    floor = minimum[married]
+    target = (1.0 + _MARKUP) * jnp.mean(cost)
+
+    def excess_revenue(intercept: jax.Array) -> jax.Array:
+        return jnp.mean(jnp.maximum(floor, intercept + slope * cost)) - target
+
+    def halve(_: jax.Array, bracket: tuple) -> tuple:
+        low, high = bracket
+        mid = 0.5 * (low + high)
+        too_high = excess_revenue(mid) > 0.0
+        return jnp.where(too_high, low, mid), jnp.where(too_high, mid, high)
+
+    low0, high0 = jnp.asarray(-50_000.0), jnp.asarray(10_000.0)
+    low, high = jax.lax.fori_loop(0, 100, halve, (low0, high0))
+    bracketed = (excess_revenue(low0) <= 0.0) & (excess_revenue(high0) >= 0.0)
+    return jnp.where(bracketed, 0.5 * (low + high), jnp.nan)
+
+
+def _intercept(*, coeff: float, cost: jax.Array) -> jax.Array:
+    return health_insurance.private_premium_intercept(
+        premium_predicted_hcc=jnp.asarray(coeff),
+        premium_markup=_MARKUP,
+        premium_minimum=_MINIMUM,
+        premium_sample_insurer_cost=cost,
+        premium_sample_is_married=_SAMPLE_MARRIED,
+    )
+
+
+def test_private_premium_intercept_reuses_its_trace_across_values() -> None:
+    """A second eager call with other values compiles no new program."""
+    _intercept(coeff=0.5, cost=_SAMPLE_COST)
+    other_cost = (_SAMPLE_COST * 1.3).block_until_ready()
+    events: list[str] = []
+
+    # keyword-only-exempt: library-callback=jax.monitoring
+    def listener(event: str, duration_secs: float, **kwargs: str | int) -> None:
+        del duration_secs, kwargs
+        if event == "/jax/core/compile/backend_compile_duration":
+            events.append(event)
+
+    monitoring.register_event_duration_secs_listener(listener)
+    try:
+        _intercept(coeff=0.8, cost=other_cost).block_until_ready()
+    finally:
+        monitoring.unregister_event_duration_listener(listener)
+    assert events == []
+
+
+@pytest.mark.parametrize("coeff", [0.5, 0.8, 1.5])
+def test_private_premium_intercept_equals_the_closure_bisection(coeff: float) -> None:
+    """The intercept is bitwise the closure-based bisection's."""
+    cost = _SAMPLE_COST * 1.3
+    np.testing.assert_array_equal(
+        _intercept(coeff=coeff, cost=cost),
+        _closure_intercept(
+            coeff=coeff, minimum=_MINIMUM, cost=cost, married=_SAMPLE_MARRIED
+        ),
+    )
