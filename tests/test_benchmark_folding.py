@@ -3,16 +3,8 @@
 from collections.abc import Mapping
 
 import lcm
-import pytest
-from lcm import DiscreteGrid
 
-from aca_model.agent.preferences import BenchmarkPrefType
-from aca_model.benchmark import create_benchmark_model, get_benchmark_initial_conditions
-
-
-@pytest.fixture(scope="module")
-def benchmark_model() -> lcm.Model:
-    return create_benchmark_model(pref_type_grid=DiscreteGrid(BenchmarkPrefType))
+from aca_model.benchmark import get_benchmark_initial_conditions
 
 
 def test_benchmark_folds_the_transitory_medical_bill(

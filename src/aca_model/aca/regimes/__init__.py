@@ -6,8 +6,8 @@ import inspect
 from collections.abc import Mapping
 from typing import Any
 
+from jax.typing import ArrayLike
 from lcm import DiscreteGrid, Regime
-from lcm.typing import UserParams
 
 from aca_model.aca.health_insurance import PolicyVariant
 from aca_model.aca.regimes._overrides import apply_aca_overrides
@@ -22,7 +22,7 @@ def build_all_regimes(
     *,
     policy: PolicyVariant,
     grid_config: GridConfig,
-    fixed_params: UserParams,
+    pia_aime_grid: ArrayLike,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
@@ -31,7 +31,7 @@ def build_all_regimes(
     """Build all 19 regimes with ACA policy overrides."""
     regimes = baseline_build_all_regimes(
         grid_config=grid_config,
-        fixed_params=fixed_params,
+        pia_aime_grid=pia_aime_grid,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
         solver=solver,

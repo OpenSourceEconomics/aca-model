@@ -1,6 +1,6 @@
 # ACA: one structural stage table, existing numerical programs
 
-Both factories declare the same admissible starts, `INITIAL_NODES`: ages 51–60
+Both factories admit the same starts by default, from `build_entry_initial_nodes`: ages 51–60
 as explicit `(age, regime)` pairs in the five `*_inelig_canwork`
 regimes, 50 pairs. Every later age, and `dead` at any age, is reached only through
 transitions; the engine derives the solved domain from these roots, **184** nodes.
@@ -10,7 +10,7 @@ admission.
 `simulate_with_dense_index` drops initial-condition rows older than the last
 admissible start age and raises on any kept row outside `model.initial_nodes`.
 
-`_AGE_STAGES` and the host-side clock supply both numerical next-age routing and
+`age_stages` and the host-side clock supply both numerical next-age routing and
 `Model.edges` source-age selectors, grouped by destination. Each source has one
 mapping of `StochasticTransition` probability cells; the model graph selects the
 cells allowed at each source age. Code order/global regime IDs and parameter

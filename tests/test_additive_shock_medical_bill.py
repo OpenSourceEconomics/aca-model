@@ -10,26 +10,23 @@ agree with the plain asset law to rounding.
 """
 
 from collections.abc import Mapping
-from dataclasses import replace
 
 import jax.numpy as jnp
 import lcm
 import numpy as np
 import pytest
-from helpers.model import make_baseline_model
 
 from aca_model.agent import assets_and_income
 from aca_model.baseline.health_insurance import negative_oop_costs
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
-_PLAIN_LAW = replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
-_ADDITIVE = replace(_PLAIN_LAW, subtract_hcc_bill=True)
-
 
 @pytest.fixture(scope="module")
-def additive_model() -> lcm.Model:
-    return make_baseline_model(grid_config=_ADDITIVE)
+def additive_model(benchmark_model: lcm.Model) -> lcm.Model:
+    """The benchmark grids subtract the medical bill as an additive shock."""
+    assert BENCHMARK_GRID_CONFIG.subtract_hcc_bill
+    return benchmark_model
 
 
 def test_negative_oop_costs_is_the_negated_bill() -> None:
@@ -53,10 +50,10 @@ def test_every_target_adds_the_negated_bill(additive_model: lcm.Model) -> None:
 
 @pytest.mark.long_running
 def test_additive_shock_value_equals_the_plain_law_value(
-    additive_model: lcm.Model,
+    additive_model: lcm.Model, baseline_model: lcm.Model
 ) -> None:
     """The two routes sum the same terms in a different order."""
-    plain_model = make_baseline_model(grid_config=_PLAIN_LAW)
+    plain_model = baseline_model
     _, _, params = get_benchmark_params(model=plain_model)
     plain_values = plain_model.solve(params=params, log_level="off").values
     additive_values = additive_model.solve(params=params, log_level="off").values

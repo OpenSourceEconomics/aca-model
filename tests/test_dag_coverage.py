@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 import pandas as pd
 import pytest
-from helpers.model import make_baseline_model
+from lcm import Model
 from lcm.exceptions import InvalidInitialConditionsError
 
 from aca_model.baseline.regimes import ENTRY_REGIMES, REGIME_SPECS
@@ -14,8 +14,8 @@ from aca_model.simulation import select_admissible_starts
 
 
 @pytest.fixture(scope="module")
-def model():
-    return make_baseline_model()
+def model(baseline_model: Model) -> Model:
+    return baseline_model
 
 
 def test_initial_nodes_are_the_age_51_to_60_entry_regimes(model):

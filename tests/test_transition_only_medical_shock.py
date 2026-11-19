@@ -7,20 +7,13 @@ transition only and integrates it in the continuation. Living regimes keep the
 lagged persistent shock, which prices the private premium.
 """
 
-from dataclasses import replace
-
 import pytest
-from helpers.model import make_baseline_model
 from lcm import Model
-
-from aca_model.config import BENCHMARK_GRID_CONFIG
-
-_GRID_CONFIG = replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
 
 
 @pytest.fixture(scope="module")
-def model() -> Model:
-    return make_baseline_model(grid_config=_GRID_CONFIG)
+def model(baseline_model: Model) -> Model:
+    return baseline_model
 
 
 def test_living_regimes_carry_no_lagged_transitory_shock(model: Model) -> None:

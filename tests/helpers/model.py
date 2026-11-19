@@ -10,12 +10,8 @@ from dataclasses import replace
 from lcm import DiscreteGrid, Model
 
 from aca_model.aca.health_insurance import PolicyVariant
-from aca_model.aca.model import create_model as _create_aca_model
-from aca_model.agent.health import GoodHealth
-from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
-from aca_model.baseline.health_insurance import HealthInsuranceState
-from aca_model.baseline.model import create_model as _create_baseline_model
+from aca_model.baseline.model import build_model_spec, create_model
 from aca_model.baseline.regimes import REGIME_SPECS
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
@@ -26,26 +22,20 @@ _NONGROUP_BEFORE_MEDICARE = frozenset(
     if spec["his"] == "nongroup" and spec["mc"] == "nomc"
 )
 
-_DERIVED_CATEGORICALS = {
-    "good_health": DiscreteGrid(GoodHealth),
-    "is_married": DiscreteGrid(IsMarried),
-    "his": DiscreteGrid(HealthInsuranceState),
-    "target_his": DiscreteGrid(HealthInsuranceState),
-    "pref_type": DiscreteGrid(BenchmarkPrefType),
-}
-
 _PLAIN_LAW_GRID_CONFIG = replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
 
 
 def make_baseline_model(*, grid_config: GridConfig = _PLAIN_LAW_GRID_CONFIG) -> Model:
     """Baseline model on `grid_config` with the benchmark snapshot params."""
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
-    return _create_baseline_model(
+    return create_model(
+        spec=build_model_spec(
+            pia_aime_grid=fixed_params["pia_aime_grid"],
+            wage_params=wage_params,
+            grid_config=grid_config,
+            pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        ),
         fixed_params=fixed_params,
-        wage_params=wage_params,
-        derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=grid_config,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
 
 
@@ -74,11 +64,13 @@ def make_aca_model(
 ) -> Model:
     """ACA model on `grid_config` with the benchmark snapshot params."""
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
-    return _create_aca_model(
-        policy=policy,
+    return create_model(
+        spec=build_model_spec(
+            pia_aime_grid=fixed_params["pia_aime_grid"],
+            policy=policy,
+            wage_params=wage_params,
+            grid_config=grid_config,
+            pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        ),
         fixed_params=aca_fixed_params(fixed_params=fixed_params, policy=policy),
-        wage_params=wage_params,
-        derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=grid_config,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
