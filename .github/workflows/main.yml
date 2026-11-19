@@ -16,7 +16,7 @@ on:
       - '**'
 jobs:
   run-tests:
-    name: Run tests on ${{ matrix.os }}
+    name: Run ${{ matrix.shard.name }} tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -25,6 +25,13 @@ jobs:
           - ubuntu-latest
         python-version:
           - '3.14'
+        # The medical-cost timing module compiles and simulates a model of its
+        # own, which takes longer than any other module; it runs in parallel.
+        shard:
+          - name: main
+            args: -n 4 --dist loadscope --ignore=tests/test_medical_cost_timing.py tests
+          - name: timing
+            args: tests/test_medical_cost_timing.py
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -33,12 +40,10 @@ jobs:
       - name: Install pylcm at the supported API revision
         # Pinned by commit so a deleted or rewritten branch cannot break the
         # install; keep it compatible with the model's graph declarations.
-        # jax 0.12.1 makes pylcm refuse to fingerprint the model, so jax stays
-        # on the 0.12.0 series pylcm locks.
         run: >-
-          pip install "jax<0.12.1" "jaxlib<0.12.1" "pylcm @
-          git+https://github.com/OpenSourceEconomics/pylcm.git@ce770fd5960813fe1debfc684b97ad2b92b66753"
+          pip install "pylcm @
+          git+https://github.com/OpenSourceEconomics/pylcm.git@318324f6bce1487178714b047211ce1245d170a8"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pytest-xdist pdbp
       - name: Run pytest
-        run: pytest -n 4 --dist loadscope --durations=40 tests
+        run: pytest --durations=40 ${{ matrix.shard.args }}
