@@ -189,8 +189,8 @@ def get_benchmark_initial_conditions(
     aime_pts = np.asarray(grids["aime"].to_jax())  # ty: ignore[unresolved-attribute]
     assets_lo, assets_hi = float(assets_pts.min()), float(assets_pts.max())
     aime_lo, aime_hi = float(aime_pts.min()), float(aime_pts.max())
-    hcc_p_pts = np.asarray(grids["hcc_persistent"].to_jax())  # ty: ignore[unresolved-attribute]
-    hcc_t_grid = grids.get("hcc_transitory")
+    hcc_p_pts = np.asarray(grids["lagged_hcc_persistent"].to_jax())  # ty: ignore[unresolved-attribute]
+    hcc_t_grid = grids.get("lagged_hcc_transitory")
     # Preserve the random stream for shared states; the transitory shock is no state.
     hcc_t_pts = (
         np.asarray(hcc_t_grid.to_jax())  # ty: ignore[unresolved-attribute]
@@ -215,8 +215,8 @@ def get_benchmark_initial_conditions(
         # pension wealth; the synthetic benchmark draws a modest positive stock.
         "pension_wealth": jnp.asarray(rng.uniform(0.0, 200_000.0, n_subjects)),
         "health": jnp.asarray(rng.integers(0, 3, n_subjects).astype(np.int32)),
-        "hcc_persistent": jnp.asarray(rng.choice(hcc_p_pts, n_subjects)),
-        "hcc_transitory": jnp.asarray(rng.choice(hcc_t_pts, n_subjects)),
+        "lagged_hcc_persistent": jnp.asarray(rng.choice(hcc_p_pts, n_subjects)),
+        "lagged_hcc_transitory": jnp.asarray(rng.choice(hcc_t_pts, n_subjects)),
         "spousal_income": jnp.asarray(rng.integers(0, 3, n_subjects).astype(np.int32)),
         "pref_type": jnp.asarray(
             rng.integers(0, _N_BENCHMARK_PREF_TYPES, n_subjects).astype(np.int32)
@@ -227,6 +227,6 @@ def get_benchmark_initial_conditions(
         # everyone starts as not-yet-claimed.
         "claimed_ss": jnp.zeros(n_subjects, dtype=jnp.int32),
     }
-    if "hcc_transitory" not in model.state_names(regime_name=ENTRY_REGIMES[0]):
-        initial.pop("hcc_transitory")
+    if "lagged_hcc_transitory" not in model.state_names(regime_name=ENTRY_REGIMES[0]):
+        initial.pop("lagged_hcc_transitory")
     return initial

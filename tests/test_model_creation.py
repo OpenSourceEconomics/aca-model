@@ -150,7 +150,7 @@ def test_all_non_terminal_regimes_have_core_states() -> None:
         regime = build_regime(name)
         assert "health" in regime.states
     model_states = build_model_states(_GRIDS)
-    for state_name in ("spousal_income", "assets", "hcc_persistent", "hcc_transitory"):
+    for state_name in ("spousal_income", "assets", "lagged_hcc_persistent", "lagged_hcc_transitory"):
         assert state_name in model_states
 
 
@@ -279,11 +279,11 @@ def test_per_target_health_transitions() -> None:
 
 
 def test_hcc_persistent_and_transitory_are_shock_grids() -> None:
-    """hcc_persistent and hcc_transitory are ShockGrids with intrinsic transitions."""
+    """lagged_hcc_persistent and lagged_hcc_transitory are ShockGrids with intrinsic transitions."""
     for name in REGIME_SPECS:
         regime = build_regime(name)
-        assert "hcc_persistent" not in regime.state_transitions
-        assert "hcc_transitory" not in regime.state_transitions
+        assert "lagged_hcc_persistent" not in regime.state_transitions
+        assert "lagged_hcc_transitory" not in regime.state_transitions
 
 
 def test_aca_model_creates_successfully(
@@ -417,7 +417,7 @@ def test_dead_regime_prunes_unused_broadcast_states(baseline_model: Model) -> No
     regimes); the other unused broadcast states are pruned by reachability."""
     model = baseline_model
     assert model.pruned_variables["dead"] == frozenset(
-        {"aime", "spousal_income", "hcc_persistent", "hcc_transitory"}
+        {"aime", "spousal_income", "lagged_hcc_persistent", "lagged_hcc_transitory"}
     )
 
 

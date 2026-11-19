@@ -142,5 +142,5 @@ def test_medical_cost_draws_keep_living_states_without_choice_constraints(model)
         if name == "dead":
             assert set(regime.states) == {"assets", "pref_type"}
         else:
-            assert "hcc_persistent" in regime.states
-            assert "hcc_transitory" not in regime.states
+            assert "lagged_hcc_persistent" in regime.states
+            assert "lagged_hcc_transitory" not in regime.states

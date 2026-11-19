@@ -507,20 +507,20 @@ def hcc_insurer_predicted(
     period: Period,
     is_married: IntND,
     good_health: IntND,
-    hcc_persistent: ContinuousState,
+    lagged_hcc_persistent: ContinuousState,
     predicted_hcc_insurer_table: FloatND,
     hcc_persistent_grid: FloatND,
 ) -> FloatND:
     """Interpolate the private insurer's expected cost for the household.
 
-    `hcc_persistent` is last period's persistent shock, so the table holds
+    `lagged_hcc_persistent` is last period's persistent shock, so the table holds
     this period's E[total_costs - oop_costs | age, married, good health,
     lagged persistent node] on `[period, is_married, good_health, node]`. Linear
     interpolation handles off-grid values during simulation (where
     draw_shock returns continuous AR1 values).
     """
     return jnp.interp(
-        hcc_persistent,
+        lagged_hcc_persistent,
         hcc_persistent_grid,
         predicted_hcc_insurer_table[period, is_married, good_health],
     )
@@ -573,15 +573,15 @@ def total_costs(
     good_health: IntND,
     log_mean: FloatND,
     log_std: FloatND,
-    next_hcc_persistent: ContinuousState,
-    next_hcc_transitory: ContinuousState,
+    next_lagged_hcc_persistent: ContinuousState,
+    next_lagged_hcc_transitory: ContinuousState,
     std_xsect_persistent: ScalarFloat,
 ) -> FloatND:
     """Compute this period's total health care costs from the log-normal model.
 
     Costs are realised after the period's choices. The persistent and
     transitory shocks that drive them are the draws the transition makes,
-    `next_hcc_persistent` and `next_hcc_transitory`: the next period carries
+    `next_lagged_hcc_persistent` and `next_lagged_hcc_transitory`: the next period carries
     them as its lagged shocks. Age, marital status and health are this
     period's.
 
@@ -592,7 +592,7 @@ def total_costs(
     return jnp.exp(
         log_mean[period, is_married, good_health]
         + log_std[period, is_married, good_health]
-        * (next_hcc_persistent * std_xsect_persistent + next_hcc_transitory * std_trans)
+        * (next_lagged_hcc_persistent * std_xsect_persistent + next_lagged_hcc_transitory * std_trans)
     )
 
 

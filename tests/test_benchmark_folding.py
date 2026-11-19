@@ -16,7 +16,7 @@ def test_benchmark_folds_the_transitory_medical_bill(
     }
     assert living
     assert all(
-        "hcc_transitory" not in model.state_names(regime_name=name) for name in living
+        "lagged_hcc_transitory" not in model.state_names(regime_name=name) for name in living
     )
     for regime in living.values():
         laws = regime.state_transitions["assets"]
@@ -25,4 +25,4 @@ def test_benchmark_folds_the_transitory_medical_bill(
             isinstance(law, lcm.AdditiveShockTransition) for law in laws.values()
         )
     initial = get_benchmark_initial_conditions(model=model, n_subjects=8, seed=42)
-    assert "hcc_transitory" not in initial
+    assert "lagged_hcc_transitory" not in initial
