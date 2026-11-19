@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pytest
-from lcm import DiscreteGrid
+from lcm import DiscreteGrid, Model
 
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.benchmark import (
@@ -78,12 +78,13 @@ def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
     }
 
 
-def test_no_regime_carries_a_lagged_transitory_shock() -> None:
+def test_no_regime_carries_a_lagged_transitory_shock(
+    benchmark_model: Model,
+) -> None:
     """Last year's transitory shock is read by nothing, so it is no state."""
-    model = create_benchmark_model(pref_type_grid=DiscreteGrid(BenchmarkPrefType))
     assert not any(
-        "hcc_transitory" in model.state_names(regime_name=name)
-        for name in model.user_regimes
+        "hcc_transitory" in benchmark_model.state_names(regime_name=name)
+        for name in benchmark_model.user_regimes
     )
 
 

@@ -257,6 +257,7 @@ def test_benchmark_regimes_search_grids_with_the_requested_lottery_contraction(
     """Every benchmark regime solves by grid search with the requested contraction."""
     model = create_benchmark_model(
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        final_age=53,
         lottery_contraction=lottery_contraction,
     )
     assert {regime.solver for regime in model.user_regimes.values()} == {
