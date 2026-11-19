@@ -43,7 +43,7 @@ class GridConfig:
     # out-of-pocket bill, so the solve averages each target's value over the
     # transitory shock once per period instead of at every source point. Needs
     # the brute-force asset law. The transitory shock is read only as its draw
-    # `next_hcc_transitory`, so pylcm integrates it out and no value carries its
+    # `next_lagged_hcc_transitory`, so pylcm integrates it out and no value carries its
     # axis, with or without this option.
     subtract_hcc_bill: bool = False
     # The post-decision savings grid is cubically clustered toward the borrowing

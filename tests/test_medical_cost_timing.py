@@ -24,7 +24,7 @@ from aca_model.benchmark import (
 )
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
-_SHOCKS = ("hcc_persistent",)
+_SHOCKS = ("lagged_hcc_persistent",)
 # Period 0's choices look one year ahead, so ages 51-53 (two living periods and
 # the age at which everybody is dead) carry the whole timing question.
 _FINAL_AGE = 53
@@ -83,7 +83,7 @@ def test_no_regime_carries_a_lagged_transitory_shock(
 ) -> None:
     """Last year's transitory shock is read by nothing, so it is no state."""
     assert not any(
-        "hcc_transitory" in benchmark_model.state_names(regime_name=name)
+        "lagged_hcc_transitory" in benchmark_model.state_names(regime_name=name)
         for name in benchmark_model.user_regimes
     )
 
@@ -92,6 +92,6 @@ def test_value_falls_with_lagged_persistent_shock(
     period_0_by_shock: dict[tuple[str, str], pd.Series],
 ) -> None:
     """A higher lagged persistent shock predicts higher costs and lowers value."""
-    low = period_0_by_shock["hcc_persistent", "low"]["value"]
-    high = period_0_by_shock["hcc_persistent", "high"]["value"]
+    low = period_0_by_shock["lagged_hcc_persistent", "low"]["value"]
+    high = period_0_by_shock["lagged_hcc_persistent", "high"]["value"]
     assert high < low

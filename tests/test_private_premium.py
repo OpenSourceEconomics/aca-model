@@ -150,7 +150,7 @@ def test_predicted_hcc_insurer_reads_age_marriage_health_cell() -> None:
         period=jnp.int32(1),
         is_married=jnp.int32(1),
         good_health=jnp.int32(0),
-        hcc_persistent=jnp.asarray(0.5),
+        lagged_hcc_persistent=jnp.asarray(0.5),
         predicted_hcc_insurer_table=table,
         hcc_persistent_grid=jnp.array([-1.0, 0.0, 1.0]),
     )

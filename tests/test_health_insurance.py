@@ -110,7 +110,7 @@ def test_predicted_hcc_insurer_on_grid() -> None:
         period=jnp.int32(0),
         is_married=jnp.int32(0),
         good_health=jnp.int32(1),
-        hcc_persistent=jnp.array(0.0),
+        lagged_hcc_persistent=jnp.array(0.0),
         predicted_hcc_insurer_table=TABLE,
         hcc_persistent_grid=GRID,
     )
@@ -122,7 +122,7 @@ def test_predicted_hcc_insurer_off_grid() -> None:
         period=jnp.int32(0),
         is_married=jnp.int32(0),
         good_health=jnp.int32(1),
-        hcc_persistent=jnp.array(-0.5),
+        lagged_hcc_persistent=jnp.array(-0.5),
         predicted_hcc_insurer_table=TABLE,
         hcc_persistent_grid=GRID,
     )

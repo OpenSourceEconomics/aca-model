@@ -997,8 +997,8 @@ def build_model_states(grids: Grids) -> dict:
             solve=pensions.wealth,
             simulate=grids.pension_wealth,
         ),
-        "hcc_persistent": grids.hcc_persistent,
-        "hcc_transitory": grids.hcc_transitory,
+        "lagged_hcc_persistent": grids.hcc_persistent,
+        "lagged_hcc_transitory": grids.hcc_transitory,
         "spousal_income": DiscreteGrid(
             SpousalIncome,
         ),
