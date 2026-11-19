@@ -10,6 +10,7 @@ from lcm import (
     PiecewiseLinSpacedGrid,
     RouwenhorstAR1Process,
 )
+from lcm.solvers import GridSearch
 
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.regimes import REGIME_SPECS
@@ -238,3 +239,17 @@ def test_benchmark_regimes_hold_no_law_args() -> None:
         if arg in fixed_params[name]
     ]
     assert leftovers == []
+
+
+@pytest.mark.parametrize("lottery_contraction", [False, True])
+def test_benchmark_regimes_search_grids_with_the_requested_lottery_contraction(
+    lottery_contraction: bool,
+) -> None:
+    """Every benchmark regime solves by grid search with the requested contraction."""
+    model = create_benchmark_model(
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        lottery_contraction=lottery_contraction,
+    )
+    assert {regime.solver for regime in model.user_regimes.values()} == {
+        GridSearch(lottery_contraction=lottery_contraction)
+    }

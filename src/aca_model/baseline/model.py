@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from lcm import AgeGrid, DiscreteGrid, ExecutionConfig, InitialNodes, Model
+from lcm.solvers import GridSearch
 from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import (
@@ -38,6 +39,7 @@ def create_model(
     consumption_dollars_points: tuple[float, ...] | None = None,
     execution_config: ExecutionConfig | None = None,
     initial_nodes: InitialNodes = INITIAL_NODES,
+    lottery_contraction: bool = False,
 ) -> Model:
     """Create the baseline structural retirement model.
 
@@ -77,6 +79,8 @@ def create_model(
         initial_nodes: Admissible starting `(age, regime)` pairs. The default
             admits the estimation sample's entry ages and regimes; pass
             `build_restart_initial_nodes` to restart simulations mid-life.
+        lottery_contraction: Whether grid-search regimes take the expectation
+            over eligible draws once per kernel call; see `GridSearch`.
 
     Returns:
         A pylcm Model with 19 regimes (18 non-terminal + dead) spanning
@@ -96,6 +100,13 @@ def create_model(
         solver=solver,
         consumption_dollars_points=consumption_dollars_points,
     )
+    if lottery_contraction:
+        regimes = {
+            name: regime.replace(solver=GridSearch(lottery_contraction=True))
+            if isinstance(regime.solver, GridSearch)
+            else regime
+            for name, regime in regimes.items()
+        }
     model_slots = build_model_slots(
         grid_config=grid_config,
         fixed_params=fixed_params,

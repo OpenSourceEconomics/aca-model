@@ -69,6 +69,7 @@ def create_benchmark_model(
     grid_config: GridConfig = BENCHMARK_GRID_CONFIG,
     execution_config: ExecutionConfig | None = None,
     initial_nodes: InitialNodes = INITIAL_NODES,
+    lottery_contraction: bool = False,
 ) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 
@@ -83,6 +84,7 @@ def create_benchmark_model(
             device-memory budget; CPU construction remains unbudgeted.
         initial_nodes: Admissible starting `(age, regime)` pairs, forwarded
             to `create_model`.
+        lottery_contraction: Forwarded to `create_model`.
     """
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     return create_model(
@@ -93,6 +95,7 @@ def create_benchmark_model(
         pref_type_grid=pref_type_grid,
         execution_config=execution_config,
         initial_nodes=initial_nodes,
+        lottery_contraction=lottery_contraction,
     )
 
 
