@@ -235,26 +235,20 @@ def private_premium_intercept(
     `[-50000, 10000]` finds the root. Without a sign change on the bracket
     the result is NaN, so an unpriceable slope `b` fails loudly downstream.
     """
-    slope = premium_predicted_hcc * (1.0 + premium_markup)
-    minimum = premium_minimum[premium_sample_is_married]
-    target = (1.0 + premium_markup) * jnp.mean(premium_sample_insurer_cost)
-
-    def excess_revenue(intercept: FloatND) -> FloatND:
-        premiums = jnp.maximum(minimum, intercept + slope * premium_sample_insurer_cost)
-        return jnp.mean(premiums) - target
-
-    def halve(
-        _: jax.Array, bracket: tuple[FloatND, FloatND]
-    ) -> tuple[FloatND, FloatND]:
-        low, high = bracket
-        mid = 0.5 * (low + high)
-        too_high = excess_revenue(mid) > 0.0
-        return jnp.where(too_high, low, mid), jnp.where(too_high, mid, high)
-
+    sample = (
+        premium_predicted_hcc * (1.0 + premium_markup),
+        premium_minimum[premium_sample_is_married],
+        premium_sample_insurer_cost,
+        (1.0 + premium_markup) * jnp.mean(premium_sample_insurer_cost),
+    )
     low0 = jnp.asarray(_INTERCEPT_BRACKET[0])
     high0 = jnp.asarray(_INTERCEPT_BRACKET[1])
-    low, high = jax.lax.fori_loop(0, _N_INTERCEPT_BISECTIONS, halve, (low0, high0))
-    bracketed = (excess_revenue(low0) <= 0.0) & (excess_revenue(high0) >= 0.0)
+    low, high, _ = jax.lax.fori_loop(
+        0, _N_INTERCEPT_BISECTIONS, _halve, (low0, high0, sample)
+    )
+    bracketed = (_excess_revenue(intercept=low0, sample=sample) <= 0.0) & (
+        _excess_revenue(intercept=high0, sample=sample) >= 0.0
+    )
     return jnp.where(bracketed, 0.5 * (low + high), jnp.nan)
 
 
@@ -600,3 +594,32 @@ def total_costs(
         + log_std[period, is_married, good_health]
         * (next_hcc_persistent * std_xsect_persistent + next_hcc_transitory * std_trans)
     )
+
+
+def _excess_revenue(
+    *, intercept: FloatND, sample: tuple[FloatND, FloatND, FloatND, FloatND]
+) -> FloatND:
+    """Mean premium revenue at `intercept` less the zero-profit target.
+
+    `sample` holds the premium slope on insurer cost, each sampled buyer's
+    premium floor, each buyer's expected insurer cost, and the required mean
+    revenue, in that order.
+    """
+    slope, minimum, cost, target = sample
+    return jnp.mean(jnp.maximum(minimum, intercept + slope * cost)) - target
+
+
+# keyword-only-exempt: library-callback=jax.lax.fori_loop
+def _halve(
+    _: jax.Array,
+    carry: tuple[FloatND, FloatND, tuple[FloatND, FloatND, FloatND, FloatND]],
+) -> tuple[FloatND, FloatND, tuple[FloatND, FloatND, FloatND, FloatND]]:
+    """Halve the bracket towards the zero-profit intercept.
+
+    A module-level body with its operands in the carry lets every call reuse
+    one traced loop instead of tracing a fresh closure.
+    """
+    low, high, sample = carry
+    mid = 0.5 * (low + high)
+    too_high = _excess_revenue(intercept=mid, sample=sample) > 0.0
+    return jnp.where(too_high, low, mid), jnp.where(too_high, mid, high), sample

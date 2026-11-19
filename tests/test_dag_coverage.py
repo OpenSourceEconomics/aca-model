@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 import pandas as pd
 import pytest
-from helpers.model import make_baseline_model
+from lcm import Model
 from lcm.exceptions import InvalidInitialConditionsError
 
 from aca_model.baseline.regimes import ENTRY_REGIMES, REGIME_SPECS
@@ -14,8 +14,8 @@ from aca_model.simulation import select_admissible_starts
 
 
 @pytest.fixture(scope="module")
-def model():
-    return make_baseline_model()
+def model(baseline_model: Model) -> Model:
+    return baseline_model
 
 
 def test_initial_nodes_are_the_age_51_to_60_entry_regimes(model):
@@ -134,10 +134,13 @@ def test_select_admissible_starts_drops_starts_at_61_and_above(model):
 
 
 def test_medical_cost_draws_keep_living_states_without_choice_constraints(model):
-    """Living regimes carry medical shocks; bequests depend only on assets and type."""
+    """Living regimes carry the persistent medical shock as a state; the transitory
+    one is read only as its next-period draw. Bequests depend only on assets and type.
+    """
     for name, regime in model.user_regimes.items():
         assert "medical_cost_shocks_carried" not in regime.constraints
         if name == "dead":
             assert set(regime.states) == {"assets", "pref_type"}
         else:
-            assert {"hcc_persistent", "hcc_transitory"} <= set(regime.states)
+            assert "hcc_persistent" in regime.states
+            assert "hcc_transitory" not in regime.states

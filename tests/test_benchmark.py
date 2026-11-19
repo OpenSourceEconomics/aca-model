@@ -2,13 +2,16 @@
 
 import numpy as np
 import pytest
+from _lcm.simulation.additional_targets import _collect_all_available_targets
 from lcm import (
     DiscreteGrid,
     GridBreakpoint,
     IrregSpacedGrid,
+    Model,
     PiecewiseLinSpacedGrid,
     RouwenhorstAR1Process,
 )
+from lcm.solvers import GridSearch
 
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline.regimes import REGIME_SPECS
@@ -19,11 +22,11 @@ from aca_model.benchmark import (
 )
 
 
-def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
+def test_benchmark_model_builds_with_the_current_pylcm_grid_api(
+    benchmark_model: Model,
+) -> None:
     """The frozen benchmark preserves its state and action grid extents."""
-    model = create_benchmark_model(
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-    )
+    model = benchmark_model
 
     aime = model.user_regimes["retiree_nomc_inelig_canwork"].states["aime"]
     assert isinstance(aime, PiecewiseLinSpacedGrid)
@@ -47,12 +50,18 @@ def test_benchmark_model_builds_with_the_current_pylcm_grid_api() -> None:
     assert consumption.n_points == 5
 
 
-@pytest.mark.long_running
-def test_benchmark_model_simulates_end_to_end() -> None:
-    n_subjects = 20
+def test_benchmark_model_with_final_age_53_has_three_periods() -> None:
+    """Ages 51, 52 and 53 make three periods; everybody is dead at 53."""
     model = create_benchmark_model(
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType), final_age=53
     )
+    assert model.n_periods == 3
+
+
+@pytest.mark.long_running
+def test_benchmark_model_simulates_end_to_end(benchmark_model: Model) -> None:
+    n_subjects = 20
+    model = benchmark_model
     _, _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
         model=model, n_subjects=n_subjects, seed=0
@@ -72,7 +81,9 @@ def test_benchmark_model_simulates_end_to_end() -> None:
 
 
 @pytest.mark.long_running
-def test_benchmark_panel_exposes_hic_premium_and_wage_targets() -> None:
+def test_benchmark_panel_exposes_hic_premium_and_wage_targets(
+    benchmark_model: Model,
+) -> None:
     """`hic_premium` and `wage` are computable simulate targets.
 
     The MSM estimation matches `hic_private_premium_*` and `wage_growth_*`
@@ -83,9 +94,7 @@ def test_benchmark_panel_exposes_hic_premium_and_wage_targets() -> None:
     target get NaN, alive/worker rows carry a finite value.
     """
     n_subjects = 20
-    model = create_benchmark_model(
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-    )
+    model = benchmark_model
     _, _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
         model=model, n_subjects=n_subjects, seed=0
@@ -112,8 +121,28 @@ def test_benchmark_panel_exposes_hic_premium_and_wage_targets() -> None:
     assert (defined_wage > 0).all()
 
 
+def test_benchmark_model_offers_uncompensated_care_targets(
+    benchmark_model: Model,
+) -> None:
+    """Transfers, the floor and the health-cost covariates can be added to the panel.
+
+    Uncompensated care is the part of `transfers` above
+    `consumption_dollars_floor`. Total health costs depend on the next period's
+    shocks, so they are rebuilt from `is_married`, `good_health` and the shock
+    states rather than offered as a target.
+    """
+    model = benchmark_model
+    available = _collect_all_available_targets(model._regimes)  # noqa: SLF001
+    assert {
+        "transfers",
+        "consumption_dollars_floor",
+        "is_married",
+        "good_health",
+    } <= available
+
+
 @pytest.mark.long_running
-def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
+def test_benchmark_simulate_obeys_borrowing_constraint(benchmark_model: Model) -> None:
     """`consumption_dollars <= max(cash_on_hand, floor)` holds for every alive row.
 
     The simulator only ever picks feasible actions — the borrowing
@@ -144,9 +173,7 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     consumption point, not the floor.
     """
     n_subjects = 4
-    model = create_benchmark_model(
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-    )
+    model = benchmark_model
     _, _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
         model=model, n_subjects=n_subjects, seed=0
@@ -170,9 +197,11 @@ def test_benchmark_simulate_obeys_borrowing_constraint() -> None:
     )
 
 
-def test_initial_conditions_choose_population_size_after_model_construction() -> None:
+def test_initial_conditions_choose_population_size_after_model_construction(
+    benchmark_model: Model,
+) -> None:
     """One model supports reproducible initial conditions with different row counts."""
-    model = create_benchmark_model(pref_type_grid=DiscreteGrid(BenchmarkPrefType))
+    model = benchmark_model
     small = get_benchmark_initial_conditions(model=model, n_subjects=2, seed=17)
     repeated = get_benchmark_initial_conditions(model=model, n_subjects=2, seed=17)
     large = get_benchmark_initial_conditions(model=model, n_subjects=5, seed=17)
@@ -219,3 +248,18 @@ def test_benchmark_regimes_hold_no_law_args() -> None:
         if arg in fixed_params[name]
     ]
     assert leftovers == []
+
+
+@pytest.mark.parametrize("lottery_contraction", [False, True])
+def test_benchmark_regimes_search_grids_with_the_requested_lottery_contraction(
+    lottery_contraction: bool,
+) -> None:
+    """Every benchmark regime solves by grid search with the requested contraction."""
+    model = create_benchmark_model(
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        final_age=53,
+        lottery_contraction=lottery_contraction,
+    )
+    assert {regime.solver for regime in model.user_regimes.values()} == {
+        GridSearch(lottery_contraction=lottery_contraction)
+    }

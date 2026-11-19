@@ -19,11 +19,10 @@ import dataclasses
 
 import numpy as np
 import pytest
-from helpers.model import _DERIVED_CATEGORICALS
 from lcm import DiscreteGrid
 
 from aca_model.agent.preferences import BenchmarkPrefType
-from aca_model.baseline.model import create_model
+from aca_model.baseline.model import build_model_spec, create_model
 from aca_model.baseline.regimes import SolverName
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
@@ -35,12 +34,14 @@ def _solve_m1(solver: SolverName) -> dict[int, np.ndarray]:
     grid_config = dataclasses.replace(BENCHMARK_GRID_CONFIG, nbegm_jump_read="bridged")
     fixed_params, wage_params, _ = get_benchmark_params(model=None)
     model = create_model(
+        spec=build_model_spec(
+            pia_aime_grid=fixed_params["pia_aime_grid"],
+            wage_params=wage_params,
+            grid_config=grid_config,
+            pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+            solver=solver,
+        ),
         fixed_params=fixed_params,
-        wage_params=wage_params,
-        derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=grid_config,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver=solver,
     )
     _, _, params = get_benchmark_params(model=model)
     solution = model.solve(params=params, log_level="off")

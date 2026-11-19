@@ -1,25 +1,46 @@
-"""Model factories expose pylcm's execution policy without changing economic grids."""
+"""Model factories forward pylcm's generic options without changing economic grids."""
 
 from functools import partial
-from types import SimpleNamespace
 
 import jax
 import pytest
 from helpers.model import aca_fixed_params
-from lcm import DiscreteGrid, ExecutionConfig
+from lcm import DiscreteGrid, ExecutionConfig, InitialNodes
 from lcm.exceptions import ExecutionPlanningError
 
-from aca_model.aca import model as aca_model_module
 from aca_model.aca.health_insurance import PolicyVariant
-from aca_model.aca.model import create_model as create_aca_model
-from aca_model.agent.health import GoodHealth
-from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline import model as baseline_model_module
-from aca_model.baseline.health_insurance import HealthInsuranceState
-from aca_model.baseline.model import create_model
+from aca_model.baseline.model import build_model_spec, create_model
 from aca_model.benchmark import create_benchmark_model, get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG
+
+_DOMAIN_KEYS = frozenset(
+    {
+        "regimes",
+        "ages",
+        "regime_id_class",
+        "description",
+        "derived_categoricals",
+        "initial_nodes",
+        "edges",
+        "functions",
+        "constraints",
+        "states",
+        "state_transitions",
+    }
+)
+
+
+def _spec(*, policy: PolicyVariant | None = None) -> dict:
+    fixed_params, wage_params, _ = get_benchmark_params(model=None)
+    return build_model_spec(
+        policy=policy,
+        grid_config=BENCHMARK_GRID_CONFIG,
+        pia_aime_grid=fixed_params["pia_aime_grid"],
+        wage_params=wage_params,
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+    )
 
 
 def _factory(kind):
@@ -28,27 +49,19 @@ def _factory(kind):
             create_benchmark_model,
             pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         )
-    fixed_params, wage_params, _ = get_benchmark_params(model=None)
-    factory = create_model
-    if kind == "aca":
-        factory = partial(create_aca_model, policy=PolicyVariant.ACA)
-        fixed_params = aca_fixed_params(
-            fixed_params=fixed_params, policy=PolicyVariant.ACA
-        )
-    return partial(
-        factory,
-        fixed_params=fixed_params,
-        wage_params=wage_params,
-        derived_categoricals={
-            "good_health": DiscreteGrid(GoodHealth),
-            "is_married": DiscreteGrid(IsMarried),
-            "his": DiscreteGrid(HealthInsuranceState),
-            "target_his": DiscreteGrid(HealthInsuranceState),
-            "pref_type": DiscreteGrid(BenchmarkPrefType),
-        },
-        grid_config=BENCHMARK_GRID_CONFIG,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-    )
+    fixed_params, _, _ = get_benchmark_params(model=None)
+    policy = PolicyVariant.ACA if kind == "aca" else None
+    if policy is not None:
+        fixed_params = aca_fixed_params(fixed_params=fixed_params, policy=policy)
+    return partial(create_model, spec=_spec(policy=policy), fixed_params=fixed_params)
+
+
+@pytest.mark.parametrize("policy", [None, PolicyVariant.ACA])
+def test_build_model_spec_holds_exactly_the_domain_arguments(
+    policy: PolicyVariant | None,
+) -> None:
+    """The spec carries the model's domain and no generic `Model` option."""
+    assert set(_spec(policy=policy)) == _DOMAIN_KEYS
 
 
 @pytest.mark.parametrize("kind", ["baseline", "aca", "benchmark"])
@@ -73,48 +86,50 @@ def test_factory_preserves_axis_width_validation(kind):
         _factory(kind)(execution_config=config)
 
 
-@pytest.mark.parametrize("kind", ["baseline", "aca", "benchmark"])
-@pytest.mark.parametrize(
-    ("requested_policy", "expected_budget"),
-    [
-        (None, 800),
-        (
-            ExecutionConfig(
-                devices=(0,),
-                device_memory_bytes=400,
-                sharded_states=("pref_type",),
-                axis_widths={"cell": 32},
-            ),
-            400,
-        ),
-        (ExecutionConfig(devices=(0,)), ExecutionConfig().device_memory_bytes),
-    ],
-)
-def test_factory_supplies_the_requested_or_measured_budget(
-    monkeypatch, kind, requested_policy, expected_budget
-):
-    """Defaults use measured limits; explicit budgets and unbudgeted controls survive."""
-    factory = _factory(kind)
-    device = SimpleNamespace(
-        id=0, platform="gpu", memory_stats=lambda: {"bytes_limit": 800}
-    )
-    monkeypatch.setattr(jax, "devices", lambda: [device])
+class _ConstructionObservedError(Exception):
+    def __init__(self, kwargs: dict) -> None:
+        super().__init__()
+        self.kwargs = kwargs
 
-    class ConstructionObservedError(Exception):
-        pass
 
+def _observe_model_kwargs(monkeypatch, factory, **options) -> dict:
     def observe_pylcm_constructor(**kwargs):
-        policy = kwargs["execution_config"]
-        assert policy.device_memory_bytes == expected_budget
-        assert policy.devices == (0,)
-        if requested_policy is not None:
-            assert policy == requested_policy
-        raise ConstructionObservedError
+        raise _ConstructionObservedError(kwargs)
 
     monkeypatch.setattr(baseline_model_module, "Model", observe_pylcm_constructor)
-    monkeypatch.setattr(aca_model_module, "Model", observe_pylcm_constructor)
-    with pytest.raises(ConstructionObservedError):
-        factory(execution_config=requested_policy)
+    with pytest.raises(_ConstructionObservedError) as observed:
+        factory(**options)
+    return observed.value.kwargs
+
+
+@pytest.mark.parametrize("kind", ["baseline", "aca", "benchmark"])
+def test_factory_without_execution_config_leaves_pylcm_default(monkeypatch, kind):
+    """No execution policy reaches `Model`, so pylcm's device default applies."""
+    kwargs = _observe_model_kwargs(monkeypatch, _factory(kind))
+    assert "execution_config" not in kwargs
+
+
+@pytest.mark.parametrize("kind", ["baseline", "aca", "benchmark"])
+def test_factory_forwards_an_explicit_execution_config_unchanged(monkeypatch, kind):
+    """An explicit policy reaches `Model` as the same object."""
+    config = ExecutionConfig(devices=(0,), device_memory_bytes=400)
+    kwargs = _observe_model_kwargs(monkeypatch, _factory(kind), execution_config=config)
+    assert kwargs["execution_config"] is config
+
+
+@pytest.mark.parametrize("kind", ["baseline", "benchmark"])
+def test_factory_forwards_any_model_option(monkeypatch, kind):
+    """A generic `Model` option the spec does not hold is passed through."""
+    kwargs = _observe_model_kwargs(monkeypatch, _factory(kind), durable_identity=False)
+    assert kwargs["durable_identity"] is False
+
+
+@pytest.mark.parametrize("kind", ["baseline", "benchmark"])
+def test_factory_initial_nodes_override_the_entry_default(monkeypatch, kind):
+    """`initial_nodes` passed as an option replaces the spec's entry starts."""
+    nodes = InitialNodes(by_age={52: ("retiree_nomc_inelig_canwork",)})
+    kwargs = _observe_model_kwargs(monkeypatch, _factory(kind), initial_nodes=nodes)
+    assert kwargs["initial_nodes"] is nodes
 
 
 @pytest.mark.parametrize("kind", ["baseline", "aca", "benchmark"])

@@ -4,6 +4,7 @@ Savings gridpoints, cliff reads, and envelope arithmetic belong to the solver.
 Device placement and compiled program widths belong to the model execution policy.
 """
 
+import numpy as np
 from lcm import IrregSpacedGrid
 from lcm.solvers import NBEGM
 
@@ -17,7 +18,9 @@ def build_nbegm_solver(grids: Grids) -> NBEGM:
     assets_points = grids.assets.to_jax()
     savings_stop = float(assets_points[-1]) - float(assets_points[0])
     savings_grid = IrregSpacedGrid(
-        points=tuple(savings_stop * (i / (n_points - 1)) ** 3 for i in range(n_points)),
+        points=np.array(
+            [savings_stop * (i / (n_points - 1)) ** 3 for i in range(n_points)]
+        ),
     )
     return NBEGM(
         savings_grid=savings_grid,

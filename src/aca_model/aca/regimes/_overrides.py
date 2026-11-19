@@ -8,6 +8,7 @@ consuming functions that need them.
 
 from aca_model.aca import health_insurance as aca_hi
 from aca_model.aca.health_insurance import PolicyVariant
+from aca_model.baseline import health_insurance as baseline_hi
 from aca_model.baseline.regimes._common import RegimeSpec
 from aca_model.environment import taxes
 
@@ -55,6 +56,7 @@ def apply_aca_overrides(
     )
 
     if has_medicaid_expansion:
+        functions["aca_magi"] = baseline_hi.aca_magi
         functions["is_medicaid_eligible"] = aca_hi.is_medicaid_eligible
 
     if has_subsidies and spec["his"] == "nongroup" and spec["mc"] == "nomc":
@@ -64,8 +66,9 @@ def apply_aca_overrides(
         # dict, not a DAG function — no entry needed here.
         functions["plan_premium"] = aca_hi.community_rated_premium
         # The community-rated premium replaces the risk-rated one, so the
-        # risk-rated premium's zero-profit intercept has no consumer left.
+        # risk-rated inputs have no consumer left.
         functions.pop("private_premium_intercept", None)
+        functions.pop("predicted_hcc_insurer", None)
         functions["hic_premium_subsidy"] = aca_hi.premium_subsidy
         # Split at the bracket, which takes finitely many values, so the
         # out-of-pocket bill can be averaged per bracket.

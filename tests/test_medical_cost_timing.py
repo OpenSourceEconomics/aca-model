@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pytest
-from lcm import DiscreteGrid
+from lcm import DiscreteGrid, Model
 
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.benchmark import (
@@ -24,19 +24,38 @@ from aca_model.benchmark import (
 )
 from aca_model.config import BENCHMARK_GRID_CONFIG
 
-_SHOCKS = ("hcc_persistent", "hcc_transitory")
+_SHOCKS = ("hcc_persistent",)
+# Period 0's choices look one year ahead, so ages 51-53 (two living periods and
+# the age at which everybody is dead) carry the whole timing question.
+_FINAL_AGE = 53
+# The twins differ in the lagged persistent shock at its grid ends, so only its
+# grid keeps the benchmark resolution.
+# Every other grid is at the smallest size the model accepts, except that
+# consumption keeps an interior point above the two floors and below the cap,
+# so the consumption comparison still allows a choice that cash would move:
+# - assets: borrowing limit, zero and the top holding;
+# - AIME: two points per PIA segment;
+# - wage residual: two points.
+_GRID_CONFIG = replace(
+    BENCHMARK_GRID_CONFIG,
+    subtract_hcc_bill=False,
+    n_assets_gridpoints=3,
+    aime_points_per_segment=(2, 2, 2, 2),
+    n_consumption_dollars_gridpoints=4,
+    n_wage_res_gridpoints=2,
+)
 
 
 @pytest.fixture(scope="module")
 def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
     """Period-0 rows of twins that differ in one lagged shock, at its grid ends."""
-    grid_config = replace(
-        BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
-    )
+    grid_config = _GRID_CONFIG
     model = create_benchmark_model(
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType), grid_config=grid_config
+        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+        grid_config=grid_config,
+        final_age=_FINAL_AGE,
     )
-    _, _, params = get_benchmark_params(model=model)
+    _, _, params = get_benchmark_params(model=model, final_age=_FINAL_AGE)
     base = get_benchmark_initial_conditions(
         model=model, n_subjects=1, seed=0, grid_config=grid_config
     )
@@ -59,22 +78,14 @@ def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
     }
 
 
-def test_value_does_not_depend_on_lagged_transitory_shock(
-    period_0_by_shock: dict[tuple[str, str], pd.Series],
+def test_no_regime_carries_a_lagged_transitory_shock(
+    benchmark_model: Model,
 ) -> None:
-    """Twins differing only in last year's transitory shock have equal value."""
-    low = period_0_by_shock["hcc_transitory", "low"]["value"]
-    high = period_0_by_shock["hcc_transitory", "high"]["value"]
-    assert low == high
-
-
-def test_consumption_does_not_depend_on_lagged_transitory_shock(
-    period_0_by_shock: dict[tuple[str, str], pd.Series],
-) -> None:
-    """Twins differing only in last year's transitory shock consume the same."""
-    low = period_0_by_shock["hcc_transitory", "low"]["consumption_dollars"]
-    high = period_0_by_shock["hcc_transitory", "high"]["consumption_dollars"]
-    assert low == high
+    """Last year's transitory shock is read by nothing, so it is no state."""
+    assert not any(
+        "hcc_transitory" in benchmark_model.state_names(regime_name=name)
+        for name in benchmark_model.user_regimes
+    )
 
 
 def test_value_falls_with_lagged_persistent_shock(

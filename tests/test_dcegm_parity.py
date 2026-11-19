@@ -18,11 +18,8 @@ import pandas as pd
 import pytest
 from lcm import DiscreteGrid, Model
 
-from aca_model.agent.health import GoodHealth
-from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
-from aca_model.baseline.health_insurance import HealthInsuranceState
-from aca_model.baseline.model import SolverName, create_model
+from aca_model.baseline.model import SolverName, build_model_spec, create_model
 from aca_model.benchmark import (
     get_benchmark_consumption_dollars_points,
     get_benchmark_initial_conditions,
@@ -78,14 +75,6 @@ def _recorded_noise_floor() -> tuple[float, float, float]:
     )
 
 
-_DERIVED_CATEGORICALS = {
-    "good_health": DiscreteGrid(GoodHealth),
-    "is_married": DiscreteGrid(IsMarried),
-    "his": DiscreteGrid(HealthInsuranceState),
-    "target_his": DiscreteGrid(HealthInsuranceState),
-    "pref_type": DiscreteGrid(BenchmarkPrefType),
-}
-
 _DISCRETE_COLUMNS = ("regime_name", "claim_ss", "labor_supply", "buy_private")
 
 _XFAIL_UNTIL_DCEGM_ADMITS_THE_ACA_BUDGET = pytest.mark.xfail(
@@ -114,13 +103,15 @@ def _make_model(*, solver: SolverName, grid_config: GridConfig) -> Model:
         else None
     )
     return create_model(
+        spec=build_model_spec(
+            pia_aime_grid=fixed_params["pia_aime_grid"],
+            wage_params=wage_params,
+            grid_config=grid_config,
+            pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+            solver=solver,
+            consumption_dollars_points=consumption_dollars_points,
+        ),
         fixed_params=fixed_params,
-        wage_params=wage_params,
-        derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=grid_config,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver=solver,
-        consumption_dollars_points=consumption_dollars_points,
     )
 
 

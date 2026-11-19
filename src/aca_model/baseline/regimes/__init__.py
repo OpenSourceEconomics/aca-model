@@ -13,27 +13,29 @@ dedicated submodule. Shared definitions and builders live in _common.
 from collections.abc import Mapping
 from typing import Any
 
+from jax.typing import ArrayLike
 from lcm import DiscreteGrid, Regime, Transition
 from lcm.solvers import DCEGM, NBEGM
-from lcm.typing import UserParams
 
 from aca_model.baseline.regimes import _nongroup as nongroup
 from aca_model.baseline.regimes import _retiree as retiree
 from aca_model.baseline.regimes import _tied as tied
 from aca_model.baseline.regimes._common import (
     ENTRY_REGIMES,
-    INITIAL_NODES,
     REGIME_SPECS,
     Grids,
     RegimeId,
     SolverName,
     build_dead_regime,
+    build_entry_initial_nodes,
     build_grids,
     build_model_constraints,
     build_model_functions,
     build_model_state_transitions,
     build_model_states,
     build_restart_initial_nodes,
+    reachable_regimes,
+    select_horizon_params,
 )
 from aca_model.baseline.regimes._dcegm import build_dcegm_solver
 from aca_model.baseline.regimes._nbegm import build_nbegm_solver
@@ -41,15 +43,17 @@ from aca_model.config import GridConfig
 
 __all__ = [
     "ENTRY_REGIMES",
-    "INITIAL_NODES",
     "REGIME_SPECS",
     "RegimeId",
     "build_all_regimes",
+    "build_entry_initial_nodes",
     "build_model_slots",
     "build_regime",
     "build_restart_initial_nodes",
     "nongroup",
+    "reachable_regimes",
     "retiree",
+    "select_horizon_params",
     "tied",
 ]
 
@@ -90,7 +94,7 @@ def build_regime(
 def build_all_regimes(
     *,
     grid_config: GridConfig,
-    fixed_params: UserParams,
+    pia_aime_grid: ArrayLike,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
     solver: SolverName = "brute_force",
@@ -98,7 +102,7 @@ def build_all_regimes(
 ) -> dict[str, Regime]:
     """Build all 19 baseline regimes (18 non-terminal + dead).
 
-    `fixed_params` carries the PIA bends for the AIME piecewise grid;
+    `pia_aime_grid` holds the PIA bends for the AIME piecewise grid;
     `wage_params` sizes the assets-floor to `-max_annual_labor_income`;
     `pref_type_grid` selects the pref-type cardinality (production
     `DiscreteGrid(PrefType)` or the benchmark's 2-type variant);
@@ -109,7 +113,7 @@ def build_all_regimes(
     """
     grids = build_grids(
         grid_config=grid_config,
-        fixed_params=fixed_params,
+        pia_aime_grid=pia_aime_grid,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
         consumption_dollars_points=consumption_dollars_points,
@@ -131,28 +135,29 @@ def build_all_regimes(
 def build_model_slots(
     *,
     grid_config: GridConfig,
-    fixed_params: UserParams,
+    pia_aime_grid: ArrayLike,
     wage_params: Mapping[str, Any],
     pref_type_grid: DiscreteGrid,
+    ages: tuple[int, ...],
     solver: SolverName = "brute_force",
 ) -> dict[str, Any]:
     """Build the shared model topology and broadcast regime slots.
 
     Returns keyword arguments for `lcm.Model(...)`: the edges, functions,
     constraint, states, and laws of motion shared by all living regimes.
-    Both the baseline and the ACA `create_model` consume this — the ACA
-    overlay swaps only regime-level functions, so the broadcast slots are
-    policy-invariant. Under DC-EGM the solver-contract functions join the
+    The ACA overlay swaps only regime-level functions, so the broadcast slots
+    are policy-invariant. Under DC-EGM the solver-contract functions join the
     broadcast set; the borrowing constraint is declared under every solver.
+    `ages` is the model's age grid, which the edges' age schedules cover.
     """
     grids = build_grids(
         grid_config=grid_config,
-        fixed_params=fixed_params,
+        pia_aime_grid=pia_aime_grid,
         wage_params=wage_params,
         pref_type_grid=pref_type_grid,
     )
     return {
-        "edges": build_edges(),
+        "edges": build_edges(ages=ages),
         "functions": build_model_functions(solver=solver),
         "constraints": build_model_constraints(solver=solver),
         "states": build_model_states(grids),
@@ -160,13 +165,13 @@ def build_model_slots(
     }
 
 
-def build_edges() -> dict[str, Transition]:
+def build_edges(*, ages: tuple[int, ...]) -> dict[str, Transition]:
     """Declare each living regime's outgoing edges by their law.
 
     The law's age schedule names each destination at the source ages that reach
     it. `dead` has no outgoing edges and is therefore terminal.
     """
     return {
-        name: Transition(law=_HIS_LAWS[spec["his"]](name))
+        name: Transition(law=_HIS_LAWS[spec["his"]](name, ages=ages))
         for name, spec in REGIME_SPECS.items()
     }

@@ -29,15 +29,17 @@ import cloudpickle
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
-from lcm import DiscreteGrid, ExecutionConfig, InitialNodes, Model
+from lcm import DiscreteGrid, Model
 
-from aca_model.agent.health import GoodHealth
-from aca_model.agent.labor_market import IsMarried
 from aca_model.agent.preferences import BenchmarkPrefType
-from aca_model.baseline.health_insurance import HealthInsuranceState
-from aca_model.baseline.model import create_model
-from aca_model.baseline.regimes import ENTRY_REGIMES, INITIAL_NODES
-from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
+from aca_model.baseline.model import build_model_spec, create_model
+from aca_model.baseline.regimes import ENTRY_REGIMES, select_horizon_params
+from aca_model.config import (
+    BENCHMARK_GRID_CONFIG,
+    MODEL_CONFIG,
+    GridConfig,
+    model_ages,
+)
 from aca_model.consumption_dollars_grid import (
     compute_consumption_dollars_points,
     inject_consumption_dollars_points,
@@ -50,14 +52,6 @@ _PARAMS_FILE = (
 
 _N_BENCHMARK_PREF_TYPES = len(DiscreteGrid(BenchmarkPrefType).categories)
 
-_DERIVED_CATEGORICALS = {
-    "good_health": DiscreteGrid(GoodHealth),
-    "is_married": DiscreteGrid(IsMarried),
-    "his": DiscreteGrid(HealthInsuranceState),
-    "target_his": DiscreteGrid(HealthInsuranceState),
-    "pref_type": DiscreteGrid(BenchmarkPrefType),
-}
-
 # The five entry regimes (inelig + canwork). All have
 # HealthWithDisability (3-state); four have lagged_labor_supply (tied
 # does not — it's implied by the regime).
@@ -67,8 +61,9 @@ def create_benchmark_model(
     *,
     pref_type_grid: DiscreteGrid,
     grid_config: GridConfig = BENCHMARK_GRID_CONFIG,
-    execution_config: ExecutionConfig | None = None,
-    initial_nodes: InitialNodes = INITIAL_NODES,
+    final_age: int = MODEL_CONFIG.end_age,
+    lottery_contraction: bool = False,
+    **model_options: Any,
 ) -> Model:
     """Create the aca baseline with `BENCHMARK_GRID_CONFIG` and frozen fixed_params.
 
@@ -77,27 +72,30 @@ def create_benchmark_model(
 
     Args:
         pref_type_grid: Pref-type grid; pass `DiscreteGrid(BenchmarkPrefType)`.
-        grid_config: Economic resolution and medical-shock folding declarations.
-        execution_config: Explicit hardware-local policy forwarded unchanged.
-            None uses the smallest selected accelerator allocator limit as the
-            device-memory budget; CPU construction remains unbudgeted.
-        initial_nodes: Admissible starting `(age, regime)` pairs, forwarded
-            to `create_model`.
+        grid_config: Economic resolution and numerical choices.
+        final_age: First age at which everybody is dead, forwarded to
+            `build_model_spec` and `get_benchmark_params`. The default is the
+            full horizon; the frozen age-indexed parameters cover it, and a
+            shorter horizon reads a prefix of them.
+        lottery_contraction: Forwarded to `build_model_spec`.
+        **model_options: Generic `lcm.Model` options forwarded to
+            `create_model`, e.g. `execution_config` or an `initial_nodes`
+            override.
     """
-    fixed_params, wage_params, _ = get_benchmark_params(model=None)
-    return create_model(
+    fixed_params, wage_params, _ = get_benchmark_params(model=None, final_age=final_age)
+    spec = build_model_spec(
         grid_config=grid_config,
-        fixed_params=fixed_params,
+        pia_aime_grid=fixed_params["pia_aime_grid"],
         wage_params=wage_params,
-        derived_categoricals=_DERIVED_CATEGORICALS,
         pref_type_grid=pref_type_grid,
-        execution_config=execution_config,
-        initial_nodes=initial_nodes,
+        final_age=final_age,
+        lottery_contraction=lottery_contraction,
     )
+    return create_model(spec=spec, fixed_params=fixed_params, **model_options)
 
 
 def get_benchmark_params(
-    *, model: Model | None
+    *, model: Model | None, final_age: int = MODEL_CONFIG.end_age
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Load the frozen `(fixed_params, wage_params, params)` snapshot.
 
@@ -112,6 +110,9 @@ def get_benchmark_params(
     to skip injection (e.g. when constructing the model with
     `fixed_params`).
 
+    `fixed_params` and `params` hold only what a model ending at `final_age`
+    reads (`select_horizon_params`); pass the same `final_age` as the model's.
+
     The regime-transition law arguments (`survival_probs`,
     `prob_disabled_next`) are returned under `fixed_params["edges"][source]`,
     where pylcm looks for the parameters of edge-declared callables.
@@ -122,6 +123,8 @@ def get_benchmark_params(
     wage_params = data["wage_params"]
     params = data["params"]
     max_consumption_dollars = float(fixed_params.pop("max_consumption_dollars"))
+    ages = model_ages(final_age=final_age)
+    fixed_params = select_horizon_params(params=fixed_params, ages=ages)
     if model is not None:
         params = inject_consumption_dollars_points(
             params=params,
@@ -129,7 +132,7 @@ def get_benchmark_params(
             max_consumption_dollars=max_consumption_dollars,
         )
         params = inject_consumption_floor_schedule(params=params, model=model)
-    return fixed_params, wage_params, params
+    return fixed_params, wage_params, select_horizon_params(params=params, ages=ages)
 
 
 def get_benchmark_consumption_dollars_points(*, n_points: int) -> tuple[float, ...]:
@@ -140,7 +143,7 @@ def get_benchmark_consumption_dollars_points(*, n_points: int) -> tuple[float, .
     snapshot's `consumption_equiv_floor` / `exponent` /
     `max_consumption_dollars`. DC-EGM builds need the continuous-action
     grid at model construction, so the points are passed to
-    `create_model(consumption_dollars_points=...)` instead of injected
+    `build_model_spec(consumption_dollars_points=...)` instead of injected
     into params.
     """
     with _PARAMS_FILE.open("rb") as fh:
@@ -188,7 +191,7 @@ def get_benchmark_initial_conditions(
     aime_lo, aime_hi = float(aime_pts.min()), float(aime_pts.max())
     hcc_p_pts = np.asarray(grids["hcc_persistent"].to_jax())  # ty: ignore[unresolved-attribute]
     hcc_t_grid = grids.get("hcc_transitory")
-    # Preserve the random stream for shared states when the folded state is absent.
+    # Preserve the random stream for shared states; the transitory shock is no state.
     hcc_t_pts = (
         np.asarray(hcc_t_grid.to_jax())  # ty: ignore[unresolved-attribute]
         if hcc_t_grid is not None

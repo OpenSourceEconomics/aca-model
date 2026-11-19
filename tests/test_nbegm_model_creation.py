@@ -17,19 +17,18 @@ from collections.abc import Mapping
 from typing import cast
 
 import pytest
-from helpers.model import _DERIVED_CATEGORICALS, aca_fixed_params
+from helpers.model import aca_fixed_params
 from lcm import DiscreteGrid, Model, Regime
 from lcm.consumption_savings_regime import ConsumptionSavingsRegime, LiquidMargin
 from lcm.exceptions import RegimeInitializationError
 from lcm.solvers import NBEGM
 
 from aca_model.aca import PolicyVariant
-from aca_model.aca.model import create_model as create_aca_model
 from aca_model.aca.regimes import build_all_regimes as build_all_aca_regimes
 from aca_model.agent import assets_and_income
 from aca_model.agent.preferences import BenchmarkPrefType
 from aca_model.baseline import health_insurance
-from aca_model.baseline.model import create_model
+from aca_model.baseline.model import build_model_spec, create_model
 from aca_model.baseline.regimes import (
     REGIME_SPECS,
     SolverName,
@@ -40,14 +39,14 @@ from aca_model.baseline.regimes._nbegm import build_nbegm_solver
 from aca_model.benchmark import get_benchmark_params
 from aca_model.config import BENCHMARK_GRID_CONFIG, GridConfig
 
+# NB-EGM is not a production solver; its wiring checks build the full model.
+pytestmark = pytest.mark.long_running
+
 _FIXED_PARAMS, _WAGE_PARAMS, _ = get_benchmark_params(model=None)
 
-# pylcm folds a shock state only under grid search, and the EGM solvers take the
-# savings-form asset law, so the transitory medical-cost shock stays a state and
-# the bill stays inside `next_assets`.
-_EGM_GRID_CONFIG = dataclasses.replace(
-    BENCHMARK_GRID_CONFIG, fold_hcc_transitory=False, subtract_hcc_bill=False
-)
+# The EGM solvers take the savings-form asset law, so the bill stays inside
+# `next_assets`; the transitory medical-cost shock is read only as its draw.
+_EGM_GRID_CONFIG = dataclasses.replace(BENCHMARK_GRID_CONFIG, subtract_hcc_bill=False)
 
 _M1_REGIME = "nongroup_nomc_inelig_canwork"
 _BRUTE_REGIME = "retiree_nomc_inelig_canwork"
@@ -62,7 +61,7 @@ _BRIDGED_GRID_CONFIG = dataclasses.replace(_EGM_GRID_CONFIG, nbegm_jump_read="br
 def _build_regimes(solver: SolverName) -> dict[str, Regime]:
     return build_all_regimes(
         grid_config=_EGM_GRID_CONFIG,
-        fixed_params=_FIXED_PARAMS,
+        pia_aime_grid=_FIXED_PARAMS["pia_aime_grid"],
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver=solver,
@@ -71,12 +70,14 @@ def _build_regimes(solver: SolverName) -> dict[str, Regime]:
 
 def _build_model_with(solver: SolverName, grid_config: GridConfig) -> Model:
     return create_model(
+        spec=build_model_spec(
+            pia_aime_grid=_FIXED_PARAMS["pia_aime_grid"],
+            wage_params=_WAGE_PARAMS,
+            grid_config=grid_config,
+            pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+            solver=solver,
+        ),
         fixed_params=_FIXED_PARAMS,
-        wage_params=_WAGE_PARAMS,
-        derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=grid_config,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver=solver,
     )
 
 
@@ -87,7 +88,7 @@ def _build_model(solver: SolverName) -> Model:
 def _grids() -> Grids:
     return build_grids(
         grid_config=_EGM_GRID_CONFIG,
-        fixed_params=_FIXED_PARAMS,
+        pia_aime_grid=_FIXED_PARAMS["pia_aime_grid"],
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
@@ -143,7 +144,7 @@ def test_build_nbegm_solver_forwards_the_jump_read_mode() -> None:
     grid_config = dataclasses.replace(_EGM_GRID_CONFIG, nbegm_jump_read="bridged")
     grids = build_grids(
         grid_config=grid_config,
-        fixed_params=_FIXED_PARAMS,
+        pia_aime_grid=_FIXED_PARAMS["pia_aime_grid"],
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
     )
@@ -303,20 +304,22 @@ def test_nbegm_builds_every_aca_policy_variant(policy: PolicyVariant) -> None:
     the solver and both discrete choices live — the overlay's function swaps
     compose with the branch compiler's per-regime wiring."""
     grid_config = _BRIDGED_GRID_CONFIG
-    model = create_aca_model(
-        policy=policy,
+    model = create_model(
+        spec=build_model_spec(
+            pia_aime_grid=_FIXED_PARAMS["pia_aime_grid"],
+            policy=policy,
+            wage_params=_WAGE_PARAMS,
+            grid_config=grid_config,
+            pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+            solver="nbegm",
+        ),
         fixed_params=aca_fixed_params(fixed_params=_FIXED_PARAMS, policy=policy),
-        wage_params=_WAGE_PARAMS,
-        derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=grid_config,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver="nbegm",
     )
     assert isinstance(model, Model)
     regimes = build_all_aca_regimes(
         policy=policy,
         grid_config=grid_config,
-        fixed_params=_FIXED_PARAMS,
+        pia_aime_grid=_FIXED_PARAMS["pia_aime_grid"],
         wage_params=_WAGE_PARAMS,
         pref_type_grid=DiscreteGrid(BenchmarkPrefType),
         solver="nbegm",
@@ -336,14 +339,16 @@ def test_nbegm_aca_variants_leave_no_free_buy_private_params(
     `*__buy_private` entry the pipeline cannot supply.
     """
     grid_config = _BRIDGED_GRID_CONFIG
-    model = create_aca_model(
-        policy=policy,
+    model = create_model(
+        spec=build_model_spec(
+            pia_aime_grid=_FIXED_PARAMS["pia_aime_grid"],
+            policy=policy,
+            wage_params=_WAGE_PARAMS,
+            grid_config=grid_config,
+            pref_type_grid=DiscreteGrid(BenchmarkPrefType),
+            solver="nbegm",
+        ),
         fixed_params=aca_fixed_params(fixed_params=_FIXED_PARAMS, policy=policy),
-        wage_params=_WAGE_PARAMS,
-        derived_categoricals=_DERIVED_CATEGORICALS,
-        grid_config=grid_config,
-        pref_type_grid=DiscreteGrid(BenchmarkPrefType),
-        solver="nbegm",
     )
     template = model.get_params_template()
     offenders = [

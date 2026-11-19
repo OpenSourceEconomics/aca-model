@@ -27,7 +27,7 @@ from aca_model.baseline.regimes._retiree import (
     _make_transition_canwork as retiree_canwork,
 )
 from aca_model.baseline.regimes._tied import _make_transition_canwork as tied_canwork
-from aca_model.config import MODEL_CONFIG
+from aca_model.config import MODEL_AGES, MODEL_CONFIG
 
 N_PERIODS = MODEL_CONFIG.end_age - MODEL_CONFIG.start_age
 SURVIVAL = jnp.full((N_PERIODS, 3), 0.99)
@@ -40,7 +40,7 @@ PROB_DISABLED = HEALTH_TRANS[:, :, 0]
 
 def _nongroup_probs(regime: str, health_state: int, labor: int) -> jnp.ndarray:
     own, _ = make_targets(regime)
-    return nongroup_canwork(own=own)(
+    return nongroup_canwork(own=own, ages=MODEL_AGES)(
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(health_state),
@@ -112,7 +112,7 @@ def test_nongroup_transition_di_medicare_entry_and_exit(
 def test_retiree_transition_newly_disabled_non_worker_keeps_retiree_cover() -> None:
     """A retiree who stops working and becomes disabled holds EPHI-Medicare."""
     own, ng = make_targets("retiree_nomc_inelig_canwork")
-    probs = retiree_canwork(own=own, ng=ng)(
+    probs = retiree_canwork(own=own, ng=ng, ages=MODEL_AGES)(
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(HealthWithDisability.good),
@@ -129,7 +129,7 @@ def test_retiree_transition_newly_disabled_non_worker_keeps_retiree_cover() -> N
 def test_tied_transition_newly_disabled_non_worker_moves_to_nongroup_medicare() -> None:
     """A tied worker who stops and becomes disabled moves to non-group Medicare."""
     own, ng = make_targets("tied_nomc_inelig_canwork")
-    probs = tied_canwork(own=own, ng=ng)(
+    probs = tied_canwork(own=own, ng=ng, ages=MODEL_AGES)(
         age=jnp.int32(55),
         period=jnp.int32(4),
         health=jnp.int32(HealthWithDisability.bad),
