@@ -33,8 +33,10 @@ jobs:
       - name: Install pylcm at the supported API revision
         # Pinned by commit so a deleted or rewritten branch cannot break the
         # install; keep it compatible with the model's graph declarations.
+        # jax 0.12.1 makes pylcm refuse to fingerprint the model, so jax stays
+        # on the 0.12.0 series pylcm locks.
         run: >-
-          pip install "pylcm @
+          pip install "jax<0.12.1" "jaxlib<0.12.1" "pylcm @
           git+https://github.com/OpenSourceEconomics/pylcm.git@ce770fd5960813fe1debfc684b97ad2b92b66753"
       - name: Install aca-model with test deps
         run: pip install -e . pytest pdbp
