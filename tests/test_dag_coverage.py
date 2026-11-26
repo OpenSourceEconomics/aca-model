@@ -73,7 +73,7 @@ def test_simulate_rejects_starts_outside_the_entry_contract(model, age, regime):
 
 def test_boundary_targets_change_with_source_age(model):
     assert set(
-        model.graph.solution.targets(period=9, source="retiree_nomc_inelig_canwork")
+        model.graph.solution.targets(step=9, source="retiree_nomc_inelig_canwork")
     ) == {
         "retiree_nomc_inelig_canwork",
         "retiree_dimc_inelig_canwork",
@@ -82,7 +82,7 @@ def test_boundary_targets_change_with_source_age(model):
         "dead",
     }
     assert set(
-        model.graph.solution.targets(period=10, source="retiree_nomc_inelig_canwork")
+        model.graph.solution.targets(step=10, source="retiree_nomc_inelig_canwork")
     ) == {
         "retiree_nomc_choose_canwork",
         "retiree_dimc_choose_canwork",
@@ -108,7 +108,7 @@ def test_each_regime_law_reaches_exactly_its_declared_targets(model, regime):
 def test_bequest_continuation_is_not_removed(model):
     regime = model.user_regimes["retiree_oamc_forced_forcedout"]
     assert model.graph.solution.targets(
-        period=44, source="retiree_oamc_forced_forcedout"
+        step=44, source="retiree_oamc_forced_forcedout"
     ) == ("dead",)
     assert "consumption_dollars" in regime.actions
     assert (95, "retiree_oamc_forced_forcedout") in model.graph.nodes
