@@ -1,4 +1,4 @@
-"""Subjects at extreme negative assets must clear `validate_initial_conditions`.
+"""Agents at extreme negative assets must clear `validate_initial_conditions`.
 
 The transfer system (`agent.assets_and_income.transfers`) tops cash-on-hand
 to the household-$ consumption floor at any starting state, so the lowest
@@ -90,21 +90,21 @@ def test_borrowing_constraint_admits_floor_at_million_dollar_negative_cash() -> 
     assert admitted
 
 
-def test_extreme_negative_assets_subject_passes_validation(
+def test_extreme_negative_assets_agent_passes_validation(
     benchmark_model: Model,
 ) -> None:
-    """A subject placed at `assets = -1_000_000` clears initial-conditions validation.
+    """An agent placed at `assets = -1_000_000` clears initial-conditions validation.
 
     A large-but-reasonable negative value (very bad draws for both HCC shocks)
     should remain in the simulated population: the consumption floor /
     transfer system absorbs them, with `c = c_floor` always feasible.
     """
-    n_subjects = 1
+    n_agents = 1
     model = benchmark_model
     _, _, params = get_benchmark_params(model=model)
 
     initial_conditions = get_benchmark_initial_conditions(
-        model=model, n_subjects=n_subjects, seed=0
+        model=model, n_agents=n_agents, seed=0
     )
     initial_conditions = {
         **initial_conditions,

@@ -2,8 +2,8 @@
 
 The borrowing constraint in `agent.assets_and_income.borrowing_constraint`
 compares the lowest consumption_dollars action against
-`max(cash_on_hand, consumption_dollars_floor)`. For subjects with cash
-below the floor (large-negative-asset subjects, moderate-negative-asset
+`max(cash_on_hand, consumption_dollars_floor)`. For agents with cash
+below the floor (large-negative-asset agents, moderate-negative-asset
 retirees, etc.) this RHS collapses to exactly
 `consumption_dollars_floor`. The constraint is feasible iff the
 relevant household-floor gridpoint is `<= consumption_dollars_floor`.
@@ -19,7 +19,7 @@ on the consumption_dollars grid.
 point equals `start`, but XLA backends can drift by sub-ULP for some
 `(start, stop, n)` combinations (observed: CUDA, n=70, drift +2.27e-13).
 A positive drift above the floor flips the kink-boundary `<=` and
-rejects every action for the affected subjects.
+rejects every action for the affected agents.
 
 `compute_consumption_dollars_points` therefore prepends the singles'
 floor as `pts[0]`, runs `geomspace` from the married floor up to the

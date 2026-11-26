@@ -162,20 +162,20 @@ def get_benchmark_consumption_dollars_points(*, n_points: int) -> tuple[float, .
 def get_benchmark_initial_conditions(
     *,
     model: Model,
-    n_subjects: int,
+    n_agents: int,
     seed: int,
     grid_config: GridConfig = BENCHMARK_GRID_CONFIG,
 ) -> dict[str, Array]:
     """Draw random feasible initial conditions across five age-51 regimes.
 
-    Every subject gets a random regime from `ENTRY_REGIMES`; continuous
+    Every agent gets a random regime from `ENTRY_REGIMES`; continuous
     states are drawn uniformly over the regime's grid range, discrete states
-    uniformly over categories. States absent from a subject's regime are
+    uniformly over categories. States absent from an agent's regime are
     filled with 0 (pylcm ignores them for that regime).
     """
     rng = np.random.default_rng(seed)
     regime_ids = tuple(model.regime_names_to_ids[n] for n in ENTRY_REGIMES)
-    regime = rng.choice(regime_ids, size=n_subjects).astype(np.int32)
+    regime = rng.choice(regime_ids, size=n_agents).astype(np.int32)
 
     # Grid ranges come from any of the five regimes (shared structure).
     # Use to_jax() so the helper handles both LinSpacedGrid and
@@ -202,30 +202,30 @@ def get_benchmark_initial_conditions(
     # For lagged_labor_supply: 0 for tied rows (regime lacks the state),
     # random 0/1 for the others.
     tied_id = model.regime_names_to_ids["tied_nomc_inelig_canwork"]
-    lls = np.where(regime == tied_id, 0, rng.integers(0, 2, size=n_subjects)).astype(
+    lls = np.where(regime == tied_id, 0, rng.integers(0, 2, size=n_agents)).astype(
         np.int32
     )
 
     initial = {
         "regime_id": jnp.asarray(regime),
-        "age": jnp.full(n_subjects, 51.0),
-        "assets": jnp.asarray(rng.uniform(assets_lo, assets_hi, n_subjects)),
-        "aime": jnp.asarray(rng.uniform(aime_lo, aime_hi, n_subjects)),
+        "age": jnp.full(n_agents, 51.0),
+        "assets": jnp.asarray(rng.uniform(assets_lo, assets_hi, n_agents)),
+        "aime": jnp.asarray(rng.uniform(aime_lo, aime_hi, n_agents)),
         # pension_wealth is a carried state seeded as the agent's true
         # pension wealth; the synthetic benchmark draws a modest positive stock.
-        "pension_wealth": jnp.asarray(rng.uniform(0.0, 200_000.0, n_subjects)),
-        "health": jnp.asarray(rng.integers(0, 3, n_subjects).astype(np.int32)),
-        "lagged_hcc_persistent": jnp.asarray(rng.choice(hcc_p_pts, n_subjects)),
-        "lagged_hcc_transitory": jnp.asarray(rng.choice(hcc_t_pts, n_subjects)),
-        "spousal_income": jnp.asarray(rng.integers(0, 3, n_subjects).astype(np.int32)),
+        "pension_wealth": jnp.asarray(rng.uniform(0.0, 200_000.0, n_agents)),
+        "health": jnp.asarray(rng.integers(0, 3, n_agents).astype(np.int32)),
+        "lagged_hcc_persistent": jnp.asarray(rng.choice(hcc_p_pts, n_agents)),
+        "lagged_hcc_transitory": jnp.asarray(rng.choice(hcc_t_pts, n_agents)),
+        "spousal_income": jnp.asarray(rng.integers(0, 3, n_agents).astype(np.int32)),
         "pref_type": jnp.asarray(
-            rng.integers(0, _N_BENCHMARK_PREF_TYPES, n_subjects).astype(np.int32)
+            rng.integers(0, _N_BENCHMARK_PREF_TYPES, n_agents).astype(np.int32)
         ),
-        "log_ft_wage_res": jnp.asarray(rng.choice(wage_res_pts, n_subjects)),
+        "log_ft_wage_res": jnp.asarray(rng.choice(wage_res_pts, n_agents)),
         "lagged_labor_supply": jnp.asarray(lls),
         # claimed_ss is required by non-initial regimes (ss="choose");
         # everyone starts as not-yet-claimed.
-        "claimed_ss": jnp.zeros(n_subjects, dtype=jnp.int32),
+        "claimed_ss": jnp.zeros(n_agents, dtype=jnp.int32),
     }
     if "lagged_hcc_transitory" not in model.state_names(regime_name=ENTRY_REGIMES[0]):
         initial.pop("lagged_hcc_transitory")

@@ -61,7 +61,7 @@ def test_regimes_carry_no_active_attribute(model):
 )
 def test_simulate_rejects_starts_outside_the_entry_contract(model, age, regime):
     _, _, params = get_benchmark_params(model=model)
-    ic = get_benchmark_initial_conditions(model=model, n_subjects=2, seed=0)
+    ic = get_benchmark_initial_conditions(model=model, n_agents=2, seed=0)
     ic = {
         **ic,
         "age": jnp.full(2, age),

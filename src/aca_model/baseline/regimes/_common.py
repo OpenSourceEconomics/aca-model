@@ -254,7 +254,7 @@ class Grids:
 
 # `pension_wealth` is a carried state (`Phased(solve=..., simulate=Grid)`):
 # imputed via a derived function in solve (never a solve grid axis) and
-# carried per subject in simulate. The grid is simulate-side metadata only —
+# carried per agent in simulate. The grid is simulate-side metadata only —
 # it fixes the state's continuous kind and float dtype. Seeds are taken
 # verbatim from the initial conditions without bound-clamping, and the state
 # is never an interpolation axis, so neither the bounds nor the point count
@@ -478,7 +478,7 @@ def age_stages(
     )
 
 
-# The living regimes a subject may start in: pre-claiming, pre-Medicare.
+# The living regimes an agent may start in: pre-claiming, pre-Medicare.
 ENTRY_REGIMES = (
     "retiree_nomc_inelig_canwork",
     "tied_nomc_inelig_canwork",
