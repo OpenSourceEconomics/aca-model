@@ -133,7 +133,7 @@ def test_factory_initial_nodes_override_the_entry_default(monkeypatch, kind):
 
 
 @pytest.mark.parametrize("kind", ["baseline", "aca", "benchmark"])
-def test_factory_rejects_construction_subject_count(kind):
+def test_factory_rejects_construction_agent_count(kind):
     """Population size is supplied by initial conditions, not model construction."""
-    with pytest.raises(TypeError, match="n_subjects"):
-        _factory(kind)(n_subjects=1)
+    with pytest.raises(TypeError, match="n_agents"):
+        _factory(kind)(n_agents=1)

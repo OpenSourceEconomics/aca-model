@@ -47,12 +47,12 @@ REFERENCE_GRID_CONFIG = GridConfig(
     n_hcc_transitory_gridpoints=3,
 )
 
-N_SUBJECTS = 200
+N_AGENTS = 200
 SEED = 0
 
 # Pre-registered tolerances, recorded from the noise-floor derivation
 # (brute at PARITY_GRID_CONFIG vs brute at REFERENCE_GRID_CONFIG, seed 0,
-# 200 subjects). A DC-EGM deviation within these bounds is indistinguishable
+# 200 agents). A DC-EGM deviation within these bounds is indistinguishable
 # from brute-force resolution noise; bounds are not adjusted after seeing
 # DC-EGM results. `None` means not yet recorded — the floor tests skip.
 NOISE_FLOOR_ACTION_AGREEMENT: float | None = None  # RECORDED-FROM-DERIVATION
@@ -116,10 +116,10 @@ def _make_model(*, solver: SolverName, grid_config: GridConfig) -> Model:
 
 
 def _seeded_panel(model: Model) -> pd.DataFrame:
-    """Solve + simulate the fixed seeded panel and return it in subject order."""
+    """Solve + simulate the fixed seeded panel and return it in agent order."""
     _, _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
-        model=model, n_subjects=N_SUBJECTS, seed=SEED
+        model=model, n_agents=N_AGENTS, seed=SEED
     )
     result = model.simulate(
         params=params,
@@ -127,11 +127,11 @@ def _seeded_panel(model: Model) -> pd.DataFrame:
         log_level="off",
     )
     df = result.to_dataframe()
-    return df.sort_values(["subject_id", "period"]).reset_index(drop=True)
+    return df.sort_values(["agent_id", "period"]).reset_index(drop=True)
 
 
 def panel_distance(panel_a: pd.DataFrame, panel_b: pd.DataFrame) -> dict[str, float]:
-    """Distance between two seeded panels of the same subjects.
+    """Distance between two seeded panels of the same agents.
 
     Returns:
 
@@ -140,8 +140,8 @@ def panel_distance(panel_a: pd.DataFrame, panel_b: pd.DataFrame) -> dict[str, fl
       (NaN) in the regimes where it does not apply counts as agreeing when
       both panels mask it — identical masking is identical behavior, not a
       disagreement.
-    - `prefix_share`: share of rows inside each subject's agreeing prefix —
-      after a subject's first discrete disagreement, the paths legitimately
+    - `prefix_share`: share of rows inside each agent's agreeing prefix —
+      after an agent's first discrete disagreement, the paths legitimately
       diverge, so continuous comparisons stop there.
     - `value_rdiff` / `consumption_rdiff`: max relative deviation of the
       recorded value and consumption inside the agreeing prefixes (`0.0`
@@ -157,9 +157,9 @@ def panel_distance(panel_a: pd.DataFrame, panel_b: pd.DataFrame) -> dict[str, fl
         agree_row &= equal | both_masked
 
     frame = pd.DataFrame(
-        {"subject_id": panel_a["subject_id"].to_numpy(), "agree": agree_row}
+        {"agent_id": panel_a["agent_id"].to_numpy(), "agree": agree_row}
     )
-    prefix = frame.groupby("subject_id")["agree"].cummin().to_numpy()
+    prefix = frame.groupby("agent_id")["agree"].cummin().to_numpy()
 
     def _max_rdiff(series_a: pd.Series, series_b: pd.Series) -> float:
         left = series_a.to_numpy()[prefix]

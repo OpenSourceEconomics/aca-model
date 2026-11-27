@@ -57,7 +57,7 @@ def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
     )
     _, _, params = get_benchmark_params(model=model, final_age=_FINAL_AGE)
     base = get_benchmark_initial_conditions(
-        model=model, n_subjects=1, seed=0, grid_config=grid_config
+        model=model, n_agents=1, seed=0, grid_config=grid_config
     )
     grids = model.user_regimes["retiree_nomc_inelig_canwork"].states
     initial_conditions = {name: jnp.tile(values, 4) for name, values in base.items()}
@@ -70,7 +70,7 @@ def period_0_by_shock() -> dict[tuple[str, str], pd.Series]:
         params=params, initial_conditions=initial_conditions, log_level="off"
     )
     df = result.to_dataframe(terminal_rows="all")
-    period_0 = df.loc[df["period"] == 0].sort_values("subject_id")
+    period_0 = df.loc[df["period"] == 0].sort_values("agent_id")
     return {
         (shock, end): period_0.iloc[2 * row + i]
         for row, shock in enumerate(_SHOCKS)

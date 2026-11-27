@@ -176,7 +176,7 @@ def compute_consumption_dollars_points(
     respectively). Both must land exactly on the action grid so the
     borrowing constraint's `max(cash_on_hand, floor)` kink boundary is
     a feasible action; otherwise sub-ULP drift can flip the `<=`
-    comparison for subjects with very negative cash. The geomspace
+    comparison for agents with very negative cash. The geomspace
     tail starts at the married floor and runs to
     `max_consumption_dollars` so the two pinned points stay strictly
     increasing.

@@ -60,11 +60,11 @@ def test_benchmark_model_with_final_age_53_has_three_periods() -> None:
 
 @pytest.mark.long_running
 def test_benchmark_model_simulates_end_to_end(benchmark_model: Model) -> None:
-    n_subjects = 20
+    n_agents = 20
     model = benchmark_model
     _, _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
-        model=model, n_subjects=n_subjects, seed=0
+        model=model, n_agents=n_agents, seed=0
     )
 
     result = model.simulate(
@@ -74,7 +74,7 @@ def test_benchmark_model_simulates_end_to_end(benchmark_model: Model) -> None:
     )
 
     df = result.to_dataframe(terminal_rows="all")
-    assert len(df) == n_subjects * model.n_periods
+    assert len(df) == n_agents * model.n_periods
     # Period 0 rows reflect initial conditions — no NaN in continuous states.
     period_0 = df.loc[df["period"] == 0]
     assert not period_0[["assets", "aime", "value"]].isna().any().any()
@@ -93,11 +93,11 @@ def test_benchmark_panel_exposes_hic_premium_and_wage_targets(
     `to_dataframe(additional_targets=...)`; dead/forced-out rows that lack a
     target get NaN, alive/worker rows carry a finite value.
     """
-    n_subjects = 20
+    n_agents = 20
     model = benchmark_model
     _, _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
-        model=model, n_subjects=n_subjects, seed=0
+        model=model, n_agents=n_agents, seed=0
     )
 
     result = model.simulate(
@@ -172,11 +172,11 @@ def test_benchmark_simulate_obeys_borrowing_constraint(benchmark_model: Model) -
     `max(cash_on_hand, floor) = cash_on_hand`) and pick an interior
     consumption point, not the floor.
     """
-    n_subjects = 4
+    n_agents = 4
     model = benchmark_model
     _, _, params = get_benchmark_params(model=model)
     initial_conditions = get_benchmark_initial_conditions(
-        model=model, n_subjects=n_subjects, seed=0
+        model=model, n_agents=n_agents, seed=0
     )
 
     result = model.simulate(
@@ -202,9 +202,9 @@ def test_initial_conditions_choose_population_size_after_model_construction(
 ) -> None:
     """One model supports reproducible initial conditions with different row counts."""
     model = benchmark_model
-    small = get_benchmark_initial_conditions(model=model, n_subjects=2, seed=17)
-    repeated = get_benchmark_initial_conditions(model=model, n_subjects=2, seed=17)
-    large = get_benchmark_initial_conditions(model=model, n_subjects=5, seed=17)
+    small = get_benchmark_initial_conditions(model=model, n_agents=2, seed=17)
+    repeated = get_benchmark_initial_conditions(model=model, n_agents=2, seed=17)
+    large = get_benchmark_initial_conditions(model=model, n_agents=5, seed=17)
 
     assert small.keys() == repeated.keys() == large.keys()
     for name, values in small.items():

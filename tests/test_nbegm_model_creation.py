@@ -238,7 +238,7 @@ def test_nbegm_m1_regime_keeps_the_borrowing_constraint() -> None:
     The EGM solve enforces the borrowing limit through the savings grid's lower
     bound, but forward simulation re-decides consumption by an argmax over the
     consumption grid — without the explicit `consumption <= resources`
-    feasibility mask, floor-region subjects (negative cash-on-hand rescued by
+    feasibility mask, floor-region agents (negative cash-on-hand rescued by
     the consumption floor) would pick the consumption grid's top value.
     """
     model = _build_model("nbegm")
